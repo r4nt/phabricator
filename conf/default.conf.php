@@ -221,10 +221,10 @@ return array(
   // clicking "Send New Message", and then composing a message.
 
   // Default address to send mail "From".
-  'metamta.default-address'     => 'noreply@example.com',
+  'metamta.default-address'     => 'noreply@llvm.org',
 
   // Domain used to generate Message-IDs.
-  'metamta.domain'              => 'example.com',
+  'metamta.domain'              => 'llvm.org',
 
   // When a message is sent to multiple recipients (for example, several
   // reviewers on a code review), Phabricator can either deliver one email to
@@ -255,7 +255,7 @@ return array(
   //
   // In the code, splitting one outbound email into one-per-recipient is
   // sometimes referred to as "multiplexing".
-  'metamta.one-mail-per-recipient'  => true,
+  'metamta.one-mail-per-recipient'  => false,
 
   // When sending a message that has no To recipient (i.e. all recipients
   // are CC'd, for example when multiplexing mail), set the To field to the
@@ -350,7 +350,7 @@ return array(
   // Set this to the left part of the email address and it well get
   // prepended to all outgoing mail. If you want to use e.g.
   // 'phabricator@example.com' this should be set to 'phabricator'.
-  'metamta.single-reply-handler-prefix' => null,
+  'metamta.single-reply-handler-prefix' => 'reviews',
 
   // Prefix prepended to mail sent by Maniphest. You can change this to
   // distinguish between testing and development installs, for example.
@@ -358,7 +358,7 @@ return array(
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Differential.
-  'metamta.differential.reply-handler-domain' => null,
+  'metamta.differential.reply-handler-domain' => 'llvm.org',
 
   // See 'metamta.maniphest.reply-handler'. This does the same thing, but
   // affects Differential.
@@ -370,13 +370,13 @@ return array(
   // Set this to true if you want patches to be attached to mail from
   // Differential. This won't work if you are using SendGrid as your mail
   // adapter.
-  'metamta.differential.attach-patches' => false,
+  'metamta.differential.attach-patches' => true,
 
   // To include patches in email bodies, set this to a positive integer. Patches
   // will be inlined if they are at most that many lines. For instance, a value
   // of 100 means "inline patches if they are no longer than 100 lines". By
   // default, patches are not inlined.
-  'metamta.differential.inline-patches' => 0,
+  'metamta.differential.inline-patches' => 100,
 
   // If you enable either of the options above, you can choose what format
   // patches are sent in. Valid options are 'unified' (like diff -u) or 'git'.
@@ -387,7 +387,7 @@ return array(
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Diffusion.
-  'metamta.diffusion.reply-handler-domain' => null,
+  'metamta.diffusion.reply-handler-domain' => 'llvm.org',
 
   // See 'metamta.maniphest.reply-handler'. This does the same thing, but
   // affects Diffusion.
@@ -430,7 +430,7 @@ return array(
   // a little bit of security for convenience, but it's reasonable in many
   // installs. Object interactions are still protected using hashes in the
   // single public email address, so objects can not be replied to blindly.
-  'metamta.public-replies' => false,
+  'metamta.public-replies' => true,
 
   // You can configure an email address like "bugs@phabricator.example.com"
   // which will automatically create Maniphest tasks when users send email
@@ -491,14 +491,14 @@ return array(
   // "Re:" to the subject line of all mail which is expected to thread. If
   // you've set 'metamta.one-mail-per-recipient', users can override this
   // setting in their preferences.
-  'metamta.re-prefix' => false,
+  'metamta.re-prefix' => true,
 
   // If true, allow MetaMTA to change mail subjects to put text like
   // '[Accepted]' and '[Commented]' in them. This makes subjects more useful,
   // but might break threading on some clients. If you've set
   // 'metamta.one-mail-per-recipient', users can override this setting in their
   // preferences.
-  'metamta.vary-subjects' => true,
+  'metamta.vary-subjects' => false,
 
 
 // -- Auth ------------------------------------------------------------------ //
@@ -586,7 +586,7 @@ return array(
 // -- GitHub OAuth ---------------------------------------------------------- //
 
   // Can users use GitHub credentials to login to Phabricator?
-  'github.auth-enabled'         => false,
+  'github.auth-enabled'         => true,
 
   // Can users use GitHub credentials to create new Phabricator accounts?
   'github.registration-enabled' => true,
@@ -596,16 +596,16 @@ return array(
   'github.auth-permanent'       => false,
 
   // The GitHub "Client ID" to use for GitHub API access.
-  'github.application-id'       => null,
+  'github.application-id'       => 'db47b40406179e8deefa',
 
   // The GitHub "Secret" to use for GitHub API access.
-  'github.application-secret'   => null,
+  'github.application-secret'   => '8336c0d6e9c5b2bebededb3657cd9186deac87ea',
 
 
 // -- Google OAuth ---------------------------------------------------------- //
 
   // Can users use Google credentials to login to Phabricator?
-  'google.auth-enabled'         => false,
+  'google.auth-enabled'         => true,
 
   // Can users use Google credentials to create new Phabricator accounts?
   'google.registration-enabled' => true,
@@ -615,10 +615,10 @@ return array(
   'google.auth-permanent'       => false,
 
   // The Google "Client ID" to use for Google API access.
-  'google.application-id'       => null,
+  'google.application-id'       => '506219160378.apps.googleusercontent.com',
 
   // The Google "Client Secret" to use for Google API access.
-  'google.application-secret'   => null,
+  'google.application-secret'   => '5Iu4KtZ9LRYPGlQHhat_IjK5',
 
 // -- LDAP Auth ----------------------------------------------------- //
   // Enable ldap auth
@@ -989,12 +989,12 @@ return array(
   // by default because email authentication can be configured to be very weak,
   // and, socially, email "!accept" is kind of sketchy and implies revisions may
   // not actually be receiving thorough review.
-  'differential.enable-email-accept' => false,
+  'differential.enable-email-accept' => true,
 
   // If you set this to true, users won't need to login to view differential
   // revisions.  Anonymous users will have read-only access and won't be able to
   // interact with the revisions.
-  'differential.anonymous-access' => false,
+  'differential.anonymous-access' => true,
 
   // List of file regexps that should be treated as if they are generated by
   // an automatic process, and thus get hidden by default in differential.
@@ -1106,7 +1106,7 @@ return array(
   // Number of "TaskMaster" daemons that "phd start" should start. You can
   // raise this if you have a task backlog, or explicitly launch more with
   // "phd launch <N> taskmaster".
-  'phd.start-taskmasters' => 4,
+  'phd.start-taskmasters' => 16,
 
   // Launch daemons in "verbose" mode by default. This creates a lot of output,
   // but can help debug issues. Daemons launched in debug mode with "phd debug"
