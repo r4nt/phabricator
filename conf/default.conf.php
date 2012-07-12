@@ -221,10 +221,10 @@ return array(
   // clicking "Send New Message", and then composing a message.
 
   // Default address to send mail "From".
-  'metamta.default-address'     => 'noreply@llvm.org',
+  'metamta.default-address'     => 'reviews@llvm-reviews.chandlerc.com',
 
   // Domain used to generate Message-IDs.
-  'metamta.domain'              => 'llvm.org',
+  'metamta.domain'              => 'llvm-reviews.chandlerc.com',
 
   // When a message is sent to multiple recipients (for example, several
   // reviewers on a code review), Phabricator can either deliver one email to
@@ -358,14 +358,14 @@ return array(
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Differential.
-  'metamta.differential.reply-handler-domain' => 'llvm.org',
+  'metamta.differential.reply-handler-domain' => 'llvm-reviews.chandlerc.com',
 
   // See 'metamta.maniphest.reply-handler'. This does the same thing, but
   // affects Differential.
   'metamta.differential.reply-handler' => 'DifferentialReplyHandler',
 
   // Prefix prepended to mail sent by Differential.
-  'metamta.differential.subject-prefix' => '[Differential]',
+  'metamta.differential.subject-prefix' => '[PATCH]',
 
   // Set this to true if you want patches to be attached to mail from
   // Differential. This won't work if you are using SendGrid as your mail
@@ -387,7 +387,7 @@ return array(
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Diffusion.
-  'metamta.diffusion.reply-handler-domain' => 'llvm.org',
+  'metamta.diffusion.reply-handler-domain' => 'llvm-reviews.chandlerc.com',
 
   // See 'metamta.maniphest.reply-handler'. This does the same thing, but
   // affects Diffusion.
@@ -615,10 +615,12 @@ return array(
   'google.auth-permanent'       => false,
 
   // The Google "Client ID" to use for Google API access.
-  'google.application-id'       => '506219160378.apps.googleusercontent.com',
+  // 'google.application-id'       => '506219160378.apps.googleusercontent.com',
+  'google.application-id'	=> '872983807341.apps.googleusercontent.com',
 
   // The Google "Client Secret" to use for Google API access.
-  'google.application-secret'   => '5Iu4KtZ9LRYPGlQHhat_IjK5',
+  // 'google.application-secret'   => '5Iu4KtZ9LRYPGlQHhat_IjK5',
+  'google.application-secret'	=> 'gEUkt3oRDeb2Uu6YJ6zw0-E4',
 
 // -- LDAP Auth ----------------------------------------------------- //
   // Enable ldap auth
