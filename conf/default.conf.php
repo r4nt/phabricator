@@ -1108,7 +1108,7 @@ return array(
   // Number of "TaskMaster" daemons that "phd start" should start. You can
   // raise this if you have a task backlog, or explicitly launch more with
   // "phd launch <N> taskmaster".
-  'phd.start-taskmasters' => 16,
+  'phd.start-taskmasters' => 4,
 
   // Launch daemons in "verbose" mode by default. This creates a lot of output,
   // but can help debug issues. Daemons launched in debug mode with "phd debug"
