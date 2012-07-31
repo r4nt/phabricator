@@ -139,9 +139,10 @@ abstract class PhabricatorMailReplyHandler {
     $mail_template->addPHIDHeaders('X-Phabricator-Cc', array_keys($ccs));
 
     $body = $mail_template->getBody();
-    $body .= "\n";
-    $body .= $this->getRecipientsSummary($to_handles, $cc_handles);
-
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $body .= "\n";
+      $body .= $this->getRecipientsSummary($to_handles, $cc_handles);
+    }
     foreach ($recipients as $phid => $recipient) {
       $mail = clone $mail_template;
       if (isset($to_handles[$phid])) {

@@ -125,13 +125,17 @@ final class DifferentialCommentMail extends DifferentialMail {
 
     $body  = array();
 
-    $body[] = "{$actor} has {$verb} the revision \"{$name}\".";
-
-    if ($this->addedReviewers) {
-      $body[] = 'Added Reviewers: '.$this->addedReviewers;
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $body[] = "{$actor} has {$verb} the revision \"{$name}\".";
     }
-    if ($this->addedCCs) {
-      $body[] = 'Added CCs: '.$this->addedCCs;
+
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      if ($this->addedReviewers) {
+        $body[] = 'Added Reviewers: '.$this->addedReviewers;
+      }
+      if ($this->addedCCs) {
+        $body[] = 'Added CCs: '.$this->addedCCs;
+      }
     }
 
     $body[] = null;
@@ -150,7 +154,11 @@ final class DifferentialCommentMail extends DifferentialMail {
 
     $inlines = $this->getInlineComments();
     if ($inlines) {
-      $body[] = 'INLINE COMMENTS';
+      if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+        $body[] = 'INLINE COMMENTS';
+      } else {
+        $body[] = null;
+      }
       $changesets = $this->getChangesets();
       foreach ($inlines as $inline) {
         $changeset = $changesets[$inline->getChangesetID()];
