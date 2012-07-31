@@ -37,8 +37,12 @@ abstract class DifferentialMail {
   protected function renderSubject() {
     $revision = $this->getRevision();
     $title = $revision->getTitle();
-    $id = $revision->getID();
-    return "D{$id}: {$title}";
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $id = $revision->getID();
+      return "D{$id}: {$title}";
+    } else {
+      return "{$title}";
+    }
   }
 
   abstract protected function renderVaryPrefix();
@@ -207,8 +211,11 @@ abstract class DifferentialMail {
         }
 
         $body =
-          $this->buildBody()."\n".
-          $reply_handler->getRecipientsSummary($to_handles, $cc_handles);
+          $this->buildBody();
+        if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+          $body .= "\n".
+            $reply_handler->getRecipientsSummary($to_handles, $cc_handles);
+        }
 
         $mail
           ->setSubject($this->renderSubject())
@@ -265,13 +272,17 @@ abstract class DifferentialMail {
     $body = new PhabricatorMetaMTAMailBody();
     $body->addRawSection($main_body);
 
-    $reply_handler = $this->getReplyHandler();
-    $body->addReplySection($reply_handler->getReplyHandlerInstructions());
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $reply_handler = $this->getReplyHandler();
+      $body->addReplySection($reply_handler->getReplyHandlerInstructions());
+    }
 
-    if ($this->getHeraldTranscriptURI() && $this->isFirstMailToRecipients()) {
-      $manage_uri = '/herald/view/differential/';
-      $xscript_uri = $this->getHeraldTranscriptURI();
-      $body->addHeraldSection($manage_uri, $xscript_uri);
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      if ($this->getHeraldTranscriptURI() && $this->isFirstMailToRecipients()) {
+        $manage_uri = '/herald/view/differential/';
+        $xscript_uri = $this->getHeraldTranscriptURI();
+        $body->addHeraldSection($manage_uri, $xscript_uri);
+      }
     }
 
     return $body->render();

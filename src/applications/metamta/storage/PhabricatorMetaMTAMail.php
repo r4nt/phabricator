@@ -756,7 +756,11 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
         case PhabricatorPHIDConstants::PHID_TYPE_USER:
           $user = $users[$phid];
           if ($user) {
-            $name = $user->getFullName();
+            if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+              $name = $user->getFullName();
+            } else {
+              $name = $user->getRealName();
+            }
             $is_mailable = !$user->getIsDisabled()
                         && !$user->getIsSystemAgent();
           }

@@ -500,6 +500,8 @@ return array(
   // preferences.
   'metamta.vary-subjects' => false,
 
+  'minimal-email' => true,
+
 
 // -- Auth ------------------------------------------------------------------ //
 
