@@ -39,12 +39,14 @@ final class DifferentialNewDiffMail extends DifferentialReviewRequestMail {
 
     $body = array();
 
-    if ($this->isFirstMailToRecipients()) {
-      $body[] = "{$actor} requested code review of \"{$name}\".";
-    } else {
-      $body[] = "{$actor} updated the revision \"{$name}\".";
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      if ($this->isFirstMailToRecipients()) {
+        $body[] = "{$actor} requested code review of \"{$name}\".";
+      } else {
+        $body[] = "{$actor} updated the revision \"{$name}\".";
+      }
+      $body[] = null;
     }
-    $body[] = null;
 
     $body[] = $this->renderReviewRequestBody();
 

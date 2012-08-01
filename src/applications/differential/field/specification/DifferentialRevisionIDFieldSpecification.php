@@ -108,8 +108,10 @@ final class DifferentialRevisionIDFieldSpecification
     $body = array();
     if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
       $body[] = 'REVISION DETAIL';
+      $body[] = '  '.PhabricatorEnv::getProductionURI('/D'.$this->id);
+    } else {
+      $body[] = PhabricatorEnv::getProductionURI('/D'.$this->id);
     }
-    $body[] = '  '.PhabricatorEnv::getProductionURI('/D'.$this->id);
 
     if ($phase == DifferentialMailPhase::UPDATE) {
       $diffs = id(new DifferentialDiff())->loadAllWhere(

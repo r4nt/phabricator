@@ -175,6 +175,9 @@ final class DifferentialReviewersFieldSpecification
   }
 
   public function renderValueForMail($phase) {
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      return null;
+    }
     if ($phase == DifferentialMailPhase::COMMENT) {
       return null;
     }
