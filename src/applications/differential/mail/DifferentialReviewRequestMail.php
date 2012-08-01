@@ -73,7 +73,11 @@ abstract class DifferentialReviewRequestMail extends DifferentialMail {
 
     $changesets = $this->getChangesets();
     if ($changesets) {
-      $body[] = 'AFFECTED FILES';
+      if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+        $body[] = 'AFFECTED FILES';
+      } else {
+        $body[] = 'Files:';
+      }
       foreach ($changesets as $changeset) {
         $body[] = '  '.$changeset->getFilename();
       }
@@ -81,7 +85,9 @@ abstract class DifferentialReviewRequestMail extends DifferentialMail {
     }
 
     if ($this->patch) {
-      $body[] = 'CHANGE DETAILS';
+      if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+        $body[] = 'CHANGE DETAILS';
+      }
       $body[] = $this->patch;
     }
 
