@@ -395,12 +395,12 @@ return array(
 
   // Set this to true if you want patches to be attached to commit notifications
   // from Diffusion. This won't work with SendGrid.
-  'metamta.diffusion.attach-patches' => false,
+  'metamta.diffusion.attach-patches' => true,
 
   // To include patches in Diffusion email bodies, set this to a positive
   // integer. Patches will be inlined if they are at most that many lines.
   // By default, patches are not inlined.
-  'metamta.diffusion.inline-patches' => 0,
+  'metamta.diffusion.inline-patches' => 200,
 
   // If you've enabled attached patches or inline patches for commit emails, you
   // can establish a hard byte limit on their size. You should generally set
