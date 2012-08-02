@@ -376,7 +376,7 @@ return array(
   // will be inlined if they are at most that many lines. For instance, a value
   // of 100 means "inline patches if they are no longer than 100 lines". By
   // default, patches are not inlined.
-  'metamta.differential.inline-patches' => 100,
+  'metamta.differential.inline-patches' => 200,
 
   // If you enable either of the options above, you can choose what format
   // patches are sent in. Valid options are 'unified' (like diff -u) or 'git'.
@@ -491,7 +491,7 @@ return array(
   // "Re:" to the subject line of all mail which is expected to thread. If
   // you've set 'metamta.one-mail-per-recipient', users can override this
   // setting in their preferences.
-  'metamta.re-prefix' => true,
+  'metamta.re-prefix' => false,
 
   // If true, allow MetaMTA to change mail subjects to put text like
   // '[Accepted]' and '[Commented]' in them. This makes subjects more useful,

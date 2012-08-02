@@ -175,9 +175,6 @@ final class DifferentialReviewersFieldSpecification
   }
 
   public function renderValueForMail($phase) {
-    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
-      return null;
-    }
     if ($phase == DifferentialMailPhase::COMMENT) {
       return null;
     }
@@ -192,6 +189,9 @@ final class DifferentialReviewersFieldSpecification
       $handles,
       array($this->getRevision()->getPrimaryReviewer())) + $handles;
     $names = mpull($handles, 'getName');
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      return 'Hi '.implode(', ', $names).',';
+    }
     return 'Reviewers: '.implode(', ', $names);
   }
 
