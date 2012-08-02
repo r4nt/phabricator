@@ -173,8 +173,20 @@ final class DifferentialCommentMail extends DifferentialMail {
         } else {
           $range = $start;
         }
-        $content = $inline->getContent();
-        $body[] = $this->formatText("{$file}:{$range} {$content}");
+
+        if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+          $body[] = $this->formatText("{$file}:{$range} {$content}");
+        } else {
+          $body[] = "Comment at: " . $file . ":" . $range;
+
+          $changeset->attachHunks($changeset->loadHunks());
+          $body[] = $changeset->makeContextDiff($inline);
+          $body[] = null;
+
+          $content = $inline->getContent();
+          $body[] = $content;
+          $body[] = null;
+        }
       }
       $body[] = null;
     }

@@ -215,4 +215,37 @@ final class DifferentialChangeset extends DifferentialDAO {
     return false;
   }
 
+  public function makeContextDiff($inline) {
+    $context = array();
+    if ($inline->getIsNewFile()) {
+      $prefix = '+ ';
+    } else {
+      $prefix = '- ';
+    }
+    foreach ($this->getHunks() as $hunk) {
+      if ($inline->getIsNewFile()) {
+        $offset = $hunk->getNewOffset();
+        $length = $hunk->getNewLen();
+        $text = $hunk->makeNewFile();
+      } else {
+        $offset = $hunk->getOldOffset();
+        $length = $hunk->getOldLen();
+        $text = $hunk->makeOldFile();
+      }
+      $start = $inline->getLineNumber() - $offset;
+      $end = $start + $inline->getLineLength();
+      if ($start < $length && $end >= 0) {
+        $start = max(0, $start);
+        $end = min($length-1, $end);
+        $lines = explode("\n", $text);
+        $slice = array_slice($lines, $start, $end - $start + 1);
+        foreach ($slice as & $line) {
+          $line = $prefix . $line;
+        }
+        $context[] = implode("\n", $slice);
+      }
+    }
+    return implode("\n[...]\n", $context);
+  }
+
 }
