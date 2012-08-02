@@ -491,7 +491,9 @@ final class PhabricatorAuditCommentEditor {
       $comment->getAction());
 
     $body = new PhabricatorMetaMTAMailBody();
-    $body->addRawSection("{$name} {$verb} commit {$cname}.");
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $body->addRawSection("{$name} {$verb} commit {$cname}.");
+    }
     $body->addRawSection($comment->getContent());
 
     if ($inline_comments) {
@@ -520,13 +522,22 @@ final class PhabricatorAuditCommentEditor {
         $block[] = "{$path}:{$range} {$content}";
       }
 
-      $body->addTextSection(pht('INLINE COMMENTS'), implode("\n", $block));
+      if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+        $body->addTextSection(pht('INLINE COMMENTS'), implode("\n", $block));
+      } else {
+        $body->addRawSection(implode("\n", $block));
+      }
     }
 
-    $body->addTextSection(
-      pht('COMMIT'),
-      PhabricatorEnv::getProductionURI($handle->getURI()));
-    $body->addReplySection($reply_handler->getReplyHandlerInstructions());
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $body->addTextSection(
+        pht('COMMIT'),
+        PhabricatorEnv::getProductionURI($handle->getURI()));
+      $body->addReplySection($reply_handler->getReplyHandlerInstructions());
+    } else {
+      $body->addRawSection(PhabricatorEnv::getProductionURI(
+        $handle->getURI()));
+    }
 
     return $body->render();
   }
