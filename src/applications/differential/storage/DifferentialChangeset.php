@@ -215,37 +215,65 @@ final class DifferentialChangeset extends DifferentialDAO {
     return false;
   }
 
+  public function makeUnifiedDiff($inline) {
+    $diff = new DifferentialDiff();
+
+    $changes = [ 0 => $this ];
+    $diff->attachChangesets($changes);
+    // TODO: We could batch this to improve performance.
+    //foreach ($diff->getChangesets() as $changeset) {
+    //  $changeset->attachHunks($changeset->loadHunks());
+    //}
+    $diff_dict = $diff->getDiffDict();
+
+    $changes = array();
+    foreach ($diff_dict['changes'] as $changedict) {
+      $changes[] = ArcanistDiffChange::newFromDictionary($changedict);
+    }
+    $bundle = ArcanistBundle::newFromChanges($changes);
+
+    $bundle->setLoadFileDataCallback(array($this, 'loadFileByPHID'));
+
+    return $bundle->toUnifiedDiff();
+  }
+
   public function makeContextDiff($inline) {
     $context = array();
     if ($inline->getIsNewFile()) {
-      $prefix = '+ ';
+      $prefix = '+';
     } else {
-      $prefix = '- ';
+      $prefix = '-';
     }
     foreach ($this->getHunks() as $hunk) {
       if ($inline->getIsNewFile()) {
         $offset = $hunk->getNewOffset();
         $length = $hunk->getNewLen();
-        $text = $hunk->makeNewFile();
       } else {
         $offset = $hunk->getOldOffset();
         $length = $hunk->getOldLen();
-        $text = $hunk->makeOldFile();
       }
       $start = $inline->getLineNumber() - $offset;
       $end = $start + $inline->getLineLength();
       if ($start < $length && $end >= 0) {
         $start = max(0, $start);
         $end = min($length-1, $end);
-        $lines = explode("\n", $text);
-        $slice = array_slice($lines, $start, $end - $start + 1);
-        foreach ($slice as & $line) {
-          $line = $prefix . $line;
+        $pos = 0;
+        foreach (explode("\n", $hunk->getChanges()) as $line) {
+          $skip = (strncmp($line, $prefix, 1) != 0 &&
+                   strncmp($line, " ", 1) != 0);
+          if ($skip && ($pos == $start || $pos == $end)) {
+            continue;
+          }
+          if ($start <= $pos && $pos <= $end) {
+            $context[] = $line;
+          }
+          if (!$skip) {
+            ++$pos;
+          }
         }
-        $context[] = implode("\n", $slice);
       }
     }
-    return implode("\n[...]\n", $context);
+    return implode("\n", $context);
   }
 
 }
