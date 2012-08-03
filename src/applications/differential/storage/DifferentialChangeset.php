@@ -255,22 +255,55 @@ final class DifferentialChangeset extends DifferentialDAO {
       $start = $inline->getLineNumber() - $offset;
       $end = $start + $inline->getLineLength();
       if ($start < $length && $end >= 0) {
-        $start = max(0, $start);
-        $end = min($length-1, $end);
-        $pos = 0;
+        $start = max(0, $start-1);
+        $end = min($length-1, $end+1);
+        $hunk_content = [];
+        $hunk_pos = [ "-" => 0, "+" => 0 ];
+        $hunk_offset = [ "-" => NULL, "+" => NULL ];
         foreach (explode("\n", $hunk->getChanges()) as $line) {
           $skip = (strncmp($line, $prefix, 1) != 0 &&
                    strncmp($line, " ", 1) != 0);
-          if ($skip && ($pos == $start || $pos == $end)) {
-            continue;
+          if ($start <= $hunk_pos[$prefix] && $hunk_pos[$prefix] <= $end) {
+            if (!$skip || ($hunk_pos[$prefix] != $start && $hunk_pos[$prefix] != $end)) {
+              if ($hunk_offset["-"] === NULL && (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0)) {
+                $hunk_offset["-"] = $hunk_pos["-"];
+              }
+              if ($hunk_offset["+"] === NULL && (strncmp($line, "+", 1) === 0 || strncmp($line, " ", 1) === 0)) {
+                $hunk_offset["+"] = $hunk_pos["+"];
+              }
+
+              $hunk_content[] = $line;
+              if ($hunk_pos[$prefix] == $end) {
+                break;
+              }
+            } else {
+              $hunk_content[] = $hunk_pos[$prefix];
+              $hunk_content[] = $start;
+              $hunk_content[] = $end;
+              $hunk_content[] = "ORIG: " . $line;
+            }
           }
-          if ($start <= $pos && $pos <= $end) {
-            $context[] = $line;
+          if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
+            ++$hunk_pos["-"];
           }
-          if (!$skip) {
-            ++$pos;
+          if (strncmp($line, "+", 1) === 0 || strncmp($line, " ", 1) === 0) {
+            ++$hunk_pos["+"];
           }
         }
+        $header = "@@";
+        if ($hunk_offset["-"] !== NULL) {
+          $header .= " -" . ($hunk_offset["-"]+1) . "," . ($hunk_pos["-"]-$hunk_offset["-"]+1);
+        }
+        if ($hunk_offset["+"] !== NULL) {
+          $header .= " +" . ($hunk_offset["+"]+1) . "," . ($hunk_pos["+"]-$hunk_offset["+"]+1);
+        }
+        $header .= " @@";
+        $context[] = $header;
+        $context[] = implode("\n", $hunk_content);
+        $context[] = $hunk_pos["-"];
+        $context[] = $hunk_offset["-"];
+        $context[] = $hunk_pos["+"];
+        $context[] = $hunk_offset["+"];
       }
     }
     return implode("\n", $context);
