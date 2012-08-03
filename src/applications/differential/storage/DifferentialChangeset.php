@@ -214,7 +214,7 @@ final class DifferentialChangeset extends DifferentialDAO {
 
     return false;
   }
-
+/*
   public function makeUnifiedDiff($inline) {
     $diff = new DifferentialDiff();
 
@@ -236,7 +236,7 @@ final class DifferentialChangeset extends DifferentialDAO {
 
     return $bundle->toUnifiedDiff();
   }
-
+*/
   public function makeContextDiff($inline) {
     $context = array();
     if ($inline->getIsNewFile()) {
@@ -257,9 +257,9 @@ final class DifferentialChangeset extends DifferentialDAO {
       if ($start < $length && $end >= 0) {
         $start = max(0, $start-1);
         $end = min($length-1, $end+1);
-        $hunk_content = [];
-        $hunk_pos = [ "-" => 0, "+" => 0 ];
-        $hunk_offset = [ "-" => NULL, "+" => NULL ];
+        $hunk_content = array();
+        $hunk_pos = array( "-" => 0, "+" => 0 );
+        $hunk_offset = array( "-" => NULL, "+" => NULL );
         foreach (explode("\n", $hunk->getChanges()) as $line) {
           $skip = (strncmp($line, $prefix, 1) != 0 &&
                    strncmp($line, " ", 1) != 0);
