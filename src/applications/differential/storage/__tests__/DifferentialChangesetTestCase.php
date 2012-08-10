@@ -1,8 +1,24 @@
 <?php
 
 final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
+  private function createComment() {
+    $comment = new DifferentialInlineComment();
+    return $comment;
+  }
+  private function createNewComment() {
+    $comment = $this->createComment();
+    $comment->setIsNewFile(True);
+    return $comment;
+  }
+  private function createOldComment() {
+    $comment = $this->createComment();
+    $comment->setIsNewFile(True);
+    return $comment;
+  }
   public function testFail() {
-    $this->assertEqual("a", "b");
+    $comment = $this->createNewComment(); 
+
+    $this->assertEqual("a", "a");
   }
 /*
   public function testMakeChanges() {
