@@ -245,6 +245,8 @@ final class DifferentialChangeset extends DifferentialDAO {
       $prefix = '-';
     }
     foreach ($this->getHunks() as $hunk) {
+      $context[] = 'hunk: '.$hunk->getOldOffset().'-'.$hunk->getOldLen().'; '.$hunk->getNewOffset().'-'.$hunk->getNewLen();
+      $context[] = $hunk->getChanges();
       if ($inline->getIsNewFile()) {
         $offset = $hunk->getNewOffset();
         $length = $hunk->getNewLen();
@@ -298,6 +300,8 @@ final class DifferentialChangeset extends DifferentialDAO {
           $header .= " +" . ($hunk_offset["+"]+1) . "," . ($hunk_pos["+"]-$hunk_offset["+"]+1);
         }
         $header .= " @@";
+        $context[] = $inline->getLineNumber();
+        $context[] = $inline->getLineLength();
         $context[] = $header;
         $context[] = implode("\n", $hunk_content);
         $context[] = $hunk_pos["-"];
