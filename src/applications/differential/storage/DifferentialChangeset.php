@@ -239,20 +239,23 @@ final class DifferentialChangeset extends DifferentialDAO {
 */
   public function makeContextDiff($inline) {
     $context = array();
+    $debug = False;
+    if ($debug) {
+      $context[] = 'Inline: '.$inline->getIsNewFile().' '.
+        $inline->getLineNumber().' '.$inline->getLineLength();
+      foreach ($this->getHunks() as $hunk) {
+        $context[] = 'hunk: '.$hunk->getOldOffset().'-'.
+          $hunk->getOldLen().'; '.$hunk->getNewOffset().'-'.$hunk->getNewLen();
+        $context[] = $hunk->getChanges();
+      }
+    }
+
     if ($inline->getIsNewFile()) {
       $prefix = '+';
     } else {
       $prefix = '-';
     }
-    $debug = False;
-    if ($debug) {
-      $context[] = 'Inline: '.$inline->getIsNewFile().' '.$inline->getLineNumber().' '.$inline->getLineLength();
-    }
     foreach ($this->getHunks() as $hunk) {
-      if ($debug) {
-        $context[] = 'hunk: '.$hunk->getOldOffset().'-'.$hunk->getOldLen().'; '.$hunk->getNewOffset().'-'.$hunk->getNewLen();
-        $context[] = $hunk->getChanges();
-      }
       if ($inline->getIsNewFile()) {
         $offset = $hunk->getNewOffset();
         $length = $hunk->getNewLen();
@@ -285,10 +288,12 @@ final class DifferentialChangeset extends DifferentialDAO {
                 break;
               }
             } else {
+              /*
               $hunk_content[] = $hunk_pos[$prefix];
               $hunk_content[] = $start;
               $hunk_content[] = $end;
               $hunk_content[] = "ORIG: " . $line;
+              */
             }
           }
           if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
