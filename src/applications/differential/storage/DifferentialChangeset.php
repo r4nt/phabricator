@@ -272,21 +272,26 @@ final class DifferentialChangeset extends DifferentialDAO {
         $hunk_content = array();
         $hunk_pos = array( "-" => 0, "+" => 0 );
         $hunk_offset = array( "-" => NULL, "+" => NULL );
+        $hunk_last = array( "-" => NULL, "+" => NULL );
         foreach (explode("\n", $hunk->getChanges()) as $line) {
-          /*$skip = (strncmp($line, $prefix, 1) != 0 &&
-                   strncmp($line, " ", 1) != 0);*/
+          $skip = (strncmp($line, $prefix, 1) != 0 &&
+                   strncmp($line, " ", 1) != 0);
           if ($hunk_pos[$prefix] <= $end) {
             if ($start <= $hunk_pos[$prefix]) {
-            //if (!$skip || ($hunk_pos[$prefix] != $start && $hunk_pos[$prefix] != $end)) {
-              if ($hunk_offset["-"] === NULL && (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0)) {
-                $hunk_offset["-"] = $hunk_pos["-"];
+            if (!$skip || ($hunk_pos[$prefix] != $start && $hunk_pos[$prefix] != $end)) {
+              if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
+                if ($hunk_offset["-"] === NULL)
+                  $hunk_offset["-"] = $hunk_pos["-"];
+                $hunk_last["-"] = $hunk_pos["-"];
               }
-              if ($hunk_offset["+"] === NULL && (strncmp($line, "+", 1) === 0 || strncmp($line, " ", 1) === 0)) {
-                $hunk_offset["+"] = $hunk_pos["+"];
+              if (strncmp($line, "+", 1) === 0 || strncmp($line, " ", 1) === 0) {
+                if ($hunk_offset["+"] === NULL)
+                  $hunk_offset["+"] = $hunk_pos["+"];
+                $hunk_last["+"] = $hunk_pos["+"];
               }
 
               $hunk_content[] = $line;
-            //}
+            }
             }
             if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
               ++$hunk_pos["-"];
@@ -298,10 +303,10 @@ final class DifferentialChangeset extends DifferentialDAO {
         }
         $header = "@@";
         if ($hunk_offset["-"] !== NULL) {
-          $header .= " -" . ($hunk->getOldOffset() + $hunk_offset["-"]) . "," . ($hunk_pos["-"]-$hunk_offset["-"]);
+          $header .= " -" . ($hunk->getOldOffset() + $hunk_offset["-"]) . "," . ($hunk_last["-"]-$hunk_offset["-"]+1);
         }
         if ($hunk_offset["+"] !== NULL) {
-          $header .= " +" . ($hunk->getNewOffset() + $hunk_offset["+"]) . "," . ($hunk_pos["+"]-$hunk_offset["+"]);
+          $header .= " +" . ($hunk->getNewOffset() + $hunk_offset["+"]) . "," . ($hunk_last["+"]-$hunk_offset["+"]+1);
         }
         $header .= " @@";
         $context[] = $header;
