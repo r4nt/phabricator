@@ -174,7 +174,8 @@ final class DifferentialCommentMail extends DifferentialMail {
           $range = $start;
         }
 
-        if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+        if (!PhabricatorEnv::getEnvConfig(
+              'metamta.differential.unified-comment-context', false)) {
           $body[] = $this->formatText("{$file}:{$range} {$content}");
         } else {
           $body[] = "Comment at: " . $file . ":" . $range;
