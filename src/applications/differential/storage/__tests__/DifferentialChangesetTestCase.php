@@ -104,6 +104,16 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
         "+n2", $context);
   }
 
+  public function testNoNewlineAtEndOfFile() {
+    $change = $this->createSingleChange(0, 1, 
+        "+a\n".
+        "\\No newline at end of file");
+    $context = $change->makeContextDiff($this->createNewComment(2, 0), 0); 
+    $this->assertEqual(
+        "@@ @@\n".
+        "\\Ex No newline at end of file", $context);
+  }
+
   public function testMultiLineNewComment() {
     $change = $this->createSingleChange(7, 7,
         " e1\n".
@@ -147,6 +157,35 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
         "+n3\n".
         " e5/4\n".
         " e6/5", $context);
+  }
+
+  public function testInclusionOfNewFileInOldCommentFromStartWithContext() {
+    $change = $this->createSingleChange(2, 3,
+         "+n1\n".
+         " e1/2\n".
+         "-o2\n".
+         "+n3\n");
+    $context = $change->makeContextDiff($this->createOldComment(1, 1), 1); 
+    $this->assertEqual(
+        "@@ -1,2 +1,2 @@\n".
+        "+n1\n".
+        " e1/2\n".
+        "-o2", $context);
+  }
+
+  public function testInclusionOfOldFileInNewCommentFromStartWithContext() {
+    $change = $this->createSingleChange(2, 2,
+         "-o1\n".
+         " e2/1\n".
+         "-o3\n".
+         "+n2\n");
+    $context = $change->makeContextDiff($this->createNewComment(1, 1), 1); 
+    $this->assertEqual(
+        "@@ -1,3 +1,2 @@\n".
+        "-o1\n".
+        " e2/1\n".
+        "-o3\n".
+        "+n2", $context);
   }
 }
 

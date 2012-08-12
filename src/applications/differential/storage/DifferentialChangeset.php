@@ -267,8 +267,8 @@ final class DifferentialChangeset extends DifferentialDAO {
       $start = $inline->getLineNumber() - $offset;
       $end = $start + $inline->getLineLength();
       if ($start < $length && $end >= 0) {
-        //$start = /*max(0,*/ $start-$add_context/*)*/;
-        //$end = /*min($length-1,*/ $end+$add_context/*)*/;
+        $start = $start - $add_context;
+        $end = $end + $add_context;
         $hunk_content = array();
         $hunk_pos = array( "-" => 0, "+" => 0 );
         $hunk_offset = array( "-" => NULL, "+" => NULL );
