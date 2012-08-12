@@ -266,7 +266,7 @@ final class DifferentialChangeset extends DifferentialDAO {
       }
       $start = $inline->getLineNumber() - $offset;
       $end = $start + $inline->getLineLength();
-      if ($start < $length && $end >= 0) {
+      if ($start <= $length && $end >= 0) {
         $start = $start - $add_context;
         $end = $end + $add_context;
         $hunk_content = array();
@@ -301,16 +301,18 @@ final class DifferentialChangeset extends DifferentialDAO {
             }
           }
         }
-        $header = "@@";
-        if ($hunk_offset["-"] !== NULL) {
-          $header .= " -" . ($hunk->getOldOffset() + $hunk_offset["-"]) . "," . ($hunk_last["-"]-$hunk_offset["-"]+1);
+        if ($hunk_offset["-"] !== NULL || $hunk_offset["+"] !== NULL) {
+          $header = "@@";
+          if ($hunk_offset["-"] !== NULL) {
+            $header .= " -" . ($hunk->getOldOffset() + $hunk_offset["-"]) . "," . ($hunk_last["-"]-$hunk_offset["-"]+1);
+          }
+          if ($hunk_offset["+"] !== NULL) {
+            $header .= " +" . ($hunk->getNewOffset() + $hunk_offset["+"]) . "," . ($hunk_last["+"]-$hunk_offset["+"]+1);
+          }
+          $header .= " @@";
+          $context[] = $header;
+          $context[] = implode("\n", $hunk_content);
         }
-        if ($hunk_offset["+"] !== NULL) {
-          $header .= " +" . ($hunk->getNewOffset() + $hunk_offset["+"]) . "," . ($hunk_last["+"]-$hunk_offset["+"]+1);
-        }
-        $header .= " @@";
-        $context[] = $header;
-        $context[] = implode("\n", $hunk_content);
       }
     }
     return implode("\n", $context);
