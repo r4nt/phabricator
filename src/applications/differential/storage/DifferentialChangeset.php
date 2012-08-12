@@ -267,16 +267,16 @@ final class DifferentialChangeset extends DifferentialDAO {
       $start = $inline->getLineNumber() - $offset;
       $end = $start + $inline->getLineLength();
       if ($start < $length && $end >= 0) {
-        $start = max(0, $start-$add_context);
-        $end = min($length-1, $end+$add_context);
+        //$start = /*max(0,*/ $start-$add_context/*)*/;
+        //$end = /*min($length-1,*/ $end+$add_context/*)*/;
         $hunk_content = array();
         $hunk_pos = array( "-" => 0, "+" => 0 );
         $hunk_offset = array( "-" => NULL, "+" => NULL );
         foreach (explode("\n", $hunk->getChanges()) as $line) {
-          $skip = (strncmp($line, $prefix, 1) != 0 &&
-                   strncmp($line, " ", 1) != 0);
-          if ($start <= $hunk_pos[$prefix] && $hunk_pos[$prefix] <= $end) {
-            if (!$skip || ($hunk_pos[$prefix] != $start && $hunk_pos[$prefix] != $end)) {
+          /*$skip = (strncmp($line, $prefix, 1) != 0 &&
+                   strncmp($line, " ", 1) != 0);*/
+          if ($start <= $hunk_pos[$prefix]) {
+            //if (!$skip || ($hunk_pos[$prefix] != $start && $hunk_pos[$prefix] != $end)) {
               if ($hunk_offset["-"] === NULL && (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0)) {
                 $hunk_offset["-"] = $hunk_pos["-"];
               }
@@ -285,17 +285,14 @@ final class DifferentialChangeset extends DifferentialDAO {
               }
 
               $hunk_content[] = $line;
+              
+              // We break out once we hit the end so that hunk_pos is located
+              // at the end of the context range.
               if ($hunk_pos[$prefix] == $end) {
                 break;
               }
-            } else {
-              /*
-              $hunk_content[] = $hunk_pos[$prefix];
-              $hunk_content[] = $start;
-              $hunk_content[] = $end;
-              $hunk_content[] = "ORIG: " . $line;
-              */
-            }
+              
+            //}
           }
           if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
             ++$hunk_pos["-"];
@@ -306,10 +303,10 @@ final class DifferentialChangeset extends DifferentialDAO {
         }
         $header = "@@";
         if ($hunk_offset["-"] !== NULL) {
-          $header .= " -" . ($hunk_offset["-"]+1) . "," . ($hunk_pos["-"]-$hunk_offset["-"]+1);
+          $header .= " -" . ($hunk->getOldOffset() + $hunk_offset["-"]) . "," . ($hunk_pos["-"]-$hunk_offset["-"]+1);
         }
         if ($hunk_offset["+"] !== NULL) {
-          $header .= " +" . ($hunk_offset["+"]+1) . "," . ($hunk_pos["+"]-$hunk_offset["+"]+1);
+          $header .= " +" . ($hunk->getNewOffset() + $hunk_offset["+"]) . "," . ($hunk_pos["+"]-$hunk_offset["+"]+1);
         }
         $header .= " @@";
         $context[] = $header;

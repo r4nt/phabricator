@@ -55,7 +55,21 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
     $context = $change->makeContextDiff($this->createNewComment(1, 0), 0); 
     $this->assertEqual("@@ +1,1 @@\n+a", $context);
   }
+
+  public function testCannotFindContext() {
+    $change = $this->createSingleChange(0, 1, "+a");
+    $context = $change->makeContextDiff($this->createNewComment(2, 0), 0); 
+    $this->assertEqual("", $context);
+  }
   
+  public function testOverlapFromStartOfHunk() {
+    $change = $this->createChange(array(
+      0 => $this->createHunk(23, 2, 42, 2, " 1\n 2"),
+    ));
+    $context = $change->makeContextDiff($this->createNewComment(41, 1), 0); 
+    $this->assertEqual("@@ -23,1 +42,1 @@\n 1", $context);
+  }
+
   public function testMultiLineOldComment() {
     $change = $this->createSingleChange(7, 7,
         " e1\n".
