@@ -108,10 +108,12 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
     $change = $this->createSingleChange(0, 1, 
         "+a\n".
         "\\No newline at end of file");
-    $context = $change->makeContextDiff($this->createNewComment(2, 0), 0); 
+    // Note that this only works with additional context.
+    $context = $change->makeContextDiff($this->createNewComment(2, 0), 1); 
     $this->assertEqual(
-        "@@ @@\n".
-        "\\Ex No newline at end of file", $context);
+        "@@ +1,1 @@\n".
+        "+a\n".
+        "\\No newline at end of file", $context);
   }
 
   public function testMultiLineNewComment() {
