@@ -78,6 +78,32 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
     $this->assertEqual("@@ -24,1 +43,1 @@\n 2", $context);
   }
 
+  public function testInclusionOfNewFileInOldCommentFromStart() {
+    $change = $this->createSingleChange(2, 3,
+         "+n1\n".
+         " e1/2\n".
+         "-o2\n".
+         "+n3\n");
+    $context = $change->makeContextDiff($this->createOldComment(1, 1), 0); 
+    $this->assertEqual(
+        "@@ -1,2 +2,1 @@\n".
+        " e1/2\n".
+        "-o2", $context);
+  }
+
+  public function testInclusionOfOldFileInNewCommentFromStart() {
+    $change = $this->createSingleChange(2, 2,
+         "-o1\n".
+         " e2/1\n".
+         "-o3\n".
+         "+n2\n");
+    $context = $change->makeContextDiff($this->createNewComment(1, 1), 0); 
+    $this->assertEqual(
+        "@@ -2,1 +1,2 @@\n".
+        " e2/1\n".
+        "+n2", $context);
+  }
+
   public function testMultiLineNewComment() {
     $change = $this->createSingleChange(7, 7,
         " e1\n".
