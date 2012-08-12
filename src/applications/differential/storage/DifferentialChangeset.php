@@ -215,29 +215,6 @@ final class DifferentialChangeset extends DifferentialDAO {
     return false;
   }
 
-  // TODO: parse unified diffs and pull out the context logic.
-  public function makeUnifiedDiff($inline) {
-    $diff = new DifferentialDiff();
-
-    $changes = [ 0 => $this ];
-    $diff->attachChangesets($changes);
-    // TODO: We could batch this to improve performance.
-    //foreach ($diff->getChangesets() as $changeset) {
-    //  $changeset->attachHunks($changeset->loadHunks());
-    //}
-    $diff_dict = $diff->getDiffDict();
-
-    $changes = array();
-    foreach ($diff_dict['changes'] as $changedict) {
-      $changes[] = ArcanistDiffChange::newFromDictionary($changedict);
-    }
-    $bundle = ArcanistBundle::newFromChanges($changes);
-
-    $bundle->setLoadFileDataCallback(array($this, 'loadFileByPHID'));
-
-    return $bundle->toUnifiedDiff();
-  }
-
   public function makeContextDiff($inline, $add_context) {
     $context = array();
     $debug = False;
