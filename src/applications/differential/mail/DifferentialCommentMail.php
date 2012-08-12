@@ -180,7 +180,7 @@ final class DifferentialCommentMail extends DifferentialMail {
           $body[] = "Comment at: " . $file . ":" . $range;
 
           $changeset->attachHunks($changeset->loadHunks());
-          $body[] = $changeset->makeContextDiff($inline);
+          $body[] = $changeset->makeContextDiff($inline, 1);
           $body[] = null;
 
           $content = $inline->getContent();

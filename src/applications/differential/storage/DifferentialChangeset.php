@@ -214,7 +214,8 @@ final class DifferentialChangeset extends DifferentialDAO {
 
     return false;
   }
-/*
+
+  // TODO: parse unified diffs and pull out the context logic.
   public function makeUnifiedDiff($inline) {
     $diff = new DifferentialDiff();
 
@@ -236,8 +237,8 @@ final class DifferentialChangeset extends DifferentialDAO {
 
     return $bundle->toUnifiedDiff();
   }
-*/
-  public function makeContextDiff($inline) {
+
+  public function makeContextDiff($inline, $add_context) {
     $context = array();
     $debug = False;
     if ($debug) {
@@ -266,8 +267,8 @@ final class DifferentialChangeset extends DifferentialDAO {
       $start = $inline->getLineNumber() - $offset;
       $end = $start + $inline->getLineLength();
       if ($start < $length && $end >= 0) {
-        $start = max(0, $start-1);
-        $end = min($length-1, $end+1);
+        $start = max(0, $start-$add_context);
+        $end = min($length-1, $end+$add_context);
         $hunk_content = array();
         $hunk_pos = array( "-" => 0, "+" => 0 );
         $hunk_offset = array( "-" => NULL, "+" => NULL );
@@ -311,14 +312,8 @@ final class DifferentialChangeset extends DifferentialDAO {
           $header .= " +" . ($hunk_offset["+"]+1) . "," . ($hunk_pos["+"]-$hunk_offset["+"]+1);
         }
         $header .= " @@";
-        //$context[] = $inline->getLineNumber();
-        //$context[] = $inline->getLineLength();
         $context[] = $header;
         $context[] = implode("\n", $hunk_content);
-        //$context[] = $hunk_pos["-"];
-        //$context[] = $hunk_offset["-"];
-        //$context[] = $hunk_pos["+"];
-        //$context[] = $hunk_offset["+"];
       }
     }
     return implode("\n", $context);

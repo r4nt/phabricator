@@ -37,23 +37,46 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
     $change->attachHunks($hunks);
     return $change;
   }
+  // Returns a change that consists of a single hunk, starting at line 1.
+  private function createSingleChange($old_lines, $new_lines, $changes) {
+    return $this->createChange(array(
+      0 => $this->createHunk(1, $old_lines, 1, $new_lines, $changes),
+    ));
+  }
 
   public function testOneLineOldComment() {
-    $change = $this->createChange(array(
-      0 => $this->createHunk(1, 1, 0, 0, "-a"),
-    ));
-    $comment = $this->createOldComment(1, 0); 
-
-    $this->assertEqual("@@ -1,1 @@\n-a", $change->makeContextDiff($comment));
+    $change = $this->createSingleChange(1, 0, "-a");
+    $context = $change->makeContextDiff($this->createOldComment(1, 0), 0); 
+    $this->assertEqual("@@ -1,1 @@\n-a", $context);
   }
 
   public function testOneLineNewComment() {
-    $change = $this->createChange(array(
-      0 => $this->createHunk(0, 0, 1, 1, "+a"),
-    ));
-    $comment = $this->createNewComment(1, 0); 
-
-    $this->assertEqual("@@ +1,1 @@\n+a", $change->makeContextDiff($comment));
+    $change = $this->createSingleChange(0, 1, "+a");
+    $context = $change->makeContextDiff($this->createNewComment(1, 0), 0); 
+    $this->assertEqual("@@ +1,1 @@\n+a", $context);
+  }
+  
+  public function testMultiLineOldComment() {
+    $change = $this->createSingleChange(7, 7,
+        " e1\n".
+        " e2\n".
+        "-o3\n".
+        "-o4\n".
+        "+n3\n".
+        " e5/4\n".
+        " e6/5\n".
+        "+n6\n".
+        " e7\n");
+    $context = $change->makeContextDiff($this->createNewComment(2, 4), 0);
+    $this->assertEqual(
+        "@@ -2,6 +2,5 @@\n".
+        " e2\n".
+        "-o3\n".
+        "-o4\n".
+        "+n3\n".
+        " e5/4\n".
+        " e6/5\n".
+        "+n6", $context);
   }
 }
 
