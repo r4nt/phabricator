@@ -276,7 +276,7 @@ final class DifferentialChangeset extends DifferentialDAO {
           /*$skip = (strncmp($line, $prefix, 1) != 0 &&
                    strncmp($line, " ", 1) != 0);*/
           if ($hunk_pos[$prefix] <= $end) {
-          if ($start <= $hunk_pos[$prefix]) {
+            if ($start <= $hunk_pos[$prefix]) {
             //if (!$skip || ($hunk_pos[$prefix] != $start && $hunk_pos[$prefix] != $end)) {
               if ($hunk_offset["-"] === NULL && (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0)) {
                 $hunk_offset["-"] = $hunk_pos["-"];
@@ -287,13 +287,13 @@ final class DifferentialChangeset extends DifferentialDAO {
 
               $hunk_content[] = $line;
             //}
-          }
-          if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
-            ++$hunk_pos["-"];
-          }
-          if (strncmp($line, "+", 1) === 0 || strncmp($line, " ", 1) === 0) {
-            ++$hunk_pos["+"];
-          }
+            }
+            if (strncmp($line, "-", 1) === 0 || strncmp($line, " ", 1) === 0) {
+              ++$hunk_pos["-"];
+            }
+            if (strncmp($line, "+", 1) === 0 || strncmp($line, " ", 1) === 0) {
+              ++$hunk_pos["+"];
+            }
           }
         }
         $header = "@@";

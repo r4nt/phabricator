@@ -78,7 +78,7 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
     $this->assertEqual("@@ -24,1 +43,1 @@\n 2", $context);
   }
 
-  public function testMultiLineOldComment() {
+  public function testMultiLineNewComment() {
     $change = $this->createSingleChange(7, 7,
         " e1\n".
         " e2\n".
@@ -99,6 +99,28 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
         " e5/4\n".
         " e6/5\n".
         "+n6", $context);
+  }
+
+  public function testMultiLineOldComment() {
+    $change = $this->createSingleChange(7, 7,
+        " e1\n".
+        " e2\n".
+        "-o3\n".
+        "-o4\n".
+        "+n3\n".
+        " e5/4\n".
+        " e6/5\n".
+        "+n6\n".
+        " e7\n");
+    $context = $change->makeContextDiff($this->createOldComment(2, 4), 0);
+    $this->assertEqual(
+        "@@ -2,5 +2,4 @@\n".
+        " e2\n".
+        "-o3\n".
+        "-o4\n".
+        "+n3\n".
+        " e5/4\n".
+        " e6/5", $context);
   }
 }
 
