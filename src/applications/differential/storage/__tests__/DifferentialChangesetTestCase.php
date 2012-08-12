@@ -70,6 +70,14 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
     $this->assertEqual("@@ -23,1 +42,1 @@\n 1", $context);
   }
 
+  public function testOverlapAfterEndOfHunk() {
+    $change = $this->createChange(array(
+      0 => $this->createHunk(23, 2, 42, 2, " 1\n 2"),
+    ));
+    $context = $change->makeContextDiff($this->createNewComment(43, 1), 0); 
+    $this->assertEqual("@@ -24,1 +43,1 @@\n 2", $context);
+  }
+
   public function testMultiLineOldComment() {
     $change = $this->createSingleChange(7, 7,
         " e1\n".
@@ -83,7 +91,7 @@ final class DifferentialChangeSetTestCase extends PhabricatorTestCase {
         " e7\n");
     $context = $change->makeContextDiff($this->createNewComment(2, 4), 0);
     $this->assertEqual(
-        "@@ -2,6 +2,5 @@\n".
+        "@@ -2,5 +2,5 @@\n".
         " e2\n".
         "-o3\n".
         "-o4\n".
