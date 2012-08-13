@@ -160,6 +160,13 @@ final class DifferentialCommentMail extends DifferentialMail {
         $body[] = null;
       }
       $changesets = $this->getChangesets();
+
+      if (PhabricatorEnv::getEnvConfig(
+            'metamta.differential.unified-comment-context', false)) {
+        foreach ($changesets as $changeset) {
+          $changeset->attachHunks($changeset->loadHunks());
+        }
+      }
       foreach ($inlines as $inline) {
         $changeset = $changesets[$inline->getChangesetID()];
         if (!$changeset) {
@@ -180,8 +187,6 @@ final class DifferentialCommentMail extends DifferentialMail {
         } else {
           $body[] = "================";
           $body[] = "Comment at: " . $file . ":" . $range;
-
-          $changeset->attachHunks($changeset->loadHunks());
           $body[] = $changeset->makeContextDiff($inline, 1);
           $body[] = "----------------";
 
