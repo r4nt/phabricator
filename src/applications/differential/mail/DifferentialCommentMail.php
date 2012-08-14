@@ -115,6 +115,34 @@ final class DifferentialCommentMail extends DifferentialMail {
     }
   }
 
+  protected function indentForMail($lines) {
+    foreach ($lines as &$line) {
+      $line = "> " . $line;
+    }
+    return $lines;
+  }
+
+  protected function nestCommentHistory($inline) {
+    $nested = array();
+    $previous_inlines = id(new DifferentialInlineComment())->loadAllWhere(
+      "changesetID = %d AND lineNumber = %d AND id < %d AND ".
+      "commentID IS NOT NULL ORDER BY id ASC",
+      $inline->getChangesetID(), $inline->getLineNumber(), $inline->getID());
+    foreach ($previous_inlines as $previous_inline) {
+      $nested = $this->indentForMail(
+        array_merge(
+          $nested,
+          explode("\n", $previous_inline->getContent())));
+      $user = id(new PhabricatorUser())->loadOneWhere(
+        "phid = %s", $previous_inline->getAuthorPHID());
+      if ($user) {
+        array_unshift($nested, $user->getRealName() . " wrote:");
+      }
+    }
+    $nested = array_merge($nested, explode("\n", $inline->getContent()));
+    return implode("\n", $nested);
+  }
+
   protected function renderBody() {
 
     $comment = $this->getComment();
@@ -189,9 +217,7 @@ final class DifferentialCommentMail extends DifferentialMail {
           $body[] = "Comment at: " . $file . ":" . $range;
           $body[] = $changeset->makeContextDiff($inline, 1);
           $body[] = "----------------";
-
-          $content = $inline->getContent();
-          $body[] = $content;
+          $body[] = $this->nestCommentHistory($inline);
           $body[] = null;
         }
       }
