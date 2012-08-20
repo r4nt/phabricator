@@ -23,6 +23,7 @@ final class DifferentialCommentEditor {
   protected $action;
 
   protected $attachInlineComments;
+  protected $attachSpecificInlineComments;
   protected $message;
   protected $changedByCommit;
   protected $addedReviewers = array();
@@ -56,6 +57,11 @@ final class DifferentialCommentEditor {
 
   public function setAttachInlineComments($attach) {
     $this->attachInlineComments = $attach;
+    return $this;
+  }
+
+  public function setAttachSpecificInlineComments($comments) {
+    $this->attachSpecificInlineComments = $comments;
     return $this;
   }
 
@@ -129,6 +135,8 @@ final class DifferentialCommentEditor {
         'authorPHID = %s AND revisionID = %d AND commentID IS NULL',
         $this->actorPHID,
         $revision->getID());
+    } elseif ($this->attachSpecificInlineComments) {
+      $inline_comments = $this->attachSpecificInlineComments;
     }
 
     switch ($action) {
