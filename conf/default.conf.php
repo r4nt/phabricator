@@ -1021,7 +1021,7 @@ return array(
   // is disabled by default because it's most likely not a behavior you want,
   // but it proves useful if you are working alone on a project and want to make
   // use of all of differential's features.
-  'differential.allow-self-accept' => false,
+  'differential.allow-self-accept' => true,
 
   // If you set this to true, any user can close any revision so long as it has
   // been accepted. This can be useful depending on your development model. For
