@@ -29,7 +29,7 @@ final class PhabricatorFlagEditController extends PhabricatorFlagController {
     $user = $request->getUser();
 
     $phid = $this->phid;
-    $handle = PhabricatorObjectHandleData::loadOneHandle($phid);
+    $handle = PhabricatorObjectHandleData::loadOneHandle($phid, $user);
 
     if (!$handle->isComplete()) {
       return new Aphront404Response();
@@ -60,6 +60,8 @@ final class PhabricatorFlagEditController extends PhabricatorFlagController {
 
     $dialog->setTitle("Flag {$type_name}");
 
+    require_celerity_resource('phabricator-flag-css');
+
     $form = new AphrontFormLayoutView();
 
     $is_new = !$flag->getID();
@@ -71,13 +73,18 @@ final class PhabricatorFlagEditController extends PhabricatorFlagController {
           "at it later.</p><br />");
     }
 
+    $radio = new AphrontFormRadioButtonControl();
+    foreach (PhabricatorFlagColor::getColorNameMap() as $color => $text) {
+      $class = 'phabricator-flag-radio phabricator-flag-color-'.$color;
+      $radio->addButton($color, $text, '', $class);
+    }
+
     $form
       ->appendChild(
-        id(new AphrontFormSelectControl())
+        $radio
           ->setName('color')
           ->setLabel('Flag Color')
-          ->setValue($flag->getColor())
-          ->setOptions(PhabricatorFlagColor::getColorNameMap()))
+          ->setValue($flag->getColor()))
       ->appendChild(
         id(new AphrontFormTextAreaControl())
           ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_SHORT)

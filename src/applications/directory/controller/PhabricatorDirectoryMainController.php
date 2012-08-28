@@ -206,6 +206,7 @@ final class PhabricatorDirectoryMainController
     $user = $this->getRequest()->getUser();
 
     $flag_query = id(new PhabricatorFlagQuery())
+      ->setViewer($user)
       ->withOwnerPHIDs(array($user->getPHID()))
       ->needHandles(true)
       ->setLimit(10);
@@ -323,9 +324,11 @@ final class PhabricatorDirectoryMainController
         "View Active Revisions \xC2\xBB"));
 
     $revision_view = id(new DifferentialRevisionListView())
+      ->setHighlightAge(true)
       ->setRevisions($active)
       ->setFields(DifferentialRevisionListView::getDefaultFields())
-      ->setUser($user);
+      ->setUser($user)
+      ->loadAssets();
     $phids = array_merge(
       array($user_phid),
       $revision_view->getRequiredHandlePHIDs());

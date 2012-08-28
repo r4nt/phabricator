@@ -877,10 +877,8 @@ return array(
 
   // The largest filesize Phabricator will store in the MySQL BLOB storage
   // engine, which just uses a database table to store files. While this isn't a
-  // best practice, it's really easy to set up. This is hard-limited by the
-  // value of 'max_allowed_packet' in MySQL (since this often defaults to 1MB,
-  // the default here is slightly smaller than 1MB). Set this to 0 to disable
-  // use of the MySQL blob engine.
+  // best practice, it's really easy to set up. Set this to 0 to disable use of
+  // the MySQL blob engine.
   'storage.mysql-engine.max-size' => 1000000,
 
   // Phabricator provides a local disk storage engine, which just writes files
@@ -1024,6 +1022,22 @@ return array(
   // but it proves useful if you are working alone on a project and want to make
   // use of all of differential's features.
   'differential.allow-self-accept' => false,
+
+  // If you set this to true, any user can close any revision so long as it has
+  // been accepted. This can be useful depending on your development model. For
+  // example, github-style pull requests where the reviewer is often the
+  // actual committer can benefit from turning this option to true. If false,
+  // only the submitter can close a revision.
+  'differential.always-allow-close' => false,
+
+  // Revisions newer than this number of days are marked as fresh in Action
+  // Required and Revisions Waiting on You views. Only work days (not weekends
+  // and holidays) are included. Set to 0 to disable this feature.
+  'differential.days-fresh' => 1,
+
+  // Similar to 'differential.days-fresh' but marks stale revisions. If the
+  // revision is even older than it is marked as old.
+  'differential.days-stale' => 3,
 
 // -- Maniphest ------------------------------------------------------------- //
 
@@ -1191,7 +1205,6 @@ return array(
     'erb' => 'Embedded Ruby/ERB',
     'erlang' => 'Erlang',
     'html' => 'HTML',
-    'infer' => 'Infer from title (extension)',
     'java' => 'Java',
     'js' => 'Javascript',
     'mysql' => 'MySQL',
@@ -1204,8 +1217,6 @@ return array(
     'ruby' => 'Ruby',
     'xml' => 'XML',
   ),
-
-  'pygments.dropdown-default' => 'infer',
 
   // This is an override list of regular expressions which allows you to choose
   // what language files are highlighted as. If your projects have certain rules
