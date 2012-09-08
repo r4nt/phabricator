@@ -38,6 +38,7 @@ abstract class DifferentialFieldSpecification {
 
   private $revision;
   private $diff;
+  private $manualDiff;
   private $handles;
   private $diffProperties;
   private $user;
@@ -278,25 +279,10 @@ abstract class DifferentialFieldSpecification {
       return '<em>None</em>';
     }
 
-    $statuses = id(new PhabricatorUserStatus())->loadCurrentStatuses(
-      $user_phids);
-
     $links = array();
     foreach ($user_phids as $user_phid) {
       $handle = $this->getHandle($user_phid);
-      $extra = null;
-      $status = idx($statuses, $handle->getPHID());
-      if ($handle->isDisabled()) {
-        $extra = ' <strong>(disabled)</strong>';
-      } else if ($status) {
-        $until = phabricator_date($status->getDateTo(), $this->getUser());
-        if ($status->getStatus() == PhabricatorUserStatus::STATUS_SPORADIC) {
-          $extra = ' <strong title="until '.$until.'">(sporadic)</strong>';
-        } else {
-          $extra = ' <strong title="until '.$until.'">(away)</strong>';
-        }
-      }
-      $links[] = $handle->renderLink().$extra;
+      $links[] = $handle->renderLink();
     }
 
     return implode(', ', $links);
@@ -583,6 +569,25 @@ abstract class DifferentialFieldSpecification {
   }
 
 
+  /**
+   * This method allows you to take action when a commit appears in a tracked
+   * branch (for example, by closing tasks associated with the commit).
+   *
+   * @param PhabricatorRepository The repository the commit appeared in.
+   * @param PhabricatorRepositoryCommit The commit itself.
+   * @param PhabricatorRepostioryCommitData Commit data.
+   * @return void
+   *
+   * @task commit
+   */
+  public function didParseCommit(
+    PhabricatorRepository $repo,
+    PhabricatorRepositoryCommit $commit,
+    PhabricatorRepositoryCommitData $data) {
+    return;
+  }
+
+
 /* -(  Loading Additional Data  )-------------------------------------------- */
 
 
@@ -806,6 +811,14 @@ abstract class DifferentialFieldSpecification {
   /**
    * @task context
    */
+  final public function setManualDiff(DifferentialDiff $diff) {
+    $this->manualDiff = $diff;
+    return $this;
+  }
+
+  /**
+   * @task context
+   */
   final public function setHandles(array $handles) {
     assert_instances_of($handles, 'PhabricatorObjectHandle');
     $this->handles = $handles;
@@ -846,6 +859,16 @@ abstract class DifferentialFieldSpecification {
       throw new DifferentialFieldDataNotAvailableException($this);
     }
     return $this->diff;
+  }
+
+  /**
+   * @task context
+   */
+  final protected function getManualDiff() {
+    if (!$this->manualDiff) {
+      return $this->getDiff();
+    }
+    return $this->manualDiff;
   }
 
   /**

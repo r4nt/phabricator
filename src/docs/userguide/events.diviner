@@ -5,17 +5,19 @@ Using Phabricator event listeners to customize behavior.
 
 = Overview =
 
-Phabricator allows you to install custom runtime event listeners which can react
-to certain things happening (like a Maniphest Task being edited) and run custom
-code to perform logging, synchronize with other systems, or modify workflows.
+Phabricator and Arcanist allow you to install custom runtime event listeners
+which can react to certain things happening (like a Maniphest Task being edited
+or a user creating a new Differential Revision) and run custom code to perform
+logging, synchronize with other systems, or modify workflows.
 
-These listeners are PHP classes which you install beside Phabricator, and which
-Phabricator loads at runtime and runs in-process. They are the most direct and
-powerful way to respond to events.
+These listeners are PHP classes which you install beside Phabricator or
+Arcanist, and which Phabricator loads at runtime and runs in-process. They
+require somewhat more effort upfront than simple configuration switches, but are
+the most direct and powerful way to respond to events.
 
-= Installing Event Listeners =
+= Installing Event Listeners (Phabicator) =
 
-To install event listeners, follow these steps:
+To install event listeners in Phabricator, follow these steps:
 
   - Write a listener class which extends @{class@libphutil:PhutilEventListener}.
   - Add it to a libphutil library, or create a new library (for instructions,
@@ -29,6 +31,22 @@ You can verify your listener is registered in the "Events" tab of DarkConsole.
 It should appear at the top under "Registered Event Listeners". You can also
 see any events the page emitted there. For details on DarkConsole, see
 @{article:Using DarkConsole}.
+
+= Installing Event Listeners (Arcanist) =
+
+To install event listeners in Arcanist, follow these steps:
+
+  - Write a listener class which extends @{class@libphutil:PhutilEventListener}.
+  - Add it to a libphutil library, or create a new library (for instructions,
+    see @{article:libphutil Libraries User Guide}.
+  - Configure Phabricator to load the library by adding it to `load`
+    in the Arcanist config (e.g., `.arcconfig`, or user/global config).
+  - Configure Arcanist to install the event listener by adding the class
+    name to `events.listeners` in the Arcanist config.
+
+You can verify your listener is registered by running any `arc` command with
+`--trace`. You should see output indicating your class was registered as an
+event listener.
 
 = Example Listener =
 
@@ -66,6 +84,51 @@ The special constant `PhutilEventType::TYPE_ALL` will let you listen for all
 events. Normally, you want to listen only to specific events, but if you're
 writing a generic handler you can listen to all events with this constant
 rather than by enumerating each event.
+
+== Arcanist Events ==
+
+Arcanist event constants are listed in @{class@arcanist:ArcanistEventType}.
+
+All Arcanist events have this data available:
+
+  - `workflow` The active @{class@arcanist:ArcanistBaseWorkflow}.
+
+== Arcanist: Commit: Will Commit SVN ==
+
+The constant for this event is `ArcanistEventType::TYPE_COMMIT_WILLCOMMITSVN`.
+
+This event is dispatched before an `svn commit` occurs and allows you to
+modify the commit message. Data available on this event:
+
+  - `message` The text of the message.
+
+== Arcanist: Diff: Will Build Message ==
+
+The constant for this event is `ArcanistEventType::TYPE_DIFF_WILLBUILDMESSAGE`.
+
+This event is dispatched before an editable message is presented to the user,
+and allows you to, e.g., fill in default values for fields. Data available
+on this event:
+
+  - `fields` A map of field values to be compiled into a message.
+
+== Arcanist: Diff: Was Created ==
+
+The constant for this event is `ArcanistEventType::TYPE_DIFF_WASCREATED`.
+
+This event is dispatched after a diff is created. It is currently only useful
+for collecting timing information. No data is available on this event.
+
+== Arcanist: Revision: Will Create Revision ==
+
+The constant for this event is
+`ArcanistEventType::TYPE_REVISION_WILLCREATEREVISION`.
+
+This event is dispatched before a revision is created. It allows you to modify
+fields to, e.g., edit revision titles. Data available on this event:
+
+  - `specification` Parameters that will be used to invoke the
+    `differential.createrevision` Conduit call.
 
 == Maniphest: Will Edit Task ==
 
@@ -207,6 +270,20 @@ The constant for this event is
 `PhabricatorEventType::TYPE_TEST_DIDRUNTEST`.
 
 This is a test event for testing event listeners. See above for details.
+
+== UI: Did Render Actions ==
+
+The constant for this event is
+`PhabricatorEventType::TYPE_UI_DIDRENDERACTIONS`.
+
+This event is dispatched after a @{class:PhabricatorActionListView} is built by
+the UI. It allows you to add new actions that your application may provide, like
+"Fax this Object". Data available on this event:
+
+  - `object` The object which actions are being rendered for.
+  - `actions` The current list of available actions.
+
+NOTE: This event is unstable and subject to change.
 
 = Debugging Listeners =
 

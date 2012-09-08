@@ -105,8 +105,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
     $phids = array_keys($phids);
 
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $dict = array();
     $dict['Status'] =
@@ -315,6 +314,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
     $headsup_panel->setProperties($dict);
 
     $engine = new PhabricatorMarkupEngine();
+    $engine->setViewer($user);
     $engine->addObject($task, ManiphestTask::MARKUP_FIELD_DESCRIPTION);
     foreach ($transactions as $xaction) {
       if ($xaction->hasComments()) {

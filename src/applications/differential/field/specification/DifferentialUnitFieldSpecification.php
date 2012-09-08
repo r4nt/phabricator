@@ -36,7 +36,7 @@ final class DifferentialUnitFieldSpecification
   }
 
   public function renderValueForRevisionView() {
-    $diff = $this->getDiff();
+    $diff = $this->getManualDiff();
 
     $ustar = DifferentialRevisionUpdateHistoryView::renderDiffUnitStar($diff);
     $umsg = DifferentialRevisionUpdateHistoryView::getDiffUnitMessage($diff);
@@ -101,10 +101,20 @@ final class DifferentialUnitFieldSpecification
           $hidden[$result]++;
         }
 
+        $value = phutil_escape_html(idx($test, 'name'));
+        if (!empty($test['link'])) {
+          $value = phutil_render_tag(
+            'a',
+            array(
+              'href' => $test['link'],
+              'target' => '_blank',
+            ),
+            $value);
+        }
         $rows[] = array(
           'style' => $this->getResultStyle($result),
           'name'  => phutil_escape_html(ucwords($result)),
-          'value' => phutil_escape_html(idx($test, 'name')),
+          'value' => $value,
           'show'  => $show,
         );
 

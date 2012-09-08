@@ -113,13 +113,13 @@ final class ManiphestTransactionPreviewController extends ManiphestController {
     }
     $phids[] = $user->getPHID();
 
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->loadHandles();
+    $handles = $this->loadViewerHandles($phids);
 
     $transactions   = array();
     $transactions[] = $transaction;
 
     $engine = new PhabricatorMarkupEngine();
+    $engine->setViewer($user);
     $engine->addObject($transaction, ManiphestTransaction::MARKUP_FIELD_BODY);
     $engine->process();
 
