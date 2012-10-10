@@ -301,7 +301,7 @@ return array(
   //    - If your install is anything else, you're much safer leaving this
   //      off since the risk in turning it on is that your outgoing mail will
   //      mostly never arrive.
-  'metamta.can-send-as-user'    => false,
+  'metamta.can-send-as-user'    => true,
 
 
   // Adapter class to use to transmit mail to the MTA. The default uses
