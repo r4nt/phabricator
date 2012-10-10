@@ -21,6 +21,14 @@ abstract class PhabricatorController extends AphrontController {
   private $handles;
 
   public function shouldRequireLogin() {
+
+    // If this install is configured to allow public resources and the
+    // controller works in public mode, allow the request through.
+    $is_public_allowed = PhabricatorEnv::getEnvConfig('policy.allow-public');
+    if ($is_public_allowed && $this->shouldAllowPublic()) {
+      return false;
+    }
+
     return true;
   }
 
@@ -30,6 +38,10 @@ abstract class PhabricatorController extends AphrontController {
 
   public function shouldRequireEnabledUser() {
     return true;
+  }
+
+  public function shouldAllowPublic() {
+    return false;
   }
 
   public function shouldRequireEmailVerification() {
@@ -48,7 +60,7 @@ abstract class PhabricatorController extends AphrontController {
     $phusr = $request->getCookie('phusr');
     $phsid = $request->getCookie('phsid');
 
-    if ($phusr && $phsid) {
+    if (strlen($phusr) && $phsid) {
       $info = queryfx_one(
         $user->establishConnection('r'),
         'SELECT u.* FROM %T u JOIN %T s ON u.phid = s.userPHID
@@ -77,6 +89,19 @@ abstract class PhabricatorController extends AphrontController {
       $disabled_user_controller = new PhabricatorDisabledUserController(
         $request);
       return $this->delegateToController($disabled_user_controller);
+    }
+
+    $event = new PhabricatorEvent(
+      PhabricatorEventType::TYPE_CONTROLLER_CHECKREQUEST,
+      array(
+        'request' => $request,
+        'controller' => get_class($this),
+      ));
+    $event->setUser($user);
+    PhutilEventEngine::dispatchEvent($event);
+    $checker_controller = $event->getValue('controller');
+    if ($checker_controller != get_class($this)) {
+      return $this->delegateToController($checker_controller);
     }
 
     if (PhabricatorEnv::getEnvConfig('darkconsole.enabled')) {

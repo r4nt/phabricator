@@ -127,7 +127,8 @@ final class PhabricatorFile extends PhabricatorFileDAO {
     array $params = array()) {
 
     $file = id(new PhabricatorFile())->loadOneWhere(
-      'contentHash = %s LIMIT 1',
+      'name = %s AND contentHash = %s LIMIT 1',
+      self::normalizeFileName(idx($params, 'name')),
       PhabricatorHash::digest($data));
 
     if (!$file) {
@@ -314,6 +315,13 @@ final class PhabricatorFile extends PhabricatorFileDAO {
     return '/file/xform/thumb-160x120/'.$this->getPHID().'/';
   }
 
+  public function getPreview220URI() {
+    return '/file/xform/preview-220/'.$this->getPHID().'/';
+  }
+
+  public function getThumb220x165URI() {
+    return '/file/xform/thumb-220x165/'.$this->getPHID().'/';
+  }
 
   public function isViewableInBrowser() {
     return ($this->getViewableMimeType() !== null);

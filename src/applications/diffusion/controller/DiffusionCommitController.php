@@ -72,7 +72,6 @@ final class DiffusionCommitController extends DiffusionController {
       $subpath = $commit_data->getCommitDetail('svn-subpath');
 
       $error_panel = new AphrontErrorView();
-      $error_panel->setWidth(AphrontErrorView::WIDTH_WIDE);
       $error_panel->setTitle('Commit Not Tracked');
       $error_panel->setSeverity(AphrontErrorView::SEVERITY_WARNING);
       $error_panel->appendChild(
@@ -156,7 +155,6 @@ final class DiffusionCommitController extends DiffusionController {
     $pane_id = null;
     if ($bad_commit) {
       $error_panel = new AphrontErrorView();
-      $error_panel->setWidth(AphrontErrorView::WIDTH_WIDE);
       $error_panel->setTitle('Bad Commit');
       $error_panel->appendChild(
         phutil_escape_html($bad_commit['description']));
@@ -166,7 +164,6 @@ final class DiffusionCommitController extends DiffusionController {
       // Don't render anything else.
     } else if (!count($changes)) {
       $no_changes = new AphrontErrorView();
-      $no_changes->setWidth(AphrontErrorView::WIDTH_WIDE);
       $no_changes->setSeverity(AphrontErrorView::SEVERITY_WARNING);
       $no_changes->setTitle('Not Yet Parsed');
       // TODO: This can also happen with weird SVN changes that don't do
@@ -568,20 +565,11 @@ final class DiffusionCommitController extends DiffusionController {
           ->setID('add-ccs-tokenizer')
           ->setDisableBehavior(true))
       ->appendChild(
-        id(new AphrontFormTextAreaControl())
+        id(new PhabricatorRemarkupControl())
           ->setLabel('Comments')
           ->setName('content')
           ->setValue($draft)
-          ->setID('audit-content')
-          ->setCaption(phutil_render_tag(
-            'a',
-            array(
-              'href' => PhabricatorEnv::getDoclink(
-                'article/Remarkup_Reference.html'),
-              'tabindex' => '-1',
-              'target' => '_blank',
-            ),
-            'Formatting Reference')))
+          ->setID('audit-content'))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue($is_serious ? 'Submit' : 'Cook the Books'));

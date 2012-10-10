@@ -364,8 +364,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $draft_text = null;
     }
 
-    $panel_id = celerity_generate_unique_node_id();
-
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
 
     if ($is_serious) {
@@ -373,9 +371,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
       // installs.
       unset($resolution_types[ManiphestTaskStatus::STATUS_CLOSED_SPITE]);
     }
-
-    $remarkup_href = PhabricatorEnv::getDoclink(
-      'article/Remarkup_Reference.html');
 
     $comment_form = new AphrontFormView();
     $comment_form
@@ -435,25 +430,15 @@ final class ManiphestTaskDetailController extends ManiphestController {
           ->setControlID('file')
           ->setControlStyle('display: none'))
       ->appendChild(
-        id(new AphrontFormTextAreaControl())
+        id(new PhabricatorRemarkupControl())
           ->setLabel('Comments')
           ->setName('comments')
           ->setValue($draft_text)
-          ->setCaption(
-            phutil_render_tag(
-              'a',
-              array(
-                'href' => $remarkup_href,
-                'tabindex' => '-1',
-                'target' => '_blank',
-              ),
-              'Formatting Reference'))
           ->setID('transaction-comments'))
       ->appendChild(
         id(new AphrontFormDragAndDropUploadControl())
           ->setLabel('Attached Files')
           ->setName('files')
-          ->setDragAndDropTarget($panel_id)
           ->setActivatedClass('aphront-panel-view-drag-and-drop'))
       ->appendChild(
         id(new AphrontFormSubmitControl())
@@ -508,7 +493,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
     $comment_panel = new AphrontPanelView();
     $comment_panel->appendChild($comment_form);
-    $comment_panel->setID($panel_id);
     $comment_panel->addClass('aphront-panel-accent');
     $comment_panel->setHeader($is_serious ? 'Add Comment' : 'Weigh In');
 

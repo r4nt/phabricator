@@ -167,6 +167,10 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
         'type'    => 'db',
         'name'    => 'ponder',
       ),
+      'db.xhprof' => array(
+        'type'    => 'db',
+        'name'    => 'xhprof',
+      ),
       '0000.legacy.sql' => array(
         'type'    => 'sql',
         'name'    => $this->getPatchPath('0000.legacy.sql'),
@@ -971,6 +975,34 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       'edgetype.sql' => array(
         'type'    => 'sql',
         'name'    => $this->getPatchPath('edgetype.sql'),
+      ),
+      'ponder-comments.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('ponder-comments.sql'),
+      ),
+      'pastepolicy.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('pastepolicy.sql'),
+      ),
+      'xhprof.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('xhprof.sql'),
+      ),
+      'draft-metadata.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('draft-metadata.sql'),
+      ),
+      'phamedomain.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('phamedomain.sql'),
+      ),
+      'ponder-mailkey.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('ponder-mailkey.sql'),
+      ),
+      'ponder-mailkey-populate.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('ponder-mailkey-populate.php'),
       ),
     );
   }

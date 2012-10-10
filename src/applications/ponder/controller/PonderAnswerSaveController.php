@@ -34,6 +34,17 @@ final class PonderAnswerSaveController extends PonderController {
 
     $answer = $request->getStr('answer');
 
+    // Only want answers with some non whitespace content
+    if (!strlen(trim($answer))) {
+      $dialog = new AphrontDialogView();
+      $dialog->setUser($request->getUser());
+      $dialog->setTitle('Empty answer');
+      $dialog->appendChild('<p>Your answer must not be empty.</p>');
+      $dialog->addCancelButton('/Q'.$question_id);
+
+      return id(new AphrontDialogResponse())->setDialog($dialog);
+    }
+
     $content_source = PhabricatorContentSource::newForSource(
       PhabricatorContentSource::SOURCE_WEB,
       array(
@@ -49,15 +60,12 @@ final class PonderAnswerSaveController extends PonderController {
       ->setContentSource($content_source);
 
     id(new PonderAnswerEditor())
+      ->setUser($user)
       ->setQuestion($question)
       ->setAnswer($res)
       ->saveAnswer();
 
-    PhabricatorSearchPonderIndexer::indexQuestion($question);
-
-    return id(new AphrontRedirectResponse())
-      ->setURI(id(new PhutilURI('/Q'. $question->getID()))
-        ->setFragment('A'.$res->getID()));
+    return id(new AphrontRedirectResponse())->setURI(
+      id(new PhutilURI('/Q'. $question->getID())));
   }
-
 }

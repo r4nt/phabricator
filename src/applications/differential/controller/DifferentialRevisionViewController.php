@@ -184,7 +184,6 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $warning = new AphrontErrorView();
       $warning->setTitle('Very Large Diff');
       $warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $warning->setWidth(AphrontErrorView::WIDTH_WIDE);
       $warning->appendChild(
         "<p>This diff is very large and affects {$count} files. Load ".
         "each file individually. ".
@@ -354,10 +353,17 @@ final class DifferentialRevisionViewController extends DifferentialController {
         'authorPHID = %s AND draftKey = %s',
         $user->getPHID(),
         'differential-comment-'.$revision->getID());
+
+      $reviewers = array();
+      $ccs = array();
       if ($draft) {
-        $draft = $draft->getDraft();
-      } else {
-        $draft = null;
+        $reviewers = idx($draft->getMetadata(), 'reviewers', array());
+        $ccs = idx($draft->getMetadata(), 'ccs', array());
+        if ($reviewers || $ccs) {
+          $handles = $this->loadViewerHandles(array_merge($reviewers, $ccs));
+          $reviewers = array_select_keys($handles, $reviewers);
+          $ccs = array_select_keys($handles, $ccs);
+        }
       }
 
       $comment_form = new DifferentialAddCommentView();
@@ -367,6 +373,8 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $comment_form->setActionURI('/differential/comment/save/');
       $comment_form->setUser($user);
       $comment_form->setDraft($draft);
+      $comment_form->setReviewers(mpull($reviewers, 'getFullName', 'getPHID'));
+      $comment_form->setCCs(mpull($ccs, 'getFullName', 'getPHID'));
     }
 
     $pane_id = celerity_generate_unique_node_id();

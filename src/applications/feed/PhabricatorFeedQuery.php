@@ -16,7 +16,8 @@
  * limitations under the License.
  */
 
-final class PhabricatorFeedQuery extends PhabricatorCursorPagedPolicyQuery {
+final class PhabricatorFeedQuery
+  extends PhabricatorCursorPagedPolicyAwareQuery {
 
   private $filterPHIDs;
 
@@ -75,11 +76,15 @@ final class PhabricatorFeedQuery extends PhabricatorCursorPagedPolicyQuery {
   private function buildGroupClause(AphrontDatabaseConnection $conn_r) {
     return qsprintf(
       $conn_r,
-      'GROUP BY ref.chronologicalKey');
+      'GROUP BY '.($this->filterPHIDs
+        ? 'ref.chronologicalKey'
+        : 'story.chronologicalKey'));
   }
 
   protected function getPagingColumn() {
-    return 'ref.chronologicalKey';
+    return ($this->filterPHIDs
+      ? 'ref.chronologicalKey'
+      : 'story.chronologicalKey');
   }
 
   protected function getPagingValue($item) {

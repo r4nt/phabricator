@@ -49,6 +49,7 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
 
         if ($parent) {
           $paste->setParentPHID($parent->getPHID());
+          $paste->setViewPolicy($parent->getViewPolicy());
         }
       }
 
@@ -87,6 +88,10 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
 
       $paste->setTitle($request->getStr('title'));
       $paste->setLanguage($request->getStr('language'));
+      $paste->setViewPolicy($request->getStr('can_view'));
+
+      // NOTE: The author is the only editor and can always view the paste,
+      // so it's impossible for them to choose an invalid policy.
 
       if (!$errors) {
         if ($is_create) {
@@ -121,7 +126,7 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
     $form->setFlexible(true);
 
     $langs = array(
-      '' => '(Detect With Wizardly Powers)',
+      '' => '(Detect From Filename in Title)',
     ) + PhabricatorEnv::getEnvConfig('pygments.dropdown-choices');
 
     $form
@@ -139,6 +144,19 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
           ->setValue($paste->getLanguage())
           ->setOptions($langs));
 
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($user)
+      ->setObject($paste)
+      ->execute();
+
+    $form->appendChild(
+      id(new AphrontFormPolicyControl())
+        ->setUser($user)
+        ->setCapability(PhabricatorPolicyCapability::CAN_VIEW)
+        ->setPolicyObject($paste)
+        ->setPolicies($policies)
+        ->setName('can_view'));
+
     if ($is_create) {
       $form
         ->appendChild(
@@ -149,17 +167,23 @@ final class PhabricatorPasteEditController extends PhabricatorPasteController {
             ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_TALL)
             ->setCustomClass('PhabricatorMonospaced')
             ->setName('text'));
-    }
-
-    /* TODO: Doesn't have any useful options yet.
-      ->appendChild(
-        id(new AphrontFormPolicyControl())
-          ->setLabel('Visible To')
-          ->setUser($user)
+    } else {
+      $fork_link = phutil_render_tag(
+        'a',
+        array(
+          'href' => $this->getApplicationURI('?parent='.$paste->getID())
+        ),
+        'Fork'
+      );
+      $form
+        ->appendChild(
+          id(new AphrontFormMarkupControl())
+          ->setLabel('Text')
           ->setValue(
-            $new_paste->getPolicy(PhabricatorPolicyCapability::CAN_VIEW))
-          ->setName('policy'))
-    */
+            'Paste text can not be edited. '.
+            $fork_link.' to create a new paste.'
+          ));
+    }
 
     $submit = new AphrontFormSubmitControl();
 

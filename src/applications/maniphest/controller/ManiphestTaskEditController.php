@@ -43,7 +43,7 @@ final class ManiphestTaskEditController extends ManiphestController {
       }
     } else {
       $task = new ManiphestTask();
-      $task->setPriority(ManiphestTaskPriority::PRIORITY_TRIAGE);
+      $task->setPriority(ManiphestTaskPriority::getDefaultPriority());
       $task->setAuthorPHID($user->getPHID());
 
       // These allow task creation with defaults.
@@ -486,24 +486,26 @@ final class ManiphestTaskEditController extends ManiphestController {
       }
     }
 
+
+    $description_control = new PhabricatorRemarkupControl();
+    // "Upsell" creating tasks via email in create flows if the instance is
+    // configured for this awesomeness.
     $email_create = PhabricatorEnv::getEnvConfig(
       'metamta.maniphest.public-create-email');
-    $email_hint = null;
     if (!$task->getID() && $email_create) {
       $email_hint = 'You can also create tasks by sending an email to: '.
                     '<tt>'.phutil_escape_html($email_create).'</tt>';
+      $description_control->setCaption($email_hint);
     }
 
-    $panel_id = celerity_generate_unique_node_id();
+    $description_control
+      ->setLabel('Description')
+      ->setName('description')
+      ->setID('description-textarea')
+      ->setValue($task->getDescription());
 
     $form
-      ->appendChild(
-        id(new AphrontFormTextAreaControl())
-          ->setLabel('Description')
-          ->setName('description')
-          ->setID('description-textarea')
-          ->setCaption($email_hint)
-          ->setValue($task->getDescription()));
+      ->appendChild($description_control);
 
     if (!$task->getID()) {
       $form
@@ -511,7 +513,6 @@ final class ManiphestTaskEditController extends ManiphestController {
           id(new AphrontFormDragAndDropUploadControl())
             ->setLabel('Attached Files')
             ->setName('files')
-            ->setDragAndDropTarget($panel_id)
             ->setActivatedClass('aphront-panel-view-drag-and-drop'));
     }
 
@@ -524,7 +525,6 @@ final class ManiphestTaskEditController extends ManiphestController {
     $panel = new AphrontPanelView();
     $panel->setWidth(AphrontPanelView::WIDTH_FULL);
     $panel->setHeader($header_name);
-    $panel->setID($panel_id);
     $panel->appendChild($form);
 
     $description_preview_panel =

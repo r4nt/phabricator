@@ -37,12 +37,16 @@ final class PhabricatorApplicationAudit extends PhabricatorApplication {
         'view/(?P<filter>[^/]+)/(?:(?P<name>[^/]+)/)?'
           => 'PhabricatorAuditListController',
         'addcomment/' => 'PhabricatorAuditAddCommentController',
-        'preview/(?P<id>\d+)/' => 'PhabricatorAuditPreviewController',
+        'preview/(?P<id>[1-9]\d*)/' => 'PhabricatorAuditPreviewController',
       ),
     );
   }
 
-  public function getCoreApplicationOrder() {
+  public function getApplicationGroup() {
+    return self::GROUP_CORE;
+  }
+
+  public function getApplicationOrder() {
     return 0.130;
   }
 

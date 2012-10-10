@@ -33,15 +33,32 @@ final class PonderQuestionViewController extends PonderController {
     if (!$question) {
       return new Aphront404Response();
     }
-    $question->attachRelated($user->getPHID());
-    $answers = $question->getAnswers();
-
+    $question->attachRelated();
+    $question->attachVotes($user->getPHID());
     $object_phids = array($user->getPHID(), $question->getAuthorPHID());
-    foreach ($answers as $answer) {
-      $object_phids[] = $answer->getAuthorPHID();
+
+    $answers = $question->getAnswers();
+    $comments = $question->getComments();
+    foreach ($comments as $comment) {
+      $object_phids[] = $comment->getAuthorPHID();
     }
 
+    foreach ($answers as $answer) {
+      $object_phids[] = $answer->getAuthorPHID();
+
+      $comments = $answer->getComments();
+      foreach ($comments as $comment) {
+        $object_phids[] = $comment->getAuthorPHID();
+      }
+    }
+
+    $subscribers = PhabricatorSubscribersQuery::loadSubscribersForPHID(
+      $question->getPHID());
+
+    $object_phids = array_merge($object_phids, $subscribers);
+
     $handles = $this->loadViewerHandles($object_phids);
+    $this->loadHandles($object_phids);
 
     $detail_panel = new PonderQuestionDetailView();
     $detail_panel
@@ -62,14 +79,70 @@ final class PonderQuestionViewController extends PonderController {
       ->setUser($user)
       ->setActionURI("/ponder/answer/add/");
 
-    return $this->buildStandardPageResponse(
+    $header = id(new PhabricatorHeaderView())
+      ->setObjectName('Q'.$question->getID())
+      ->setHeader($question->getTitle());
+
+    $actions = $this->buildActionListView($question);
+    $properties = $this->buildPropertyListView($question, $subscribers);
+
+    $nav = $this->buildSideNavView($question);
+    $nav->appendChild(
       array(
+        $header,
+        $actions,
+        $properties,
         $detail_panel,
         $responses_panel,
         $answer_add_panel
-      ),
+      ));
+    $nav->selectFilter(null);
+
+
+    return $this->buildApplicationPage(
+      $nav,
       array(
+        'device' => true,
         'title' => 'Q'.$question->getID().' '.$question->getTitle()
       ));
+  }
+
+  private function buildActionListView(PonderQuestion $question) {
+    $viewer = $this->getRequest()->getUser();
+    $view = new PhabricatorActionListView();
+
+    $view->setUser($viewer);
+    $view->setObject($question);
+
+    return $view;
+  }
+
+  private function buildPropertyListView(
+    PonderQuestion $question,
+    array $subscribers) {
+
+    $viewer = $this->getRequest()->getUser();
+    $view = new PhabricatorPropertyListView();
+
+    $view->addProperty(
+      pht('Author'),
+      $this->getHandle($question->getAuthorPHID())->renderLink());
+
+    $view->addProperty(
+      pht('Created'),
+      phabricator_datetime($question->getDateCreated(), $viewer));
+
+    if ($subscribers) {
+      foreach ($subscribers as $key => $subscriber) {
+        $subscribers[$key] = $this->getHandle($subscriber)->renderLink();
+      }
+      $subscribers = implode(', ', $subscribers);
+    }
+
+    $view->addProperty(
+      pht('Subscribers'),
+      nonempty($subscribers, '<em>'.pht('None').'</em>'));
+
+    return $view;
   }
 }

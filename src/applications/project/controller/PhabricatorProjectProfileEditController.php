@@ -19,6 +19,8 @@
 final class PhabricatorProjectProfileEditController
   extends PhabricatorProjectController {
 
+  private $id;
+
   public function willProcessRequest(array $data) {
     $this->id = $data['id'];
   }
@@ -154,6 +156,11 @@ final class PhabricatorProjectProfileEditController
     $title = 'Edit Project';
     $action = '/project/edit/'.$project->getID().'/';
 
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($user)
+      ->setObject($project)
+      ->execute();
+
     $form = new AphrontFormView();
     $form
       ->setID('project-edit-form')
@@ -187,12 +194,14 @@ final class PhabricatorProjectProfileEditController
           ->setName('can_view')
           ->setCaption('Members can always view a project.')
           ->setPolicyObject($project)
+          ->setPolicies($policies)
           ->setCapability(PhabricatorPolicyCapability::CAN_VIEW))
       ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setUser($user)
           ->setName('can_edit')
           ->setPolicyObject($project)
+          ->setPolicies($policies)
           ->setCapability(PhabricatorPolicyCapability::CAN_EDIT))
       ->appendChild(
         id(new AphrontFormPolicyControl())
@@ -201,6 +210,7 @@ final class PhabricatorProjectProfileEditController
           ->setCaption(
             'Users who can edit a project can always join a project.')
           ->setPolicyObject($project)
+          ->setPolicies($policies)
           ->setCapability(PhabricatorPolicyCapability::CAN_JOIN))
       ->appendChild(
         id(new AphrontFormMarkupControl())
