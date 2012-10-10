@@ -226,7 +226,10 @@ final class DifferentialCommentMail extends DifferentialMail {
       $body[] = null;
     }
 
-    $body[] = $this->renderAuxFields(DifferentialMailPhase::COMMENT);
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false) ||
+        trim(implode("", $body)) != "") {
+      $body[] = $this->renderAuxFields(DifferentialMailPhase::COMMENT);
+    }
 
     return implode("\n", $body);
   }

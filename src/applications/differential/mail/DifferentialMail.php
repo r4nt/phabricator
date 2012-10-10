@@ -269,6 +269,11 @@ abstract class DifferentialMail {
   protected function buildBody() {
     $main_body = $this->renderBody();
 
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false) &&
+        trim($main_body) == "") {
+      return;
+    }
+
     $body = new PhabricatorMetaMTAMailBody();
     $body->addRawSection($main_body);
 
