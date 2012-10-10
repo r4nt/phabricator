@@ -47,6 +47,10 @@ class PhabricatorMailImplementationPHPMailerLiteAdapter
     return $this;
   }
 
+  public function setSender($sender) {
+    $this->mailer->Sender = $sender;
+  }
+
   public function addReplyTo($email, $name = '') {
     $this->mailer->AddReplyTo($email, $name);
     return $this;

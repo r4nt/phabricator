@@ -382,6 +382,8 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
             $default,
             $phids[$from]['name']);
           unset($params['from']);
+        } else {
+          $mailer->setSender($default);
         }
       }
 
