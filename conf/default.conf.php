@@ -1059,7 +1059,7 @@ return array(
 
 // -- Maniphest ------------------------------------------------------------- //
 
-  'maniphest.enabled' => true,
+  'maniphest.enabled' => false,
 
   // Array of custom fields for Maniphest tasks. For details on adding custom
   // fields to Maniphest, see "Maniphest User Guide: Adding Custom Fields".
@@ -1076,7 +1076,7 @@ return array(
 
 // -- Phriction ------------------------------------------------------------- //
 
-  'phriction.enabled' => true,
+  'phriction.enabled' => false,
 
 // -- Phame ----------------------------------------------------------------- //
 
