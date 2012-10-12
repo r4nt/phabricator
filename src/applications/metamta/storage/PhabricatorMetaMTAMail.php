@@ -401,7 +401,7 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
       foreach ($params as $key => $value) {
         switch ($key) {
           case 'from':
-            $mailer->setFrom($phids[$from]['email']);
+            $mailer->setFrom($phids[$from]['email'], $phids[$from]['name']);
             break;
           case 'reply-to':
             $mailer->addReplyTo($value, $reply_to_name);
