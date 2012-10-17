@@ -525,7 +525,7 @@ return array(
   // "Re:" to the subject line of all mail which is expected to thread. If
   // you've set 'metamta.one-mail-per-recipient', users can override this
   // setting in their preferences.
-  'metamta.re-prefix' => false,
+  'metamta.re-prefix' => true,
 
   // If true, allow MetaMTA to change mail subjects to put text like
   // '[Accepted]' and '[Commented]' in them. This makes subjects more useful,
