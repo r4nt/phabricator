@@ -231,6 +231,7 @@ final class ManiphestTaskEditController extends ManiphestController {
           $transactions = $event->getValue('transactions');
 
           $editor = new ManiphestTransactionEditor();
+          $editor->setActor($user);
           $editor->setAuxiliaryFields($aux_fields);
           $editor->applyTransactions($task, $transactions);
 
@@ -249,7 +250,7 @@ final class ManiphestTaskEditController extends ManiphestController {
 
         if ($parent_task) {
           id(new PhabricatorEdgeEditor())
-            ->setUser($user)
+            ->setActor($user)
             ->addEdge(
               $parent_task->getPHID(),
               PhabricatorEdgeConfig::TYPE_TASK_DEPENDS_ON_TASK,
