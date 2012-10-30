@@ -25,6 +25,10 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       $this->setID($id);
     }
 
+    // We need to have this if previews render images, since Ajax can not
+    // currently ship JS or CSS.
+    require_celerity_resource('lightbox-attachment-css');
+
     Javelin::initBehavior(
       'aphront-drag-and-drop-textarea',
       array(
@@ -57,6 +61,9 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       ),
       'code' => array(
         'tip' => pht('Code Block'),
+      ),
+      'table' => array(
+        'tip' => pht('Table'),
       ),
       'help'  => array(
         'tip' => pht('Help'),

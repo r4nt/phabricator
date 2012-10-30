@@ -57,6 +57,7 @@ final class PhabricatorMarkupEngine {
 
   private $objects = array();
   private $viewer;
+  private $version = 0;
 
 
 /* -(  Markup Pipeline  )---------------------------------------------------- */
@@ -185,7 +186,7 @@ final class PhabricatorMarkupEngine {
   private function getMarkupFieldKey(
     PhabricatorMarkupInterface $object,
     $field) {
-    return $object->getMarkupFieldKey($field);
+    return $object->getMarkupFieldKey($field).'@'.$this->version;
   }
 
 
@@ -453,6 +454,7 @@ final class PhabricatorMarkupEngine {
     $blocks[] = new PhutilRemarkupEngineRemarkupCodeBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupNoteBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupTableBlockRule();
+    $blocks[] = new PhutilRemarkupEngineRemarkupSimpleTableBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupDefaultBlockRule();
 
     $custom_block_rule_classes = $options['custom-block'];

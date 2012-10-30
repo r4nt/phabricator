@@ -35,6 +35,15 @@ abstract class DifferentialMail {
   protected $replyHandler;
   protected $parentMessageID;
 
+  private $rawMail;
+
+  public function getRawMail() {
+    if (!$this->rawMail) {
+      throw new Exception("Call send() before getRawMail()!");
+    }
+    return $this->rawMail;
+  }
+
   protected function renderSubject() {
     $revision = $this->getRevision();
     $title = $revision->getTitle();
@@ -191,6 +200,10 @@ abstract class DifferentialMail {
 
     $this->prepareBody();
 
+    $this->rawMail = clone $template;
+    $this->rawMail->addTos($to_phids);
+    $this->rawMail->addCCs($cc_phids);
+
     $mails = $reply_handler->multiplexMail($template, $to_handles, $cc_handles);
 
     $original_translator = PhutilTranslator::getInstance();
@@ -243,6 +256,8 @@ abstract class DifferentialMail {
     }
 
     PhutilTranslator::setInstance($original_translator);
+
+    return $this;
   }
 
   protected function getMailTags() {
