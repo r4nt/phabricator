@@ -564,7 +564,6 @@ EOBODY;
       ->addTos(array($this->getPHID()))
       ->setSubject('[Phabricator] Welcome to Phabricator')
       ->setBody($body)
-      ->setFrom($admin->getPHID())
       ->saveAndSend();
   }
 
