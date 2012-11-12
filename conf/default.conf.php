@@ -1226,7 +1226,7 @@ return array(
   // If you want syntax highlighting for other languages than PHP then you can
   // install the python package 'Pygments', make sure the 'pygmentize' script is
   //  available in the $PATH of the webserver, and then enable this.
-  'pygments.enabled'            => false,
+  'pygments.enabled'            => true,
 
   // In places that we display a dropdown to syntax-highlight code,
   // this is where that list is defined.
