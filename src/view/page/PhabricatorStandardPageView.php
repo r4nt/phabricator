@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * This is a standard Phabricator page with menus, Javelin, DarkConsole, and
  * basic styles.
@@ -111,26 +95,29 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     require_celerity_resource('phabricator-core-buttons-css');
     require_celerity_resource('phabricator-standard-page-view');
 
+    Javelin::initBehavior('workflow', array());
+
     $current_token = null;
     $request = $this->getRequest();
     if ($request) {
       $user = $request->getUser();
       if ($user) {
         $current_token = $user->getCSRFToken();
+        $download_form = phabricator_render_form_magic($user);
+        $default_img_uri =
+          PhabricatorEnv::getCDNURI(
+            '/rsrc/image/icon/fatcow/document_black.png'
+          );
+
+        Javelin::initBehavior(
+          'lightbox-attachments',
+          array(
+            'defaultImageUri' => $default_img_uri,
+            'downloadForm'    => $download_form,
+          ));
       }
     }
 
-    Javelin::initBehavior('workflow', array());
-    $download_form = phabricator_render_form_magic($user);
-    $default_img_uri =
-      PhabricatorEnv::getCDNURI('/rsrc/image/icon/fatcow/document_black.png');
-
-    Javelin::initBehavior(
-      'lightbox-attachments',
-      array(
-        'defaultImageUri' => $default_img_uri,
-        'downloadForm'    => $download_form,
-      ));
     Javelin::initBehavior('toggle-class', array());
     Javelin::initBehavior('konami', array());
     Javelin::initBehavior(

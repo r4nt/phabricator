@@ -2,6 +2,16 @@
  * @provides differential-changeset-view-css
  */
 
+.differential-review-stage {
+  margin: 0 2em 0 2em;
+
+  /**
+   * This is potentially overridden by a 'style' attribute which selects a
+   * different width based on the maximum character width of the diff.
+   */
+  max-width:        1162px;
+}
+
 .differential-changeset {
   z-index: 2;
   position: relative;
@@ -51,8 +61,6 @@
   border-style:       solid;
   border-width:       0px 1px;
   border-color:       #eeeeee #999999 #eeeeee #dddddd;
-  font-weight:        bold;
-  font-family:        "Verdana";
   font-size:          11px;
   overflow:           hidden;
 

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialDiffViewController extends DifferentialController {
 
   private $id;
@@ -99,14 +83,44 @@ final class DifferentialDiffViewController extends DifferentialController {
       $top_panel = $action_panel;
     }
 
+    $props = id(new DifferentialDiffProperty())->loadAllWhere(
+      'diffID = %d',
+      $diff->getID());
+    $props = mpull($props, 'getData', 'getName');
 
+    $aux_fields = DifferentialFieldSelector::newSelector()
+      ->getFieldSpecifications();
+    foreach ($aux_fields as $key => $aux_field) {
+      if (!$aux_field->shouldAppearOnDiffView()) {
+        unset($aux_fields[$key]);
+      } else {
+        $aux_field->setUser($this->getRequest()->getUser());
+      }
+    }
+
+    $dict = array();
+    foreach ($aux_fields as $key => $aux_field) {
+      $aux_field->setDiff($diff);
+      $aux_field->setManualDiff($diff);
+      $aux_field->setDiffProperties($props);
+      $value = $aux_field->renderValueForDiffView();
+      if (strlen($value)) {
+        $label = rtrim($aux_field->renderLabelForDiffView(), ':');
+        $dict[$label] = $value;
+      }
+    }
+
+    $action_panel = new AphrontHeadsupView();
+    $action_panel->setProperties($dict);
+    $action_panel->setHeader(pht('Diff Properties'));
 
     $changesets = $diff->loadChangesets();
     $changesets = msort($changesets, 'getSortKey');
 
     $table_of_contents = id(new DifferentialDiffTableOfContentsView())
       ->setChangesets($changesets)
-      ->setVisibleChangesets($changesets);
+      ->setVisibleChangesets($changesets)
+      ->setUnitTestData(idx($props, 'arc:unit', array()));
 
     $refs = array();
     foreach ($changesets as $changeset) {
@@ -116,6 +130,7 @@ final class DifferentialDiffViewController extends DifferentialController {
     $details = id(new DifferentialChangesetListView())
       ->setChangesets($changesets)
       ->setVisibleChangesets($changesets)
+      ->setLineWidthFromChangesets($changesets)
       ->setRenderingReferences($refs)
       ->setStandaloneURI('/differential/changeset/')
       ->setUser($request->getUser());
@@ -126,6 +141,7 @@ final class DifferentialDiffViewController extends DifferentialController {
         ->appendChild(
           array(
             $top_panel->render(),
+            $action_panel->render(),
             $table_of_contents->render(),
             $details->render(),
           )),

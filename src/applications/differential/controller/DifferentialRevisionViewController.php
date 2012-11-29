@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialRevisionViewController extends DifferentialController {
 
   private $revisionID;
@@ -153,24 +137,36 @@ final class DifferentialRevisionViewController extends DifferentialController {
     }
 
     $reviewer_warning = null;
-    $has_live_reviewer = false;
-    foreach ($revision->getReviewers() as $reviewer) {
-      if (!$handles[$reviewer]->isDisabled()) {
-        $has_live_reviewer = true;
+    if ($revision->getStatus() ==
+        ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
+      $has_live_reviewer = false;
+      foreach ($revision->getReviewers() as $reviewer) {
+        if (!$handles[$reviewer]->isDisabled()) {
+          $has_live_reviewer = true;
+          break;
+        }
       }
-    }
-    if (!$has_live_reviewer) {
-      $reviewer_warning = new AphrontErrorView();
-      $reviewer_warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $reviewer_warning->setTitle('No Active Reviewers');
-      if ($revision->getReviewers()) {
-        $reviewer_warning->appendChild(
-          '<p>All specified reviewers are disabled. You may want to add '.
-          'some new reviewers.</p>');
-      } else {
-        $reviewer_warning->appendChild(
-          '<p>This revision has no specified reviewers. You may want to '.
-          'add some.</p>');
+      if (!$has_live_reviewer) {
+        $reviewer_warning = new AphrontErrorView();
+        $reviewer_warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
+        $reviewer_warning->setTitle('No Active Reviewers');
+        if ($revision->getReviewers()) {
+          $reviewer_warning->appendChild(
+            phutil_render_tag(
+              'p',
+              array(),
+              pht('All specified reviewers are disabled and this revision '.
+                  'needs review. You may want to add some new reviewers.')
+            ));
+        } else {
+          $reviewer_warning->appendChild(
+            phutil_render_tag(
+              'p',
+              array(),
+              pht('This revision has no specified reviewers and needs review.'.
+                  ' You may want to add some reviewers.')
+            ));
+        }
       }
     }
 
@@ -285,6 +281,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
     }
 
     $changeset_view = new DifferentialChangesetListView();
+    $changeset_view->setLineWidthFromChangesets($changesets);
     $changeset_view->setChangesets($changesets);
     $changeset_view->setVisibleChangesets($visible_changesets);
 

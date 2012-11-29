@@ -1,34 +1,11 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 abstract class DifferentialFreeformFieldSpecification
   extends DifferentialFieldSpecification {
 
-  public function didParseCommit(
-    PhabricatorRepository $repository,
-    PhabricatorRepositoryCommit $commit,
-    PhabricatorRepositoryCommitData $data) {
-
-    $user = id(new PhabricatorUser())->loadOneWhere(
-      'phid = %s',
-      $data->getCommitDetail('authorPHID'));
-    if (!$user) {
-      return;
+  private function findMentionedTasks($message) {
+    if (!PhabricatorEnv::getEnvConfig('maniphest.enabled')) {
+      return array();
     }
 
     $prefixes = array(
@@ -71,16 +48,13 @@ abstract class DifferentialFreeformFieldSpecification
     $suffix_regex = implode('|', $suffix_regex);
 
     $matches = null;
-    $ok = preg_match_all(
+    preg_match_all(
       "/({$prefix_regex})\s+T(\d+)\s*({$suffix_regex})/i",
-      $this->renderValueForCommitMessage($is_edit = false),
+      $message,
       $matches,
       PREG_SET_ORDER);
 
-    if (!$ok) {
-      return;
-    }
-
+    $tasks_statuses = array();
     foreach ($matches as $set) {
       $prefix = strtolower($set[1]);
       $task_id = (int)$set[2];
@@ -91,16 +65,63 @@ abstract class DifferentialFreeformFieldSpecification
         $status = idx($prefixes, $prefix);
       }
 
-      $tasks = id(new ManiphestTaskQuery())
-        ->withTaskIDs(array($task_id))
-        ->execute();
-      $task = idx($tasks, $task_id);
+      $tasks_statuses[$task_id] = $status;
+    }
 
-      if (!$task) {
-        // Task doesn't exist, or the user can't see it.
-        continue;
-      }
+    return $tasks_statuses;
+  }
 
+  public function didWriteRevision(DifferentialRevisionEditor $editor) {
+    $message = $this->renderValueForCommitMessage(false);
+    $tasks = $this->findMentionedTasks($message);
+    if (!$tasks) {
+      return;
+    }
+
+    $revision_phid = $editor->getRevision()->getPHID();
+    $edge_type = PhabricatorEdgeConfig::TYPE_DREV_HAS_RELATED_TASK;
+
+    $add_phids = id(new ManiphestTask())
+      ->loadAllWhere('id IN (%Ld)', array_keys($tasks));
+    $add_phids = mpull($add_phids, 'getPHID');
+
+    $old_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
+      $revision_phid,
+      $edge_type);
+
+    $add_phids = array_diff($add_phids, $old_phids);
+
+    $edge_editor = id(new PhabricatorEdgeEditor())->setActor($this->getUser());
+    foreach ($add_phids as $phid) {
+      $edge_editor->addEdge($revision_phid, $edge_type, $phid);
+    }
+    // NOTE: Deletes only through Maniphest Tasks field.
+    $edge_editor->save();
+  }
+
+  public function didParseCommit(
+    PhabricatorRepository $repository,
+    PhabricatorRepositoryCommit $commit,
+    PhabricatorRepositoryCommitData $data) {
+
+    $user = id(new PhabricatorUser())->loadOneWhere(
+      'phid = %s',
+      $data->getCommitDetail('authorPHID'));
+    if (!$user) {
+      return;
+    }
+
+    $message = $this->renderValueForCommitMessage($is_edit = false);
+    $tasks_statuses = $this->findMentionedTasks($message);
+    if (!$tasks_statuses) {
+      return;
+    }
+
+    $tasks = id(new ManiphestTaskQuery())
+      ->withTaskIDs(array_keys($tasks_statuses))
+      ->execute();
+
+    foreach ($tasks as $task_id => $task) {
       id(new PhabricatorEdgeEditor())
         ->setActor($user)
         ->addEdge(
@@ -109,6 +130,7 @@ abstract class DifferentialFreeformFieldSpecification
           $commit->getPHID())
         ->save();
 
+      $status = $tasks_statuses[$task_id];
       if (!$status) {
         // Text like "Ref T123", don't change the task status.
         continue;

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialCommentMail extends DifferentialMail {
 
   protected $changedByCommit;
@@ -50,16 +34,31 @@ final class DifferentialCommentMail extends DifferentialMail {
   }
 
   protected function getMailTags() {
+    $tags    = array();
     $comment = $this->getComment();
-    $action = $comment->getAction();
+    $action  = $comment->getAction();
 
-    $tags = array();
     switch ($action) {
       case DifferentialAction::ACTION_ADDCCS:
         $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_CC;
         break;
       case DifferentialAction::ACTION_CLOSE:
         $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_CLOSED;
+        break;
+      case DifferentialAction::ACTION_ADDREVIEWERS:
+        $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_REVIEWERS;
+        break;
+      case DifferentialAction::ACTION_UPDATE:
+        $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_UPDATED;
+        break;
+      case DifferentialAction::ACTION_REQUEST:
+        $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_REVIEW_REQUEST;
+        break;
+      case DifferentialAction::ACTION_COMMENT:
+        // this is a comment which we will check separately below for content
+        break;
+      default:
+        $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_OTHER;
         break;
     }
 

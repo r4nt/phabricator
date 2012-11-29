@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DiffusionCommitController extends DiffusionController {
 
   const CHANGES_LIMIT = 100;
@@ -269,6 +253,10 @@ final class DiffusionCommitController extends DiffusionController {
       $change_list->setRenderURI('/diffusion/'.$callsign.'/diff/');
       $change_list->setRepository($repository);
       $change_list->setUser($user);
+      // pick the first branch for "Browse in Diffusion" View Option
+      $branches     = $commit_data->getCommitDetail('seenOnBranches');
+      $first_branch = reset($branches);
+      $change_list->setBranch($first_branch);
 
       $change_list->setStandaloneURI(
         '/diffusion/'.$callsign.'/diff/');
@@ -587,7 +575,8 @@ final class DiffusionCommitController extends DiffusionController {
           ->setLabel('Comments')
           ->setName('content')
           ->setValue($draft)
-          ->setID('audit-content'))
+          ->setID('audit-content')
+          ->setUser($user))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue($is_serious ? 'Submit' : 'Cook the Books'));
@@ -816,12 +805,14 @@ final class DiffusionCommitController extends DiffusionController {
     require_celerity_resource('phabricator-object-selector-css');
     require_celerity_resource('javelin-behavior-phabricator-object-selector');
 
-    $action = new AphrontHeadsupActionView();
-    $action->setName('Edit Maniphest Tasks');
-    $action->setURI('/search/attach/'.$commit->getPHID().'/TASK/edge/');
-    $action->setWorkflow(true);
-    $action->setClass('attach-maniphest');
-    $actions[] = $action;
+    if (PhabricatorEnv::getEnvConfig('maniphest.enabled')) {
+      $action = new AphrontHeadsupActionView();
+      $action->setName('Edit Maniphest Tasks');
+      $action->setURI('/search/attach/'.$commit->getPHID().'/TASK/edge/');
+      $action->setWorkflow(true);
+      $action->setClass('attach-maniphest');
+      $actions[] = $action;
+    }
 
     if ($user->getIsAdmin()) {
       $action = new AphrontHeadsupActionView();

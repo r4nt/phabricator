@@ -1,31 +1,20 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DrydockLease extends DrydockDAO {
 
-  protected $phid;
   protected $resourceID;
+  protected $resourceType;
   protected $until;
   protected $ownerPHID;
   protected $attributes = array();
-  protected $status;
+  protected $status = DrydockLeaseStatus::STATUS_PENDING;
+  protected $taskID;
 
   private $resource;
+
+  public function getLeaseName() {
+    return pht('Lease %d', $this->getID());
+  }
 
   public function getConfiguration() {
     return array(
@@ -37,12 +26,12 @@ final class DrydockLease extends DrydockDAO {
   }
 
   public function setAttribute($key, $value) {
-    $this->attributes[$key] = $value;
+    $this->attributes[strtolower($key)] = $value;
     return $this;
   }
 
   public function getAttribute($key, $default = null) {
-    return idx($this->attributes, $key, $default);
+    return idx($this->attributes, strtolower($key), $default);
   }
 
   public function generatePHID() {
@@ -75,10 +64,37 @@ final class DrydockLease extends DrydockDAO {
       $this->getResourceID());
   }
 
+  public function queueForActivation() {
+    if ($this->getID()) {
+      throw new Exception(
+        "Only new leases may be queued for activation!");
+    }
+
+    $this->setStatus(DrydockLeaseStatus::STATUS_PENDING);
+    $this->save();
+
+    // NOTE: Prevent a race where some eager worker quickly grabs the task
+    // before we can save the Task ID.
+
+    $this->openTransaction();
+      $this->beginReadLocking();
+
+        $this->reload();
+
+        $task = PhabricatorWorker::scheduleTask(
+          'DrydockAllocatorWorker',
+          $this->getID());
+
+        $this->setTaskID($task->getID());
+        $this->save();
+
+      $this->endReadLocking();
+    $this->saveTransaction();
+
+    return $this;
+  }
+
   public function release() {
-
-    // TODO: Insert a cleanup task into the taskmaster queue.
-
     $this->setStatus(DrydockLeaseStatus::STATUS_RELEASED);
     $this->save();
 
@@ -95,25 +111,50 @@ final class DrydockLease extends DrydockDAO {
     }
   }
 
-  public function waitUntilActive() {
-    $this->reload();
+  public static function waitForLeases(array $leases) {
+    assert_instances_of($leases, 'DrydockLease');
+
+    $task_ids = array_filter(mpull($leases, 'getTaskID'));
+
+    PhabricatorWorker::waitForTasks($task_ids);
+
+    $unresolved = $leases;
     while (true) {
-      switch ($this->status) {
-        case DrydockLeaseStatus::STATUS_ACTIVE:
-          break 2;
-        case DrydockLeaseStatus::STATUS_RELEASED:
-        case DrydockLeaseStatus::STATUS_EXPIRED:
-        case DrydockLeaseStatus::STATUS_BROKEN:
-          throw new Exception("Lease will never become active!");
-        case DrydockLeaseStatus::STATUS_PENDING:
-          break;
+      foreach ($unresolved as $key => $lease) {
+        $lease->reload();
+        switch ($lease->getStatus()) {
+          case DrydockLeaseStatus::STATUS_ACTIVE:
+            unset($unresolved[$key]);
+            break;
+          case DrydockLeaseStatus::STATUS_RELEASED:
+            throw new Exception("Lease has already been released!");
+          case DrydockLeaseStatus::STATUS_EXPIRED:
+            throw new Exception("Lease has already expired!");
+          case DrydockLeaseStatus::STATUS_BROKEN:
+            throw new Exception("Lease has been broken!");
+          case DrydockLeaseStatus::STATUS_PENDING:
+            break;
+        }
       }
-      sleep(2);
-      $this->reload();
+
+      if ($unresolved) {
+        sleep(1);
+      } else {
+        break;
+      }
     }
 
-    $this->attachResource($this->loadResource());
+    foreach ($leases as $lease) {
+      $lease->attachResource($lease->loadResource());
+    }
+  }
 
+  public function waitUntilActive() {
+    if (!$this->getID()) {
+      $this->queueForActivation();
+    }
+
+    self::waitForLeases(array($this));
     return $this;
   }
 

@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class AphrontCalendarMonthView extends AphrontView {
 
   private $user;
@@ -305,15 +289,24 @@ final class AphrontCalendarMonthView extends AphrontView {
       $info .= "\n\n".$event->getDescription();
     }
 
+    if ($user->getPHID() == $event->getUserPHID()) {
+      $tag  = 'a';
+      $href = '/calendar/status/edit/'.$event->getEventID().'/';
+    } else {
+      $tag  = 'div';
+      $href = null;
+    }
+
     $text_div = javelin_render_tag(
-      'div',
+      $tag,
       array(
         'sigil' => 'has-tooltip',
         'meta'  => array(
-          'tip'   => $info."\n\n".implode("\n", $when),
-          'size'  => 240,
+          'tip'  => $info."\n\n".implode("\n", $when),
+          'size' => 240,
         ),
         'class' => 'aphront-calendar-event-text',
+        'href'  => $href,
       ),
       phutil_escape_html(phutil_utf8_shorten($event->getName(), 32)));
 

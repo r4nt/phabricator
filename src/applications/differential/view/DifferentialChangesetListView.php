@@ -1,22 +1,7 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-final class DifferentialChangesetListView extends AphrontView {
+final class DifferentialChangesetListView
+  extends DifferentialCodeWidthSensitiveView {
 
   private $changesets = array();
   private $visibleChangesets = array();
@@ -32,8 +17,17 @@ final class DifferentialChangesetListView extends AphrontView {
   private $user;
   private $symbolIndexes = array();
   private $repository;
+  private $branch;
   private $diff;
   private $vsMap = array();
+
+  public function setBranch($branch) {
+    $this->branch = $branch;
+    return $this;
+  }
+  private function getBranch() {
+    return $this->branch;
+  }
 
   public function setChangesets($changesets) {
     $this->changesets = $changesets;
@@ -200,6 +194,7 @@ final class DifferentialChangesetListView extends AphrontView {
       array(
         'class' => 'differential-review-stage',
         'id'    => 'differential-review-stage',
+        'style' => "max-width: {$this->calculateSideBySideWidth()}px; ",
       ),
       implode("\n", $output));
   }
@@ -257,7 +252,8 @@ final class DifferentialChangesetListView extends AphrontView {
     if ($repository) {
       $meta['diffusionURI'] = (string)$repository->getDiffusionBrowseURIForPath(
         $changeset->getAbsoluteRepositoryPath($repository, $this->diff),
-        idx($changeset->getMetadata(), 'line:first'));
+        idx($changeset->getMetadata(), 'line:first'),
+        $this->getBranch());
     }
 
     $change = $changeset->getChangeType();

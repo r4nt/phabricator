@@ -1,22 +1,17 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
+
+  private $user;
+
+  public function setUser(PhabricatorUser $user) {
+    $this->user = $user;
+    return $this;
+  }
+
+  public function getUser() {
+    return $this->user;
+  }
 
   protected function renderInput() {
     $id = $this->getID();
@@ -107,6 +102,8 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
         $meta['tip'] = $tip;
       }
 
+      require_celerity_resource('sprite-icon-css');
+
       $buttons[] = javelin_render_tag(
         'a',
         array(
@@ -121,7 +118,7 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
         phutil_render_tag(
           'div',
           array(
-            'class' => 'remarkup-assist autosprite remarkup-assist-'.$action,
+            'class' => 'remarkup-assist sprite-icon remarkup-assist-'.$action,
           ),
           ''));
     }
@@ -133,7 +130,22 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       ),
       implode('', $buttons));
 
-    $this->setCustomClass('remarkup-assist-textarea');
+    $monospaced_textareas = null;
+    $monospaced_textareas_class = null;
+    $user = $this->getUser();
+
+    if ($user) {
+      $monospaced_textareas = $user
+        ->loadPreferences()
+        ->getPreference(
+          PhabricatorUserPreferences::PREFERENCE_MONOSPACED_TEXTAREAS);
+      if ($monospaced_textareas == 'enabled') {
+        $monospaced_textareas_class = 'PhabricatorMonospaced';
+      }
+    }
+
+    $this->setCustomClass(
+      'remarkup-assist-textarea '.$monospaced_textareas_class);
 
     return javelin_render_tag(
       'div',

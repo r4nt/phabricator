@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class DifferentialAddCommentView extends AphrontView {
 
   private $revision;
@@ -102,6 +86,7 @@ final class DifferentialAddCommentView extends AphrontView {
     $form = new AphrontFormView();
     $form
       ->setWorkflow(true)
+      ->setFlexible(true)
       ->setUser($this->user)
       ->setAction($this->actionURI)
       ->addHiddenInput('revision_id', $revision->getID())
@@ -133,7 +118,8 @@ final class DifferentialAddCommentView extends AphrontView {
           ->setName('comment')
           ->setID('comment-content')
           ->setLabel('Comment')
-          ->setValue($this->draft ? $this->draft->getDraft() : null))
+          ->setValue($this->draft ? $this->draft->getDraft() : null)
+          ->setUser($this->user))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue($is_serious ? 'Submit' : 'Clowncopterize'));
@@ -164,8 +150,6 @@ final class DifferentialAddCommentView extends AphrontView {
 
     $diff = $revision->loadActiveDiff();
     $warnings = mpull($this->auxFields, 'renderWarningBoxForRevisionAccept');
-    $lint_warning = null;
-    $unit_warning = null;
 
     Javelin::initBehavior(
       'differential-accept-with-errors',
@@ -192,8 +176,6 @@ final class DifferentialAddCommentView extends AphrontView {
         'inline'    => 'inline-comment-preview',
       ));
 
-    $panel_view = new AphrontPanelView();
-    $panel_view->appendChild($form);
     $warning_container = '<div id="warnings">';
     foreach ($warnings as $warning) {
       if ($warning) {
@@ -201,18 +183,9 @@ final class DifferentialAddCommentView extends AphrontView {
       }
     }
     $warning_container .= '</div>';
-    $panel_view->appendChild($warning_container);
-    if ($lint_warning) {
-      $panel_view->appendChild($lint_warning);
-    }
-    if ($unit_warning) {
-      $panel_view->appendChild($unit_warning);
-    }
 
-    $panel_view->setHeader($is_serious ? 'Add Comment' : 'Leap Into Action');
-
-    $panel_view->addClass('aphront-panel-accent');
-    $panel_view->addClass('aphront-panel-flush');
+    $header = id(new PhabricatorHeaderView())
+      ->setHeader($is_serious ? 'Add Comment' : 'Leap Into Action');
 
     return
       id(new PhabricatorAnchorView())
@@ -220,7 +193,9 @@ final class DifferentialAddCommentView extends AphrontView {
         ->setNavigationMarker(true)
         ->render().
       '<div class="differential-add-comment-panel">'.
-        $panel_view->render().
+        $header->render().
+        $form->render().
+        $warning_container.
         '<div class="aphront-panel-preview aphront-panel-flush">'.
           '<div id="comment-preview">'.
             '<span class="aphront-panel-preview-loading-text">'.

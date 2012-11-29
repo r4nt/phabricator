@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorActionView extends AphrontView {
 
   private $name;
@@ -65,11 +49,18 @@ final class PhabricatorActionView extends AphrontView {
 
     $icon = null;
     if ($this->icon) {
+
+      $suffix = '';
+      if ($this->disabled) {
+        $suffix = '-grey';
+      }
+
+      require_celerity_resource('sprite-icon-css');
       $icon = phutil_render_tag(
         'span',
         array(
-          'class' => 'phabricator-action-view-icon autosprite '.
-                       'action-'.$this->icon,
+          'class' => 'phabricator-action-view-icon sprite-icon '.
+                       'action-'.$this->icon.$suffix,
         ),
         '');
     }
@@ -130,29 +121,23 @@ final class PhabricatorActionView extends AphrontView {
   }
 
   public static function getAvailableIcons() {
-    return array(
-      'delete',
-      'edit',
-      'file',
-      'flag-0',
-      'flag-1',
-      'flag-2',
-      'flag-3',
-      'flag-4',
-      'flag-5',
-      'flag-6',
-      'flag-7',
-      'flag-ghost',
-      'fork',
-      'move',
-      'new',
-      'preview',
-      'subscribe-add',
-      'subscribe-auto',
-      'subscribe-delete',
-      'unpublish',
-      'world',
-    );
+    $root = dirname(phutil_get_library_root('phabricator'));
+    $path = $root.'/resources/sprite/manifest/icon.json';
+    $data = Filesystem::readFile($path);
+    $manifest = json_decode($data, true);
+
+    $results = array();
+    $prefix = 'action-';
+    foreach ($manifest['sprites'] as $sprite) {
+      if (preg_match('/-(white|grey)$/', $sprite)) {
+        continue;
+      }
+      if (!strncmp($sprite, $prefix, strlen($prefix))) {
+        $results[] = substr($sprite, strlen($prefix));
+      }
+    }
+
+    return $results;
   }
 
 }

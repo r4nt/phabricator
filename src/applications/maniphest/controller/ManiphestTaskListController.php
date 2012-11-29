@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -47,13 +31,10 @@ final class ManiphestTaskListController extends ManiphestController {
       $task_ids   = nonempty($task_ids, null);
 
       $search_text = $request->getStr('set_search');
-      $search_text = nonempty($search_text, null);
 
       $min_priority = $request->getInt('set_lpriority');
-      $min_priority = nonempty($min_priority, null);
 
       $max_priority = $request->getInt('set_hpriority');
-      $max_priority = nonempty($max_priority, null);
 
       $uri = $request->getRequestURI()
         ->alter('users',      $this->getArrToStrList('set_users'))
@@ -246,7 +227,7 @@ final class ManiphestTaskListController extends ManiphestController {
           ->setValue($tokens));
 
       $priority = ManiphestTaskPriority::getLowestPriority();
-      if ($low_priority) {
+      if ($low_priority !== null) {
         $priority = $low_priority;
       }
 
@@ -259,7 +240,7 @@ final class ManiphestTaskListController extends ManiphestController {
                 ManiphestTaskPriority::getTaskPriorityMap(), true)));
 
       $priority = ManiphestTaskPriority::getHighestPriority();
-      if ($high_priority) {
+      if ($high_priority !== null) {
         $priority = $high_priority;
       }
 
@@ -442,10 +423,10 @@ final class ManiphestTaskListController extends ManiphestController {
     $author_phids = $search_query->getParameter('authorPHIDs', array());
 
     $low_priority = $search_query->getParameter('lowPriority');
-    $low_priority = nonempty($low_priority,
+    $low_priority = coalesce($low_priority,
         ManiphestTaskPriority::getLowestPriority());
     $high_priority = $search_query->getParameter('highPriority');
-    $high_priority = nonempty($high_priority,
+    $high_priority = coalesce($high_priority,
       ManiphestTaskPriority::getHighestPriority());
 
     $query = new ManiphestTaskQuery();
@@ -559,6 +540,7 @@ final class ManiphestTaskListController extends ManiphestController {
       $owner_phids,
       $author_phids,
       $project_group_phids,
+      $any_project_phids,
       array_mergev(mpull($data, 'getProjectPHIDs')));
     $handles = id(new PhabricatorObjectHandleData($handle_phids))
       ->loadHandles();

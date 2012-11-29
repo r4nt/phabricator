@@ -224,8 +224,9 @@ JX.behavior('differential-keyboard-navigation', function(config) {
     })
     .register();
 
-
-  new JX.KeyboardShortcut('h', 'Collapse or expand the file display.')
+  new JX.KeyboardShortcut(
+    'h',
+    'Collapse or expand the file display (after jump).')
     .setHandler(function(manager) {
       if (!changesets || !changesets[cursor]) {
         return;
@@ -260,6 +261,12 @@ JX.behavior('differential-keyboard-navigation', function(config) {
   new JX.KeyboardShortcut('e', 'Edit selected inline comment.')
     .setHandler(function(manager) {
       inline_op(selection_begin, 'edit');
+    })
+    .register();
+
+  new JX.KeyboardShortcut('f', 'Toggle file tree.')
+    .setHandler(function(manager) {
+      JX.Stratcom.invoke('differential-filetree-toggle');
     })
     .register();
 

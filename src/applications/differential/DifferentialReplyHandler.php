@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 class DifferentialReplyHandler extends PhabricatorMailReplyHandler {
 
   private $receivedMail;
@@ -107,10 +91,10 @@ class DifferentialReplyHandler extends PhabricatorMailReplyHandler {
 
   protected function receiveEmail(PhabricatorMetaMTAReceivedMail $mail) {
     $this->receivedMail = $mail;
-    $this->handleAction($mail->getCleanTextBody());
+    $this->handleAction($mail->getCleanTextBody(), $mail->getAttachments());
   }
 
-  public function handleAction($body) {
+  public function handleAction($body, array $attachments) {
     // all commands start with a bang and separated from the body by a newline
     // to make sure that actual feedback text couldn't trigger an action.
     // unrecognized commands will be parsed as part of the comment.
@@ -134,6 +118,8 @@ class DifferentialReplyHandler extends PhabricatorMailReplyHandler {
         // TODO: Send the user a confirmation email?
         return null;
     }
+
+    $body = $this->enhanceBodyWithAttachments($body, $attachments);
 
     try {
       $editor = new DifferentialCommentEditor(
@@ -161,10 +147,15 @@ class DifferentialReplyHandler extends PhabricatorMailReplyHandler {
       return $comment->getID();
 
     } catch (Exception $ex) {
+      if ($this->receivedMail) {
+        $error_body = $this->receivedMail->getRawTextBody();
+      } else {
+        $error_body = $body;
+      }
       $exception_mail = new DifferentialExceptionMail(
         $this->getMailReceiver(),
         $ex,
-        $this->receivedMail->getRawTextBody());
+        $error_body);
 
       $exception_mail->setToPHIDs(array($this->getActor()->getPHID()));
       $exception_mail->send();

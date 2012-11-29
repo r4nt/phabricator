@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 final class PhabricatorObjectHandleData {
 
   private $phids;
@@ -104,10 +88,20 @@ final class PhabricatorObjectHandleData {
           break;
         case PhabricatorPHIDConstants::PHID_TYPE_QUES:
           $questions = id(new PonderQuestionQuery())
+            ->setViewer($this->viewer)
             ->withPHIDs($phids)
             ->execute();
           foreach ($questions as $question) {
             $objects[$question->getPHID()] = $question;
+          }
+          break;
+        case PhabricatorPHIDConstants::PHID_TYPE_MOCK:
+          $mocks = id(new PholioMockQuery())
+            ->setViewer($this->viewer)
+            ->withPHIDs($phids)
+            ->execute();
+          foreach ($mocks as $mock) {
+            $objects[$mock->getPHID()] = $mock;
           }
           break;
       }
@@ -557,6 +551,29 @@ final class PhabricatorObjectHandleData {
               $handle->setName($post->getTitle());
               $handle->setFullName($post->getTitle());
               $handle->setURI('/phame/post/view/'.$post->getID().'/');
+              $handle->setComplete(true);
+            }
+            $handles[$phid] = $handle;
+          }
+          break;
+        case PhabricatorPHIDConstants::PHID_TYPE_MOCK:
+          $mocks = id(new PholioMockQuery())
+            ->withPHIDs($phids)
+            ->setViewer($this->viewer)
+            ->execute();
+          $mocks = mpull($mocks, null, 'getPHID');
+
+          foreach ($phids as $phid) {
+            $handle = new PhabricatorObjectHandle();
+            $handle->setPHID($phid);
+            $handle->setType($type);
+            if (empty($mocks[$phid])) {
+              $handle->setName('Unknown Mock');
+            } else {
+              $mock = $mocks[$phid];
+              $handle->setName($mock->getName());
+              $handle->setFullName($mock->getName());
+              $handle->setURI('/M'.$mock->getID());
               $handle->setComplete(true);
             }
             $handles[$phid] = $handle;

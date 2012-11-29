@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * Handle major edit operations to DifferentialRevision -- adding and removing
  * reviewers, diffs, and CCs. Unlike simple edits, these changes trigger
@@ -823,21 +807,15 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     }
     $all_paths = array_keys($all_paths);
 
-    $path_map = id(new DiffusionPathIDQuery($all_paths))->loadPathIDs();
+    $path_ids =
+      PhabricatorRepositoryCommitChangeParserWorker::lookupOrCreatePaths(
+        $all_paths);
 
     $table = new DifferentialAffectedPath();
     $conn_w = $table->establishConnection('w');
 
     $sql = array();
-    foreach ($all_paths as $path) {
-      $path_id = idx($path_map, $path);
-      if (!$path_id) {
-        // Don't bother creating these, it probably means we're either adding
-        // a file (in which case having this row is irrelevant since Diffusion
-        // won't be querying for it) or something is misconfigured (in which
-        // case we'd just be writing garbage).
-        continue;
-      }
+    foreach ($path_ids as $path_id) {
       $sql[] = qsprintf(
         $conn_w,
         '(%d, %d, %d, %d)',

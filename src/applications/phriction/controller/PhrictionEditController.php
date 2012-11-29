@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group phriction
  */
@@ -170,20 +154,22 @@ final class PhrictionEditController
         ->setErrors($errors);
     }
 
+    $delete_button = null;
     if ($document->getID()) {
       $panel_header = 'Edit Phriction Document';
       $submit_button = 'Save Changes';
-      $delete_button = phutil_render_tag(
-        'a',
-        array(
-          'href' => '/phriction/delete/'.$document->getID().'/',
-          'class' => 'grey button',
-        ),
-        'Delete Document');
+      if ($document->getStatus() != PhrictionDocumentStatus::STATUS_DELETED) {
+        $delete_button = phutil_render_tag(
+          'a',
+          array(
+            'href' => '/phriction/delete/'.$document->getID().'/',
+            'class' => 'grey button',
+          ),
+          'Delete Document');
+      }
     } else {
       $panel_header = 'Create New Phriction Document';
       $submit_button = 'Create Document';
-      $delete_button = null;
     }
 
     $uri = $document->getSlug();
@@ -236,7 +222,8 @@ final class PhrictionEditController
           ->setValue($content_text)
           ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_TALL)
           ->setName('content')
-          ->setID('document-textarea'))
+          ->setID('document-textarea')
+          ->setUser($user))
       ->appendChild(
         id(new AphrontFormTextControl())
           ->setLabel('Edit Notes')

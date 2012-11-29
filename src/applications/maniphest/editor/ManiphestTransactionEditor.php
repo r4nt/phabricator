@@ -1,28 +1,11 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
 final class ManiphestTransactionEditor extends PhabricatorEditor {
 
   private $parentMessageID;
-  private $excludePHIDs = array();
   private $auxiliaryFields = array();
 
   public function setAuxiliaryFields(array $fields) {
@@ -34,15 +17,6 @@ final class ManiphestTransactionEditor extends PhabricatorEditor {
   public function setParentMessageID($parent_message_id) {
     $this->parentMessageID = $parent_message_id;
     return $this;
-  }
-
-  public function setExcludePHIDs(array $exclude) {
-    $this->excludePHIDs = $exclude;
-    return $this;
-  }
-
-  public function getExcludePHIDs() {
-    return $this->excludePHIDs;
   }
 
   public function applyTransactions(ManiphestTask $task, array $transactions) {
@@ -235,7 +209,6 @@ final class ManiphestTransactionEditor extends PhabricatorEditor {
   }
 
   private function sendEmail($task, $transactions, $email_to, $email_cc) {
-    $exclude  = $this->getExcludePHIDs();
     $email_to = array_filter(array_unique($email_to));
     $email_cc = array_filter(array_unique($email_cc));
 
@@ -264,7 +237,7 @@ final class ManiphestTransactionEditor extends PhabricatorEditor {
 
     $is_create = $this->isCreate($transactions);
 
-    $task_uri = PhabricatorEnv::getURI('/T'.$task->getID());
+    $task_uri = PhabricatorEnv::getProductionURI('/T'.$task->getID());
 
     $reply_handler = $this->buildReplyHandler($task);
 
@@ -410,6 +383,12 @@ final class ManiphestTransactionEditor extends PhabricatorEditor {
     $tags = array();
     foreach ($transactions as $xaction) {
       switch ($xaction->getTransactionType()) {
+        case ManiphestTransactionType::TYPE_STATUS:
+          $tags[] = MetaMTANotificationType::TYPE_MANIPHEST_STATUS;
+          break;
+        case ManiphestTransactionType::TYPE_OWNER:
+          $tags[] = MetaMTANotificationType::TYPE_MANIPHEST_OWNER;
+          break;
         case ManiphestTransactionType::TYPE_CCS:
           $tags[] = MetaMTANotificationType::TYPE_MANIPHEST_CC;
           break;
@@ -418,6 +397,10 @@ final class ManiphestTransactionEditor extends PhabricatorEditor {
           break;
         case ManiphestTransactionType::TYPE_PRIORITY:
           $tags[] = MetaMTANotificationType::TYPE_MANIPHEST_PRIORITY;
+          break;
+        case ManiphestTransactionType::TYPE_NONE:
+          // this is a comment which we will check separately below for
+          // content
           break;
         default:
           $tags[] = MetaMTANotificationType::TYPE_MANIPHEST_OTHER;

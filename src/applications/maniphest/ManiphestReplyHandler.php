@@ -1,21 +1,5 @@
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 /**
  * @group maniphest
  */
@@ -63,9 +47,9 @@ final class ManiphestReplyHandler extends PhabricatorMailReplyHandler {
 
     $body = $mail->getCleanTextBody();
     $body = trim($body);
+    $body = $this->enhanceBodyWithAttachments($body, $mail->getAttachments());
 
     $xactions = array();
-
     $content_source = PhabricatorContentSource::newForSource(
       PhabricatorContentSource::SOURCE_EMAIL,
       array(
@@ -75,6 +59,7 @@ final class ManiphestReplyHandler extends PhabricatorMailReplyHandler {
     $template = new ManiphestTransaction();
     $template->setContentSource($content_source);
     $template->setAuthorPHID($user->getPHID());
+
 
     if ($is_new_task) {
       // If this is a new task, create a "User created this task." transaction
@@ -134,21 +119,14 @@ final class ManiphestReplyHandler extends PhabricatorMailReplyHandler {
       $xactions[] = $xaction;
     }
 
-    // TODO: We should look at CCs on the mail and add them as CCs.
-
-    $files = $mail->getAttachments();
-    if ($files) {
-      $file_xaction = clone $template;
-      $file_xaction->setTransactionType(ManiphestTransactionType::TYPE_ATTACH);
-
-      $phid_type = PhabricatorPHIDConstants::PHID_TYPE_FILE;
-      $new = $task->getAttached();
-      foreach ($files as $file_phid) {
-        $new[$phid_type][$file_phid] = array();
-      }
-
-      $file_xaction->setNewValue($new);
-      $xactions[] = $file_xaction;
+    $ccs = $mail->loadCCPHIDs();
+    if ($ccs) {
+      $old_ccs = $task->getCCPHIDs();
+      $new_ccs = array_unique(array_merge($old_ccs, $ccs));
+      $cc_xaction = clone $template;
+      $cc_xaction->setTransactionType(ManiphestTransactionType::TYPE_CCS);
+      $cc_xaction->setNewValue($new_ccs);
+      $xactions[] = $cc_xaction;
     }
 
     $event = new PhabricatorEvent(

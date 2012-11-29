@@ -1,22 +1,6 @@
 #!/usr/bin/env php
 <?php
 
-/*
- * Copyright 2012 Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 require_once dirname(dirname(__FILE__)).'/__init_script__.php';
 
 $args = new PhutilArgumentParser($argv);
@@ -34,7 +18,11 @@ $args->parse(
       'name'  => 'source',
       'param' => 'directory',
       'help'  => 'Directory with sprite sources.',
-    )
+    ),
+    array(
+      'name'  => 'force',
+      'help'  => 'Force regeneration even if sources have not changed.',
+    ),
   ));
 
 $srcroot = $args->getArg('source');
@@ -43,7 +31,8 @@ if (!$srcroot) {
     "You must specify a source directory with '--source'.");
 }
 
-$webroot = dirname(phutil_get_library_root('phabricator')).'/webroot/rsrc';
+$root = dirname(phutil_get_library_root('phabricator'));
+$webroot = $root.'/webroot/rsrc';
 $webroot = Filesystem::readablePath($webroot);
 
 function glx($x) {
@@ -71,15 +60,15 @@ EOCSS
 
 $menu_normal_template = id(new PhutilSprite())
   ->setSourceFile($srcroot.'/menu_normal_1x.png')
-  ->setSourceSize(26, 26);
+  ->setSourceSize(30, 30);
 
 $menu_hover_template = id(new PhutilSprite())
   ->setSourceFile($srcroot.'/menu_hover_1x.png')
-  ->setSourceSize(26, 26);
+  ->setSourceSize(30, 30);
 
 $menu_selected_template = id(new PhutilSprite())
   ->setSourceFile($srcroot.'/menu_selected_1x.png')
-  ->setSourceSize(26, 26);
+  ->setSourceSize(30, 30);
 
 $menu_map = array(
   ''          => $menu_normal_template,
@@ -91,7 +80,6 @@ $icon_map = array(
   'help'          => array(4, 19),
   'settings'      => array(0, 28),
   'logout'        => array(3, 6),
-  'notifications' => array(5, 20),
   'task'          => array(1, 15),
 );
 
@@ -180,6 +168,7 @@ $app_map = array(
   'phame'           => array(8, 4),
   'macro'           => array(0, 31),
   'releeph'         => array(5, 18),
+  'drydock'         => array(5, 25),
 );
 
 $xadj = -1;
@@ -199,49 +188,36 @@ foreach ($app_map as $icon => $coords) {
   }
 }
 
-$action_template = id(new PhutilSprite())
-  ->setSourcePosition(0, 0)
-  ->setSourceSize(16, 16);
-
-$action_icons = PhabricatorActionView::getAvailableIcons();
-foreach ($action_icons as $icon) {
-  $action_map[$icon] = 'icon/'.$icon.'.png';
-}
-
-foreach ($action_map as $icon => $source) {
-  $sheet->addSprite(
-    id(clone $action_template)
-      ->setSourceFile($srcroot.$source)
-      ->setTargetCSS('.action-'.$icon));
-}
-
-
-$remarkup_template = id(new PhutilSprite())
-  ->setSourcePosition(0, 0)
-  ->setSourceSize(14, 14);
-
-$remarkup_icons = array(
-  'b',
-  'code',
-  'i',
-  'image',
-  'ol',
-  'tag',
-  'tt',
-  'ul',
-  'help',
-  'table',
-);
-
-foreach ($remarkup_icons as $icon) {
-  $sheet->addSprite(
-    id(clone $remarkup_template)
-      ->setSourceFile($srcroot.'remarkup/text_'.$icon.'.png')
-      ->setTargetCSS('.remarkup-assist-'.$icon));
-}
-
-
 $sheet->generateImage($webroot.'/image/autosprite.png');
 $sheet->generateCSS($webroot.'/css/autosprite.css');
+
+
+/* -(  Icons Sheet  )-------------------------------------------------------- */
+
+$generator = new CeleritySpriteGenerator();
+
+$sheets = array(
+  'icon' => $generator->buildIconSheet(),
+  'menu' => $generator->buildMenuSheet(),
+);
+
+foreach ($sheets as $name => $sheet) {
+  $manifest_path = $root.'/resources/sprite/manifest/'.$name.'.json';
+  if (!$args->getArg('force')) {
+    if (Filesystem::pathExists($manifest_path)) {
+      $data = Filesystem::readFile($manifest_path);
+      $data = json_decode($data, true);
+      if (!$sheet->needsRegeneration($data)) {
+        continue;
+      }
+    }
+  }
+
+  $sheet
+    ->generateImage($webroot."/image/sprite-{$name}.png", 1)
+    ->generateImage($webroot."/image/sprite-{$name}-X2.png", 2)
+    ->generateCSS($webroot."/css/sprite-{$name}.css")
+    ->generateManifest($root."/resources/sprite/manifest/{$name}.json");
+}
 
 echo "Done.\n";
