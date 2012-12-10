@@ -254,7 +254,7 @@ final class DiffusionCommitController extends DiffusionController {
       $change_list->setRepository($repository);
       $change_list->setUser($user);
       // pick the first branch for "Browse in Diffusion" View Option
-      $branches     = $commit_data->getCommitDetail('seenOnBranches');
+      $branches     = $commit_data->getCommitDetail('seenOnBranches', array());
       $first_branch = reset($branches);
       $change_list->setBranch($first_branch);
 
@@ -370,11 +370,8 @@ final class DiffusionCommitController extends DiffusionController {
     }
 
     $reviewer_phid = $data->getCommitDetail('reviewerPHID');
-    $reviewer_name = $data->getCommitDetail('reviewerName');
     if ($reviewer_phid) {
       $props['Reviewer'] = $handles[$reviewer_phid]->renderLink();
-    } else if ($reviewer_name) {
-      $props['Reviewer'] = phutil_escape_html($reviewer_name);
     }
 
     $committer = $data->getCommitDetail('committer');
