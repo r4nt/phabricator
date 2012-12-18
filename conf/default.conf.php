@@ -383,12 +383,19 @@ return array(
   // distinguish between testing and development installs, for example.
   'metamta.maniphest.subject-prefix' => '[Maniphest]',
 
-  // See 'metamta.pholio.reply-handler-domain'. This does the same thing, but
+  // See 'metamta.maniphest.reply-handler-domain'. This does the same thing, but
   // affects Pholio.
   'metamta.pholio.reply-handler-domain' => null,
 
   // Prefix prepended to mail sent by Pholio.
   'metamta.pholio.subject-prefix' => '[Pholio]',
+
+  // See 'metamta.maniphest.reply-handler-domain'. This does the same thing, but
+  // affects Macro.
+  'metamta.macro.reply-handler-domain' => null,
+
+  // Prefix prepended to mail sent by Macro.
+  'metamta.macro.subject-prefix' => '[Macro]',
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Differential.
@@ -1064,6 +1071,19 @@ return array(
   // Similar to 'differential.days-fresh' but marks stale revisions. If the
   // revision is even older than it is marked as old.
   'differential.days-stale' => 3,
+
+// -- Repositories ---------------------------------------------------------- //
+
+  // The default location in which to store local copies of repositories.
+  // Anything stored in this directory will be assumed to be under the
+  // control of phabricator, which means that Phabricator will try to do some
+  // maintenance on working copies if there are problems (such as a change
+  // to the remote origin url). This maintenance may include completely
+  // removing (and recloning) anything in this directory.
+  //
+  // When set to null, this option is ignored (i.e. Phabricator will not fully
+  // control any working copies).
+  'repository.default-local-path' => null,
 
 // -- Maniphest ------------------------------------------------------------- //
 

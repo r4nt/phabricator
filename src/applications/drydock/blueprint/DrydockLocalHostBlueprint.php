@@ -28,12 +28,25 @@ final class DrydockLocalHostBlueprint extends DrydockBlueprint {
     Filesystem::assertIsDirectory($path);
     Filesystem::assertWritable($path);
 
-    $resource = $this->newResourceTemplate('localhost');
+    $resource = $this->newResourceTemplate('Host (localhost)');
     $resource->setStatus(DrydockResourceStatus::STATUS_OPEN);
     $resource->setAttribute('path', $path);
     $resource->save();
 
     return $resource;
+  }
+
+  protected function canAllocateLease(
+    DrydockResource $resource,
+    DrydockLease $lease) {
+    return true;
+  }
+
+  protected function shouldAllocateLease(
+    DrydockResource $resource,
+    DrydockLease $lease,
+    array $other_leases) {
+    return true;
   }
 
   protected function executeAcquireLease(
@@ -42,13 +55,12 @@ final class DrydockLocalHostBlueprint extends DrydockBlueprint {
 
     $lease_id = $lease->getID();
 
+    $full_path = $resource->getAttribute('path').$lease_id.'/';
+
     $cmd = $lease->getInterface('command');
-    $cmd->execx('mkdir %s', $lease_id);
+    $cmd->execx('mkdir %s', $full_path);
 
-    $lease->setAttribute('path', $resource->getAttribute('path').'/'.$lease_id);
-    $lease->save();
-
-    return;
+    $lease->setAttribute('path', $full_path);
   }
 
   public function getType() {
