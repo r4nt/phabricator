@@ -7,7 +7,6 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
   private $references = array();
   private $repository;
   private $diff;
-  private $user;
   private $renderURI = '/differential/changeset/';
   private $revisionID;
   private $whitespace;
@@ -40,11 +39,6 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
 
   public function setUnitTestData($unit_test_data) {
     $this->unitTestData = $unit_test_data;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -185,35 +179,42 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
         1, // line number
         $this->repository->getCallsign());
       if ($editor_link) {
-        $editor_link = phutil_render_tag(
-          'a',
-          array(
-            'href' => $editor_link,
-            'class' => 'button differential-toc-edit-all',
-          ),
-          'Open All in Editor');
+        $editor_link =
+          phutil_render_tag(
+            'a',
+            array(
+              'href' => $editor_link,
+              'class' => 'button differential-toc-edit-all',
+            ),
+            'Open All in Editor');
       }
     }
 
-    $reveal_link = javelin_render_tag(
-      'a',
-      array(
-        'sigil' => 'differential-reveal-all',
-        'mustcapture' => true,
-        'class' => 'button differential-toc-reveal-all',
-      ),
-      'Show All Context'
-    );
+    $reveal_link =
+      javelin_render_tag(
+        'a',
+        array(
+          'sigil' => 'differential-reveal-all',
+          'mustcapture' => true,
+          'class' => 'button differential-toc-reveal-all',
+        ),
+        'Show All Context'
+      );
+
+    $buttons =
+      '<tr><td colspan="7">'.
+        $editor_link.$reveal_link.
+      '</td></tr>';
 
     return
       id(new PhabricatorAnchorView())
         ->setAnchorName('toc')
         ->setNavigationMarker(true)
         ->render().
+      id(new PhabricatorHeaderView())
+        ->setHeader(pht('Table of Contents'))
+        ->render().
       '<div class="differential-toc differential-panel">'.
-        $editor_link.
-        $reveal_link.
-        '<h1>Table of Contents</h1>'.
         '<table>'.
           '<tr>'.
             '<th></th>'.
@@ -224,6 +225,7 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
             '<th class="differential-toc-mcov">Coverage (Touched)</th>'.
           '</tr>'.
           implode("\n", $rows).
+          $buttons.
         '</table>'.
       '</div>';
   }

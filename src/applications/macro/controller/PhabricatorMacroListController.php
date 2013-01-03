@@ -70,49 +70,56 @@ final class PhabricatorMacroListController
     $filter_view = new AphrontListFilterView();
     $filter_view->appendChild($filter_form);
 
-    $nav = $this->buildSideNavView();
-    $nav->selectFilter('/');
+    $has_search = strlen($filter);
+    $nav = $this->buildSideNavView(
+      $for_app = false,
+      $has_search);
+    $nav->selectFilter($has_search ? 'search' : '/');
 
     $nav->appendChild($filter_view);
 
-    if ($macros) {
-      $pinboard = new PhabricatorPinboardView();
-      foreach ($macros as $macro) {
-        $file_phid = $macro->getFilePHID();
-        $file = idx($files_map, $file_phid);
+    $pinboard = new PhabricatorPinboardView();
+    $pinboard->setNoDataString($nodata);
+    foreach ($macros as $macro) {
+      $file_phid = $macro->getFilePHID();
+      $file = idx($files_map, $file_phid);
 
-        $item = new PhabricatorPinboardItemView();
-        if ($file) {
-          $item->setImageURI($file->getThumb220x165URI());
-          $item->setImageSize(220, 165);
-          if ($file->getAuthorPHID()) {
-            $author_handle = $this->getHandle($file->getAuthorPHID());
-            $item->appendChild(
-              'Created by '.$author_handle->renderLink());
-          }
-          $datetime = phabricator_date($file->getDateCreated(), $viewer);
+      $item = new PhabricatorPinboardItemView();
+      if ($file) {
+        $item->setImageURI($file->getThumb220x165URI());
+        $item->setImageSize(220, 165);
+        if ($file->getAuthorPHID()) {
+          $author_handle = $this->getHandle($file->getAuthorPHID());
           $item->appendChild(
-            phutil_render_tag(
-              'div',
-              array(),
-              'Created on '.$datetime));
+            'Created by '.$author_handle->renderLink());
         }
-        $item->setURI($this->getApplicationURI('/edit/'.$macro->getID().'/'));
-        $item->setHeader($macro->getName());
-
-        $pinboard->addItem($item);
+        $datetime = phabricator_date($file->getDateCreated(), $viewer);
+        $item->appendChild(
+          phutil_render_tag(
+            'div',
+            array(),
+            'Created on '.$datetime));
       }
-      $nav->appendChild($pinboard);
-    } else {
-      $list = new PhabricatorObjectItemListView();
-      $list->setNoDataString($nodata);
-      $nav->appendChild($list);
+      $item->setURI($this->getApplicationURI('/view/'.$macro->getID().'/'));
+      $item->setHeader($macro->getName());
+
+      $pinboard->addItem($item);
     }
+    $nav->appendChild($pinboard);
 
-
-    if ($filter === null) {
+    if (!strlen($filter)) {
       $nav->appendChild($pager);
+      $name = pht('All Macros');
+    } else {
+      $name = pht('Search');
     }
+
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($name)
+        ->setHref($request->getRequestURI()));
+    $nav->setCrumbs($crumbs);
 
     return $this->buildApplicationPage(
       $nav,

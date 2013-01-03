@@ -30,12 +30,15 @@ final class PhabricatorObjectItemListView extends AphrontView {
   public function render() {
     require_celerity_resource('phabricator-object-item-list-view-css');
 
-    $header = phutil_render_tag(
-      'h1',
-      array(
-        'class' => 'phabricator-object-item-list-header',
-      ),
-      phutil_escape_html($this->header));
+    $header = null;
+    if (strlen($this->header)) {
+      $header = phutil_render_tag(
+        'h1',
+        array(
+          'class' => 'phabricator-object-item-list-header',
+        ),
+        phutil_escape_html($this->header));
+    }
 
     if ($this->items) {
       $items = $this->renderSingleView($this->items);

@@ -56,9 +56,11 @@ $package_spec = array(
     'javelin-behavior-phabricator-remarkup-assist',
     'phabricator-textareautils',
     'phabricator-file-upload',
+    'javelin-behavior-global-drag-and-drop',
   ),
   'core.pkg.css' => array(
     'phabricator-core-css',
+    'phabricator-zindex-css',
     'phabricator-core-buttons-css',
     'phabricator-standard-page-view',
     'aphront-dialog-view-css',
@@ -100,6 +102,7 @@ $package_spec = array(
     'phabricator-side-menu-view-css',
     'phabricator-crumbs-view-css',
     'phabricator-object-item-list-view-css',
+    'global-drag-and-drop-css',
 
   ),
   'differential.pkg.css' => array(

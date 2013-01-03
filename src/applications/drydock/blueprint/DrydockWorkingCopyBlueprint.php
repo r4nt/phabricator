@@ -3,7 +3,25 @@
 final class DrydockWorkingCopyBlueprint extends DrydockBlueprint {
 
   public function isEnabled() {
-    return PhabricatorEnv::getEnvConfig('drydock.localhost.enabled');
+    return true;
+  }
+
+  protected function canAllocateLease(
+    DrydockResource $resource,
+    DrydockLease $lease) {
+
+    $resource_repo = $resource->getAttribute('repositoryID');
+    $lease_repo = $lease->getAttribute('repositoryID');
+
+    return ($resource_repo && $lease_repo && ($resource_repo == $lease_repo));
+  }
+
+  protected function shouldAllocateLease(
+    DrydockResource $resource,
+    DrydockLease $lease,
+    array $other_leases) {
+
+    return !$other_leases;
   }
 
   protected function executeAllocateResource(DrydockLease $lease) {
@@ -31,7 +49,10 @@ final class DrydockWorkingCopyBlueprint extends DrydockBlueprint {
       ->setResourceType('host')
       ->waitUntilActive();
 
-    $path = $host_lease->getAttribute('path').'/'.$repository->getCallsign();
+    $path = $host_lease->getAttribute('path').$repository->getCallsign();
+
+    $this->log(
+      pht('Cloning %s into %s....', $repository->getCallsign(), $path));
 
     $cmd = $host_lease->getInterface('command');
     $cmd->execx(
@@ -39,10 +60,14 @@ final class DrydockWorkingCopyBlueprint extends DrydockBlueprint {
       $repository->getRemoteURI(),
       $path);
 
-    $resource = $this->newResourceTemplate($repository->getCallsign());
+    $this->log(pht('Complete.'));
+
+    $resource = $this->newResourceTemplate(
+      'Working Copy ('.$repository->getCallsign().')');
     $resource->setStatus(DrydockResourceStatus::STATUS_OPEN);
     $resource->setAttribute('lease.host', $host_lease->getID());
     $resource->setAttribute('path', $path);
+    $resource->setAttribute('repositoryID', $repository->getID());
     $resource->save();
 
     return $resource;
@@ -62,6 +87,13 @@ final class DrydockWorkingCopyBlueprint extends DrydockBlueprint {
     DrydockResource $resource,
     DrydockLease $lease,
     $type) {
+
+    switch ($type) {
+      case 'command':
+        return $this
+          ->loadLease($resource->getAttribute('lease.host'))
+          ->getInterface($type);
+    }
 
     throw new Exception("No interface of type '{$type}'.");
   }

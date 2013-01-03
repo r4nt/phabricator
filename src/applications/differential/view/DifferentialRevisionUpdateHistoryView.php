@@ -6,7 +6,6 @@ final class DifferentialRevisionUpdateHistoryView extends AphrontView {
   private $selectedVersusDiffID;
   private $selectedDiffID;
   private $selectedWhitespace;
-  private $user;
 
   public function setDiffs(array $diffs) {
     assert_instances_of($diffs, 'DifferentialDiff');
@@ -27,15 +26,6 @@ final class DifferentialRevisionUpdateHistoryView extends AphrontView {
   public function setSelectedWhitespace($whitespace) {
     $this->selectedWhitespace = $whitespace;
     return $this;
-  }
-
-  public function setUser($user) {
-    $this->user = $user;
-    return $this;
-  }
-
-  public function getUser() {
-    return $this->user;
   }
 
   public function render() {
@@ -202,8 +192,10 @@ final class DifferentialRevisionUpdateHistoryView extends AphrontView {
     $select .= '</select>';
 
     return
+      id(new PhabricatorHeaderView())
+        ->setHeader(pht('Revision Update History'))
+        ->render() .
       '<div class="differential-revision-history differential-panel">'.
-        '<h1>Revision Update History</h1>'.
         '<form action="#toc">'.
           '<table class="differential-revision-history-table">'.
             '<tr>'.
@@ -217,7 +209,7 @@ final class DifferentialRevisionUpdateHistoryView extends AphrontView {
             '</tr>'.
             implode("\n", $rows).
             '<tr>'.
-              '<td colspan="8" class="diff-differ-submit">'.
+              '<td colspan="9" class="diff-differ-submit">'.
                 '<label>Whitespace Changes: '.$select.'</label>'.
                 '<button>Show Diff</button>'.
               '</td>'.

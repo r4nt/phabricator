@@ -5,7 +5,6 @@ final class AphrontFormTokenizerControl extends AphrontFormControl {
   private $datasource;
   private $disableBehavior;
   private $limit;
-  private $user;
   private $placeholder;
 
   public function setDatasource($datasource) {
@@ -27,11 +26,6 @@ final class AphrontFormTokenizerControl extends AphrontFormControl {
     return $this;
   }
 
-  public function setUser($user) {
-    $this->user = $user;
-    return $this;
-  }
-
   public function setPlaceholder($placeholder) {
     $this->placeholder = $placeholder;
     return $this;
@@ -47,9 +41,8 @@ final class AphrontFormTokenizerControl extends AphrontFormControl {
       $id = celerity_generate_unique_node_id();
     }
 
-    $placeholder = null;
     if (!$this->placeholder) {
-      $placeholder = $this->getDefaultPlaceholder();
+      $this->placeholder = $this->getDefaultPlaceholder();
     }
 
     $template = new AphrontTokenizerTemplateView();
@@ -70,7 +63,7 @@ final class AphrontFormTokenizerControl extends AphrontFormControl {
         'limit'       => $this->limit,
         'ondemand'    => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
         'username'    => $username,
-        'placeholder' => $placeholder,
+        'placeholder' => $this->placeholder,
       ));
     }
 

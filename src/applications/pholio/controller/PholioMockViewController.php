@@ -25,7 +25,8 @@ final class PholioMockViewController extends PholioController {
     }
 
     $xactions = id(new PholioTransactionQuery())
-      ->withMockIDs(array($mock->getID()))
+      ->setViewer($user)
+      ->withObjectPHIDs(array($mock->getPHID()))
       ->execute();
 
     $subscribers = PhabricatorSubscribersQuery::loadSubscribersForPHID(
@@ -33,12 +34,6 @@ final class PholioMockViewController extends PholioController {
 
     $phids = array();
     $phids[] = $mock->getAuthorPHID();
-    foreach ($xactions as $xaction) {
-      $phids[] = $xaction->getAuthorPHID();
-      foreach ($xaction->getRequiredHandlePHIDs() as $hphid) {
-        $phids[] = $hphid;
-      }
-    }
     foreach ($subscribers as $subscriber) {
       $phids[] = $subscriber;
     }
@@ -49,7 +44,11 @@ final class PholioMockViewController extends PholioController {
       ->setViewer($user);
     $engine->addObject($mock, PholioMock::MARKUP_FIELD_DESCRIPTION);
     foreach ($xactions as $xaction) {
-      $engine->addObject($xaction, PholioTransaction::MARKUP_FIELD_COMMENT);
+      if ($xaction->getComment()) {
+        $engine->addObject(
+          $xaction->getComment(),
+          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
+      }
     }
     $engine->process();
 
@@ -65,7 +64,10 @@ final class PholioMockViewController extends PholioController {
       '<h1 style="margin: 2em; padding: 1em; border: 1px dashed grey;">'.
         'Carousel Goes Here</h1>';
 
-    $xaction_view = $this->buildTransactionView($xactions, $engine);
+    $xaction_view = id(new PhabricatorApplicationTransactionView())
+      ->setUser($this->getRequest()->getUser())
+      ->setTransactions($xactions)
+      ->setMarkupEngine($engine);
 
     $add_comment = $this->buildAddCommentView($mock);
 
@@ -157,6 +159,8 @@ final class PholioMockViewController extends PholioController {
   private function buildAddCommentView(PholioMock $mock) {
     $user = $this->getRequest()->getUser();
 
+    $draft = PhabricatorDraft::newFromUserAndKey($user, $mock->getPHID());
+
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
 
     $title = $is_serious
@@ -166,152 +170,20 @@ final class PholioMockViewController extends PholioController {
     $header = id(new PhabricatorHeaderView())
       ->setHeader($title);
 
-    $action = $is_serious
+    $button_name = $is_serious
       ? pht('Add Comment')
       : pht('Answer The Call');
 
-    $form = id(new AphrontFormView())
+    $form = id(new PhabricatorApplicationTransactionCommentView())
       ->setUser($user)
-      ->setAction($this->getApplicationURI('/comment/'.$mock->getID().'/'))
-      ->setWorkflow(true)
-      ->setFlexible(true)
-      ->appendChild(
-        id(new PhabricatorRemarkupControl())
-          ->setName('comment')
-          ->setLabel(pht('Comment'))
-          ->setUser($user))
-      ->appendChild(
-        id(new AphrontFormSubmitControl())
-          ->setValue($action));
+      ->setDraft($draft)
+      ->setSubmitButtonName($button_name)
+      ->setAction($this->getApplicationURI('/comment/'.$mock->getID().'/'));
 
     return array(
       $header,
       $form,
     );
-  }
-
-  private function buildTransactionView(
-    array $xactions,
-    PhabricatorMarkupEngine $engine) {
-    assert_instances_of($xactions, 'PholioTransaction');
-
-    $view = new PhabricatorTimelineView();
-
-    foreach ($xactions as $xaction) {
-      $author = $this->getHandle($xaction->getAuthorPHID());
-
-      $old = $xaction->getOldValue();
-      $new = $xaction->getNewValue();
-
-      $xaction_visible = true;
-      $title = null;
-      $type = $xaction->getTransactionType();
-
-      switch ($type) {
-        case PholioTransactionType::TYPE_NONE:
-          $title = pht(
-            '%s added a comment.',
-            $author->renderLink());
-          break;
-        case PholioTransactionType::TYPE_NAME:
-          if ($old === null) {
-            $xaction_visible = false;
-            break;
-          }
-          $title = pht(
-            '%s renamed this mock from "%s" to "%s".',
-            $author->renderLink(),
-            phutil_escape_html($old),
-            phutil_escape_html($new));
-          break;
-        case PholioTransactionType::TYPE_DESCRIPTION:
-          if ($old === null) {
-            $xaction_visible = false;
-            break;
-          }
-          // TODO: Show diff, like Maniphest.
-          $title = pht(
-            '%s updated the description of this mock. '.
-            'The old description was: %s',
-            $author->renderLink(),
-            phutil_escape_html($old));
-          break;
-        case PholioTransactionType::TYPE_VIEW_POLICY:
-          if ($old === null) {
-            $xaction_visible = false;
-            break;
-          }
-          // TODO: Render human-readable.
-          $title = pht(
-            '%s changed the visibility of this mock from "%s" to "%s".',
-            $author->renderLink(),
-            phutil_escape_html($old),
-            phutil_escape_html($new));
-          break;
-        case PholioTransactionType::TYPE_SUBSCRIBERS:
-          $rem = array_diff($old, $new);
-          $add = array_diff($new, $old);
-
-          $add_l = array();
-          foreach ($add as $phid) {
-            $add_l[] = $this->getHandle($phid)->renderLink();
-          }
-          $add_l = implode(', ', $add_l);
-
-          $rem_l = array();
-          foreach ($rem as $phid) {
-            $rem_l[] = $this->getHandle($phid)->renderLink();
-          }
-          $rem_l = implode(', ', $rem_l);
-
-          if ($add && $rem) {
-            $title = pht(
-              '%s edited subscriber(s), added %d: %s; removed %d: %s.',
-              $author->renderLink(),
-              $add_l,
-              count($add),
-              $rem_l,
-              count($rem));
-          } else if ($add) {
-            $title = pht(
-              '%s added %d subscriber(s): %s.',
-              $author->renderLink(),
-              count($add),
-              $add_l);
-          } else if ($rem) {
-            $title = pht(
-              '%s removed %d subscribers: %s.',
-              $author->renderLink(),
-              count($rem),
-              $rem_l);
-          }
-          break;
-        default:
-          throw new Exception("Unknown transaction type '{$type}'!");
-      }
-
-      if (!$xaction_visible) {
-        // Some transactions aren't useful to human viewers, like
-        // the initial transactions which set the mock's name and description.
-        continue;
-      }
-
-      $event = id(new PhabricatorTimelineEventView())
-        ->setUserHandle($author);
-
-      $event->setTitle($title);
-
-      if (strlen($xaction->getComment())) {
-        $event->appendChild(
-          $engine->getOutput(
-            $xaction,
-            PholioTransaction::MARKUP_FIELD_COMMENT));
-      }
-
-      $view->addEvent($event);
-    }
-
-    return $view;
   }
 
 }

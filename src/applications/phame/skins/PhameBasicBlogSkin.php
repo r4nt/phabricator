@@ -8,6 +8,42 @@
 abstract class PhameBasicBlogSkin extends PhameBlogSkin {
 
   private $pager;
+  private $title;
+  private $description;
+  private $oGType;
+  private $uriPath;
+
+  public function setURIPath($uri_path) {
+    $this->uriPath = $uri_path;
+    return $this;
+  }
+  public function getURIPath() {
+    return $this->uriPath;
+  }
+
+  protected function setOGType($og_type) {
+    $this->oGType = $og_type;
+    return $this;
+  }
+  protected function getOGType() {
+    return $this->oGType;
+  }
+
+  protected function setDescription($description) {
+    $this->description = $description;
+    return $this;
+  }
+  protected function getDescription() {
+    return $this->description;
+  }
+
+  protected function setTitle($title) {
+    $this->title = $title;
+    return $this;
+  }
+  protected function getTitle() {
+    return $this->title;
+  }
 
   public function processRequest() {
     $request = $this->getRequest();
@@ -145,7 +181,7 @@ abstract class PhameBasicBlogSkin extends PhameBlogSkin {
    */
   protected function getNewerPageURI() {
     if ($this->pager) {
-      $next = $this->pager->getNextPageID();
+      $next = $this->pager->getPrevPageID();
       if ($next) {
         return $this->getURI('newer/'.$next.'/');
       }
@@ -183,6 +219,11 @@ abstract class PhameBasicBlogSkin extends PhameBlogSkin {
 
     $matches = null;
     $path = $request->getPath();
+    // default to the blog-wide values
+    $this->setTitle($this->getBlog()->getName());
+    $this->setDescription($this->getBlog()->getDescription());
+    $this->setOGType('website');
+    $this->setURIPath('');
     if (preg_match('@^/post/(?P<name>.*)$@', $path, $matches)) {
       $post = id(new PhamePostQuery())
         ->setViewer($user)
@@ -191,6 +232,11 @@ abstract class PhameBasicBlogSkin extends PhameBlogSkin {
         ->executeOne();
 
       if ($post) {
+        $description = $post->getMarkupText(PhamePost::MARKUP_FIELD_SUMMARY);
+        $this->setTitle($post->getTitle());
+        $this->setDescription($description);
+        $this->setOGType('article');
+        $this->setURIPath('post/'.$post->getPhameTitle());
         $view = head($this->buildPostViews(array($post)));
         return $this->renderPostDetail($view);
       }
@@ -198,9 +244,9 @@ abstract class PhameBasicBlogSkin extends PhameBlogSkin {
       $pager = new AphrontCursorPagerView();
 
       if (preg_match('@^/older/(?P<before>\d+)/$@', $path, $matches)) {
-        $pager->setBeforeID($matches['before']);
+        $pager->setAfterID($matches['before']);
       } else if (preg_match('@^/newer/(?P<after>\d)/$@', $path, $matches)) {
-        $pager->setAfterID($matches['after']);
+        $pager->setBeforeID($matches['after']);
       } else if (preg_match('@^/$@', $path, $matches)) {
         // Just show the first page.
       } else {
@@ -248,7 +294,7 @@ abstract class PhameBasicBlogSkin extends PhameBlogSkin {
     $views = array();
     foreach ($posts as $post) {
       $view = id(new PhamePostView())
-        ->setViewer($user)
+        ->setUser($user)
         ->setSkin($this)
         ->setPost($post)
         ->setBody($engine->getOutput($post, PhamePost::MARKUP_FIELD_BODY))

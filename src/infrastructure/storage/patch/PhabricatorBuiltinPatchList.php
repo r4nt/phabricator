@@ -1044,6 +1044,38 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
         'type'    => 'sql',
         'name'    => $this->getPatchPath('owners-exclude.sql'),
       ),
+      '20121209.pholioxactions.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121209.pholioxactions.sql'),
+      ),
+      '20121209.xmacroadd.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121209.xmacroadd.sql'),
+      ),
+      '20121209.xmacromigrate.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('20121209.xmacromigrate.php'),
+      ),
+      '20121209.xmacromigratekey.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121209.xmacromigratekey.sql'),
+      ),
+      '20121220.generalcache.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121220.generalcache.sql'),
+      ),
+      'db.config' => array(
+        'type'    => 'db',
+        'name'    => 'config',
+      ),
+      '20121226.config.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20121226.config.sql'),
+      ),
+      '20130101.confxaction.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130101.confxaction.sql'),
+      ),
     );
   }
 

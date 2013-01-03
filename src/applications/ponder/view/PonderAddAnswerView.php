@@ -3,17 +3,11 @@
 final class PonderAddAnswerView extends AphrontView {
 
   private $question;
-  private $user;
   private $actionURI;
   private $draft;
 
   public function setQuestion($question) {
     $this->question = $question;
-    return $this;
-  }
-
-  public function setUser(PhabricatorUser $user) {
-    $this->user = $user;
     return $this;
   }
 
@@ -48,7 +42,7 @@ final class PonderAddAnswerView extends AphrontView {
           ->setUser($this->user))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue($is_serious ? 'Submit' : 'Make it so.'));
+          ->setValue($is_serious ? 'Submit' : 'Make it so'));
 
     $preview =
       '<div class="aphront-panel-flush">'.
