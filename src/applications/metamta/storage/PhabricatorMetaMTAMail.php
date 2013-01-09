@@ -805,6 +805,10 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
    * @task recipients
    */
   private function resolveRecipients(array $phids) {
+    if (!$phids) {
+      return array();
+    }
+
     $phids = array_combine($phids, $phids);
 
 
