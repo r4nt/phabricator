@@ -14,6 +14,7 @@ final class PhabricatorCoreConfigOptions
   public function getOptions() {
     return array(
       $this->newOption('phabricator.base-uri', 'string', null)
+        ->setLocked(true)
         ->setSummary(pht("URI where Phabricator is installed."))
         ->setDescription(
           pht(
@@ -50,6 +51,12 @@ final class PhabricatorCoreConfigOptions
         ->addExample('America/Chicago', pht('US Central (CDT)'))
         ->addExample('America/Boise', pht('US Mountain (MDT)'))
         ->addExample('America/Los_Angeles', pht('US West (PDT)')),
+      $this->newOption('phabricator.show-beta-applications', 'bool', false)
+        ->setBoolOptions(
+          array(
+            pht('Visible'),
+            pht('Invisible')
+          ))->setDescription(pht('Show beta applications on the home page.')),
       $this->newOption('phabricator.serious-business', 'bool', false)
         ->setBoolOptions(
           array(
@@ -65,7 +72,7 @@ final class PhabricatorCoreConfigOptions
             "and a call to 'Leap Into Action'. If you'd prefer more ".
             "traditional UI strings like 'Submit', you can set this flag to ".
             "disable most of the jokes and easter eggs.")),
-       $this->newOption('environment.append-paths', 'list<string>', null)
+       $this->newOption('environment.append-paths', 'list<string>', array())
         ->setSummary(
           pht("These paths get appended to your \$PATH envrionment variable."))
         ->setDescription(
@@ -80,6 +87,47 @@ final class PhabricatorCoreConfigOptions
             "non-standard locations."))
         ->addExample('/usr/local/bin', pht('Add One Path'))
         ->addExample("/usr/bin\n/usr/local/bin", pht('Add Multiple Paths')),
+       $this->newOption('tokenizer.ondemand', 'bool', false)
+        ->setBoolOptions(
+          array(
+            pht("Query on demand"),
+            pht("Query on page load"),
+          ))
+        ->setSummary(
+          pht("Query for tokenizer fields on demand."))
+        ->setDescription(
+          pht(
+            "Tokenizers are UI controls which let the user select other ".
+            "users, email addresses, project names, etc., by typing the ".
+            "first few letters and having the control autocomplete from a ".
+            "list. They can load their data in two ways: either in a big ".
+            "chunk up front, or as the user types. By default, the data is ".
+            "loaded in a big chunk. This is simpler and performs better for ".
+            "small datasets. However, if you have a very large number of ".
+            "users or projects, (in the ballpark of more than a thousand), ".
+            "loading all that data may become slow enough that it's ".
+            "worthwhile to query on demand instead. This makes the typeahead ".
+            "slightly less responsive but overall performance will be much ".
+            "better if you have a ton of stuff. You can figure out which ".
+            "setting is best for your install by changing this setting and ".
+            "then playing with a user tokenizer (like the user selectors in ".
+            "Maniphest or Differential) and seeing which setting loads ".
+            "faster and feels better.")),
+      $this->newOption('config.lock', 'set', array())
+        ->setLocked(true)
+        ->setDescription(pht('Additional configuration options to lock.')),
+      $this->newOption('config.hide', 'set', array())
+        ->setLocked(true)
+        ->setDescription(pht('Additional configuration options to hide.')),
+      $this->newOption('config.mask', 'set', array())
+        ->setLocked(true)
+        ->setDescription(pht('Additional configuration options to mask.')),
+      $this->newOption('phabricator.env', 'string', null)
+        ->setLocked(true)
+        ->setDescription(pht('Internal.')),
+      $this->newOption('test.value', 'wild', null)
+        ->setLocked(true)
+        ->setDescription(pht('Unit test value.')),
     );
   }
 

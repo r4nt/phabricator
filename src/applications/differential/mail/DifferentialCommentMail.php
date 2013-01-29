@@ -190,7 +190,7 @@ final class DifferentialCommentMail extends DifferentialMail {
       $hunk_parser = new DifferentialHunkParser();
 
       if (PhabricatorEnv::getEnvConfig(
-            'metamta.differential.unified-comment-context', false)) {
+            'metamta.differential.unified-comment-context')) {
         foreach ($changesets as $changeset) {
           $changeset->attachHunks($changeset->loadHunks());
         }
@@ -212,7 +212,7 @@ final class DifferentialCommentMail extends DifferentialMail {
         $inline_content = $inline->getContent();
 
         if (!PhabricatorEnv::getEnvConfig(
-              'metamta.differential.unified-comment-context', false)) {
+              'metamta.differential.unified-comment-context')) {
           $body[] = $this->formatText("{$file}:{$range} {$inline_content}");
         } else {
           $body[] = "================";

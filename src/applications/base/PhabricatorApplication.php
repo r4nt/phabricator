@@ -18,6 +18,11 @@ abstract class PhabricatorApplication {
   const GROUP_DEVELOPER       = 'developer';
   const GROUP_MISC            = 'misc';
 
+  const TILE_INVISIBLE        = 'invisible';
+  const TILE_HIDE             = 'hide';
+  const TILE_SHOW             = 'show';
+  const TILE_FULL             = 'full';
+
   public static function getApplicationGroups() {
     return array(
       self::GROUP_CORE          => pht('Core Applications'),
@@ -29,6 +34,17 @@ abstract class PhabricatorApplication {
       self::GROUP_MISC          => pht('Miscellaneous Applications'),
     );
   }
+
+  public static function getTileDisplayName($constant) {
+    $names = array(
+      self::TILE_INVISIBLE => pht('Invisible'),
+      self::TILE_HIDE => pht('Hidden'),
+      self::TILE_SHOW => pht('Show Small Tile'),
+      self::TILE_FULL => pht('Show Large Tile'),
+    );
+    return idx($names, $constant);
+  }
+
 
 
 /* -(  Application Information  )-------------------------------------------- */
@@ -44,6 +60,10 @@ abstract class PhabricatorApplication {
 
   public function isEnabled() {
     return true;
+  }
+
+  public function isBeta() {
+    return false;
   }
 
   public function getPHID() {
@@ -94,6 +114,25 @@ abstract class PhabricatorApplication {
 
   public function getEventListeners() {
     return array();
+  }
+
+  public function getDefaultTileDisplay(PhabricatorUser $user) {
+    switch ($this->getApplicationGroup()) {
+      case self::GROUP_CORE:
+        return self::TILE_FULL;
+      case self::GROUP_UTILITIES:
+      case self::GROUP_DEVELOPER:
+        return self::TILE_HIDE;
+      case self::GROUP_ADMIN:
+        if ($user->getIsAdmin()) {
+          return self::TILE_SHOW;
+        } else {
+          return self::TILE_INVISIBLE;
+        }
+        break;
+      default:
+        return self::TILE_SHOW;
+    }
   }
 
 
@@ -159,11 +198,26 @@ abstract class PhabricatorApplication {
   }
 
 
+  /**
+   * On the Phabricator homepage sidebar, this function returns the URL for
+   * a quick create X link which is displayed in the wide button only.
+   *
+   * @return string
+   * @task ui
+   */
+  public function getQuickCreateURI() {
+    return null;
+  }
+
+
 /* -(  Application Management  )--------------------------------------------- */
 
 
   public static function getAllInstalledApplications() {
     static $applications;
+
+    $show_beta =
+      PhabricatorEnv::getEnvConfig('phabricator.show-beta-applications');
 
     if (empty($applications)) {
       $classes = id(new PhutilSymbolLoader())
@@ -177,6 +231,11 @@ abstract class PhabricatorApplication {
         if (!$app->isEnabled()) {
           continue;
         }
+
+        if (!$show_beta && $app->isBeta()) {
+          continue;
+        }
+
         $apps[] = $app;
       }
       $applications = $apps;

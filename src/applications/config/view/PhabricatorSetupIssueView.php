@@ -125,7 +125,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       $table[] = '<tr>';
       $table[] = '<th>'.phutil_escape_html($key).'</th>';
 
-      $value = PhabricatorEnv::getEnvConfig($key);
+      $value = PhabricatorEnv::getUnrepairedEnvConfig($key);
       if ($value === null) {
         $value = '<em>null</em>';
       } else if ($value === false) {
@@ -133,7 +133,8 @@ final class PhabricatorSetupIssueView extends AphrontView {
       } else if ($value === true) {
         $value = '<em>true</em>';
       } else {
-        $value = phutil_escape_html($value);
+        $value = phutil_escape_html(
+          PhabricatorConfigJSON::prettyPrintJSON($value));
       }
 
       $table[] = '<td>'.$value.'</td>';
@@ -145,6 +146,8 @@ final class PhabricatorSetupIssueView extends AphrontView {
       array(
       ),
       implode("\n", $table));
+
+    $options = PhabricatorApplicationConfigOptions::loadAllOptions();
 
     if ($this->getIssue()->getIsFatal()) {
       $update_info = phutil_render_tag(
@@ -164,12 +167,11 @@ final class PhabricatorSetupIssueView extends AphrontView {
       }
       $update = phutil_render_tag('pre', array(), implode("\n", $update));
     } else {
-      $update_info = phutil_render_tag(
-        'p',
-        array(),
-        pht("You can update these %d value(s) here:", count($configs)));
       $update = array();
       foreach ($configs as $config) {
+        if (!idx($options, $config) || $options[$config]->getLocked()) {
+          continue;
+        }
         $link = phutil_render_tag(
           'a',
           array(
@@ -178,7 +180,16 @@ final class PhabricatorSetupIssueView extends AphrontView {
           pht('Edit %s', phutil_escape_html($config)));
         $update[] = '<li>'.$link.'</li>';
       }
-      $update = '<ul>'.implode("\n", $update).'</ul>';
+      if ($update) {
+        $update = '<ul>'.implode("\n", $update).'</ul>';
+        $update_info = phutil_render_tag(
+          'p',
+          array(),
+          pht("You can update these %d value(s) here:", count($configs)));
+      } else {
+        $update = null;
+        $update_info = null;
+      }
     }
 
     return phutil_render_tag(

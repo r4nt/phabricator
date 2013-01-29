@@ -81,6 +81,26 @@
       "rule" : ".app-conduit-light-large",
       "hash" : "a2fd3cfe6e4e46d589e0e99f52e7f6f0"
     },
+    "app-conpherence-blue-large"   : {
+      "name" : "app-conpherence-blue-large",
+      "rule" : ".app-conpherence-blue-large, .phabricator-crumb-view:hover .app-conpherence-dark-large",
+      "hash" : "efcf3788ac60484d5920b37c1560e565"
+    },
+    "app-conpherence-dark-large"   : {
+      "name" : "app-conpherence-dark-large",
+      "rule" : ".app-conpherence-dark-large",
+      "hash" : "2722117e3da8c2dbc478d957fb21ca53"
+    },
+    "app-conpherence-glow-large"   : {
+      "name" : "app-conpherence-glow-large",
+      "rule" : ".app-conpherence-glow-large, .device-desktop .phabricator-dark-menu a:hover .app-conpherence-light-large",
+      "hash" : "efa3c29ad40680fca2d62e0b180e709f"
+    },
+    "app-conpherence-light-large"  : {
+      "name" : "app-conpherence-light-large",
+      "rule" : ".app-conpherence-light-large",
+      "hash" : "a79e5f0094caf9f012f3e9d7a10f2bac"
+    },
     "app-countdown-blue-large"     : {
       "name" : "app-countdown-blue-large",
       "rule" : ".app-countdown-blue-large, .phabricator-crumb-view:hover .app-countdown-dark-large",
@@ -220,6 +240,26 @@
       "name" : "app-fact-light-large",
       "rule" : ".app-fact-light-large",
       "hash" : "8253f813361ba065866ee6e6e2077320"
+    },
+    "app-feed-blue-large"          : {
+      "name" : "app-feed-blue-large",
+      "rule" : ".app-feed-blue-large, .phabricator-crumb-view:hover .app-feed-dark-large",
+      "hash" : "462246f99422c86301b7d4faa67d9488"
+    },
+    "app-feed-dark-large"          : {
+      "name" : "app-feed-dark-large",
+      "rule" : ".app-feed-dark-large",
+      "hash" : "0eecff752dc5dde55e7feaa52b7ee7d0"
+    },
+    "app-feed-glow-large"          : {
+      "name" : "app-feed-glow-large",
+      "rule" : ".app-feed-glow-large, .device-desktop .phabricator-dark-menu a:hover .app-feed-light-large",
+      "hash" : "45fe559a997e540933c184ae570a6ddc"
+    },
+    "app-feed-light-large"         : {
+      "name" : "app-feed-light-large",
+      "rule" : ".app-feed-light-large",
+      "hash" : "2ec6e12956fe1e1b746261bb3d0a0d36"
     },
     "app-files-blue-large"         : {
       "name" : "app-files-blue-large",

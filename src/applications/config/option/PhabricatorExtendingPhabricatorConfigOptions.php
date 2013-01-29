@@ -13,10 +13,12 @@ final class PhabricatorExtendingPhabricatorConfigOptions
 
   public function getOptions() {
     return array(
-      $this->newOption('load-libraries', 'list<string>', null)
+      $this->newOption('load-libraries', 'list<string>', array())
+        ->setLocked(true)
         ->setSummary(pht("Paths to additional phutil libraries to load."))
         ->addExample('/srv/our-libs/sekrit-phutil', pht('Valid Setting')),
-      $this->newOption('events.listeners', 'list<string>', null)
+      $this->newOption('events.listeners', 'list<string>', array())
+        ->setLocked(true)
         ->setSummary(
           pht("Listeners receive callbacks when interesting things occur."))
         ->setDescription(
@@ -30,6 +32,7 @@ final class PhabricatorExtendingPhabricatorConfigOptions
         'celerity.resource-path',
         'string',
         '__celerity_resource_map__.php')
+        ->setLocked(true)
         ->setSummary(
           pht("Custom celerity resource map."))
         ->setDescription(
@@ -37,6 +40,19 @@ final class PhabricatorExtendingPhabricatorConfigOptions
             "Path to custom celerity resource map relative to ".
             "'phabricator/src'. See also `scripts/celerity_mapper.php`."))
         ->addExample('local/my_celerity_map.php', pht('Valid Setting')),
+       $this->newOption(
+         'aphront.default-application-configuration-class',
+         'class',
+         'AphrontDefaultApplicationConfiguration')
+        ->setBaseClass('AphrontApplicationConfiguration')
+        // TODO: This could probably use some better documentation.
+        ->setDescription(pht("Application configuration class.")),
+       $this->newOption(
+         'controller.oauth-registration',
+         'class',
+         'PhabricatorOAuthDefaultRegistrationController')
+        ->setBaseClass('PhabricatorOAuthRegistrationController')
+        ->setDescription(pht("OAuth registration controller.")),
     );
   }
 

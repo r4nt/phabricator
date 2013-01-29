@@ -193,6 +193,39 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
+      '%s removed %d subscriber(s): %s.' => array(
+        array(
+          '%s removed a subscriber: %3$s.',
+          '%s removed subscribers: %3$s.',
+        ),
+        array(
+          '%s removed a subscriber: %3$s.',
+          '%s removed subscribers: %3$s.',
+        ),
+      ),
+
+      '%s added %d participant(s): %s.' => array(
+        array(
+          '%s added a participant: %3$s.',
+          '%s added participants: %3$s.',
+        ),
+        array(
+          '%s added a participant: %3$s.',
+          '%s added participants: %3$s.',
+        ),
+      ),
+
+      '%s removed %d participant(s): %s.' => array(
+        array(
+          '%s removed a participant: %3$s.',
+          '%s removed participants: %3$s.',
+        ),
+        array(
+          '%s removed a participant: %3$s.',
+          '%s removed participants: %3$s.',
+        ),
+      ),
+
       '%2$s Line(s)' => array(
         '%2$s Line',
         '%2$s Lines',
@@ -204,8 +237,8 @@ abstract class PhabricatorBaseEnglishTranslation
       ),
 
       'Run these %d command(s):' => array(
-        'Run this %d command:',
-        'Run these %d commands:',
+        'Run this command:',
+        'Run these commands:',
       ),
 
       'Install these %d PHP extension(s):' => array(
@@ -250,6 +283,11 @@ abstract class PhabricatorBaseEnglishTranslation
       'PHP also loaded these configuration file(s):' => array(
         'PHP also loaded this configuration file:',
         'PHP also loaded these configuration files:',
+      ),
+
+      'You have %d unresolved setup issue(s)...' => array(
+        'You have %d unresolved setup issue...',
+        'You have %d unresolved setup issues...',
       ),
 
     );

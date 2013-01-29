@@ -9,7 +9,6 @@
  *      ->addLabel('Cats')
  *      ->addFilter('meow', 'Meow')
  *      ->addFilter('purr', 'Purr')
- *      ->addSpacer()
  *      ->addLabel('Dogs')
  *      ->addFilter('woof', 'Woof')
  *      ->addFilter('bark', 'Bark');
@@ -25,9 +24,24 @@ final class AphrontSideNavFilterView extends AphrontView {
   private $active;
   private $menu;
   private $crumbs;
+  private $classes = array();
+  private $menuID;
+
+  public function setMenuID($menu_id) {
+    $this->menuID = $menu_id;
+    return $this;
+  }
+  public function getMenuID() {
+    return $this->menuID;
+  }
 
   public function __construct() {
     $this->menu = new PhabricatorMenuView();
+  }
+
+  public function addClass($class) {
+    $this->classes[] = $class;
+    return $this;
   }
 
   public static function newFromMenu(PhabricatorMenuView $menu) {
@@ -106,12 +120,6 @@ final class AphrontSideNavFilterView extends AphrontView {
         ->setName($name));
   }
 
-  public function addSpacer() {
-    return $this->addMenuItem(
-      id(new PhabricatorMenuItemView())
-        ->setType(PhabricatorMenuItemView::TYPE_SPACER));
-  }
-
   public function setBaseURI(PhutilURI $uri) {
     $this->baseURI = $uri;
     return $this;
@@ -143,9 +151,11 @@ final class AphrontSideNavFilterView extends AphrontView {
       }
     }
 
-    $selected_item = $this->menu->getItem($this->selectedFilter);
-    if ($selected_item) {
-      $selected_item->addClass('phabricator-menu-item-selected');
+    if ($this->selectedFilter !== null) {
+      $selected_item = $this->menu->getItem($this->selectedFilter);
+      if ($selected_item) {
+        $selected_item->addClass('phabricator-menu-item-selected');
+      }
     }
 
     require_celerity_resource('phabricator-side-menu-view-css');
@@ -171,6 +181,7 @@ final class AphrontSideNavFilterView extends AphrontView {
     $main_id = celerity_generate_unique_node_id();
 
     if ($this->flexible) {
+      $nav_classes[] = 'has-drag-nav';
       $drag_id = celerity_generate_unique_node_id();
       $flex_bar = phutil_render_tag(
         'div',
@@ -203,7 +214,8 @@ final class AphrontSideNavFilterView extends AphrontView {
           'class' => 'phabricator-nav-local phabricator-side-menu',
           'id'    => $local_id,
         ),
-        self::renderSingleView($this->menu));
+        self::renderSingleView($this->menu->setID($this->getMenuID()))
+      );
     }
 
     $crumbs = null;
@@ -213,6 +225,8 @@ final class AphrontSideNavFilterView extends AphrontView {
     }
 
     if ($this->flexible) {
+      $nav_classes[] = 'has-drag-nav';
+
       Javelin::initBehavior(
         'phabricator-nav',
         array(
@@ -232,7 +246,9 @@ final class AphrontSideNavFilterView extends AphrontView {
       }
     }
 
-    return $crumbs.phutil_render_tag(
+    $nav_classes = array_merge($nav_classes, $this->classes);
+
+    return phutil_render_tag(
       'div',
       array(
         'class' => implode(' ', $nav_classes),
@@ -246,7 +262,7 @@ final class AphrontSideNavFilterView extends AphrontView {
           'class' => 'phabricator-nav-content',
           'id' => $content_id,
         ),
-        $this->renderChildren()));
+        $crumbs.$this->renderChildren()));
   }
 
 }

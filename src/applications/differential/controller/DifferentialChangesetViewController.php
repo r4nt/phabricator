@@ -157,6 +157,11 @@ final class DifferentialChangesetViewController extends DifferentialController {
     $parser->setLeftSideCommentMapping($left_source, $left_new);
     $parser->setWhitespaceMode($request->getStr('whitespace'));
 
+    if ($request->getStr('renderer') == '1up') {
+      $parser->setRenderer(new DifferentialChangesetOneUpRenderer());
+    }
+
+
     if ($left && $right) {
       $parser->setOriginals($left, $right);
     }
@@ -247,7 +252,7 @@ final class DifferentialChangesetViewController extends DifferentialController {
         $panel
       ),
       array(
-        'title' => 'Changeset View',
+        'title' => pht('Changeset View'),
       ));
   }
 

@@ -35,13 +35,19 @@ final class CeleritySpriteGenerator {
         $sprite = id(clone $template)
           ->setName('action-'.$icon.$suffix);
 
+        $tcss = array();
+        $tcss[] = '.action-'.$icon.$suffix;
         if ($color == 'white') {
-          $sprite->setTargetCSS(
-            '.action-'.$icon.$suffix.', '.
-            '.device-desktop .phabricator-action-view:hover .action-'.$icon);
-        } else {
-          $sprite->setTargetCSS('.action-'.$icon.$suffix);
+          $tcss[] = '.device-desktop .phabricator-action-view:hover '.
+            '.action-'.$icon;
+          if ($icon == 'new') {
+            // Hover state for the "+" icons on homepage tiles.
+            $tcss[] = '.phabricator-application-launch-create:hover '.
+                      '.phabricator-application-create-icon.action-new-grey';
+          }
         }
+
+        $sprite->setTargetCSS(implode(', ', $tcss));
 
         foreach ($scales as $scale_key => $scale) {
           $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
@@ -81,16 +87,6 @@ final class CeleritySpriteGenerator {
     $sprites = array();
 
     $sources = array(
-      'round_bubble' => array(
-        'x' => 26,
-        'y' => 26,
-        'css' => '.phabricator-main-menu-alert-bubble'
-      ),
-      'bubble' => array(
-        'x' => 46,
-        'y' => 26,
-        'css' => '.phabricator-main-menu-alert-bubble.alert-unread'
-      ),
       'seen_read_all' => array(
         'x' => 14,
         'y' => 14,
@@ -129,6 +125,25 @@ final class CeleritySpriteGenerator {
         'y' => 25,
         'css' => '.phabricator-main-menu-logo-image',
       ),
+      'conf-off' => array(
+        'x' => 14,
+        'y' => 14,
+        'css' =>
+          '.alert-notifications .phabricator-main-menu-message-icon',
+      ),
+      'conf-hover' => array(
+        'x' => 14,
+        'y' => 14,
+        'css' =>
+          '.alert-notifications:hover .phabricator-main-menu-message-icon',
+      ),
+      'conf-unseen' => array(
+        'x' => 14,
+        'y' => 14,
+        'css' =>
+          '.alert-notifications.message-unread '.
+          '.phabricator-main-menu-message-icon',
+      ),
     );
 
     $scales = array(
@@ -161,6 +176,42 @@ final class CeleritySpriteGenerator {
     return $sheet;
   }
 
+  public function buildConpherenceSheet() {
+    $icons = $this->getDirectoryList('conpher_1x');
+    $scales = array(
+      '1x' => 1,
+      '2x' => 2,
+    );
+    $template = id(new PhutilSprite())
+      ->setSourceSize(32, 32);
+
+    $sprites = array();
+      foreach ($icons as $icon) {
+      $color = preg_match('/_on/', $icon) ? 'on' : 'off';
+
+      $prefix = 'conpher_';
+
+      $sprite = id(clone $template)
+        ->setName($prefix.$icon);
+
+      $sprite->setTargetCSS($prefix.$icon);
+
+      foreach ($scales as $scale_key => $scale) {
+        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
+        $sprite->setSourceFile($path, $scale);
+      }
+      $sprites[] = $sprite;
+    }
+
+    $sheet = $this->buildSheet('conpher', true);
+    $sheet->setScales($scales);
+    foreach ($sprites as $sprite) {
+      $sheet->addSprite($sprite);
+    }
+
+    return $sheet;
+  }
+
   public function buildGradientSheet() {
     $gradients = $this->getDirectoryList('gradients');
 
@@ -169,12 +220,15 @@ final class CeleritySpriteGenerator {
     $unusual_heights = array(
       'dark-menu-label' => 25,
       'breadcrumbs'     => 31,
+      'menu-hover'      => 28,
+      'menu-label'      => 24,
+      'menu-selected'   => 28,
     );
 
     // Reorder the sprites so less-specific rules generate earlier in the sheet.
     // Otherwise we end up with blue "a.black" buttons because the blue rules
     // have the same specificity but appear later.
-    $gradients = array_combine($gradients, $gradients);
+    $gradients = array_fuse($gradients);
     $gradients = array_select_keys(
       $gradients,
       array(
@@ -193,8 +247,19 @@ final class CeleritySpriteGenerator {
                         'button.grey_active, a.dropdown-open',
       'green-dark' => ', button.green, a.green, a.green:visited',
       'green-light' => ', button.green:active, a.green:active',
-      'dark-menu-label'
-        => ', .phabricator-dark-menu .phabricator-menu-item-type-label',
+      'dark-menu-label' =>
+        ', .phabricator-dark-menu .phabricator-menu-item-type-label',
+      'menu-label' =>
+        ', .phabricator-side-menu .phabricator-menu-item-type-label',
+      'menu-hover' =>
+        ', .device-desktop .phabricator-side-menu '.
+        'a.phabricator-menu-item-type-link:hover, '.
+        '.phabricator-filetree a.phabricator-filetree-item:hover',
+      'menu-selected' =>
+        ', .phabricator-side-menu .phabricator-menu-item-selected, '.
+        '.device-desktop .phabricator-side-menu '.
+        'a.phabricator-menu-item-selected:hover, '.
+        '.phabricator-nav-local a.phabricator-active-nav-focus',
     );
 
     $sprites = array();
@@ -215,7 +280,15 @@ final class CeleritySpriteGenerator {
       false,
       PhutilSpriteSheet::TYPE_REPEAT_X,
       ', button, a.button, a.button:visited, input.inputsubmit, '.
-      '.phabricator-dark-menu .phabricator-menu-item-type-label');
+      '.phabricator-dark-menu .phabricator-menu-item-type-label, '.
+      '.phabricator-side-menu .phabricator-menu-item-type-label, '.
+      '.device-desktop .phabricator-side-menu '.
+        'a.phabricator-menu-item-type-link:hover, '.
+      '.phabricator-side-menu .phabricator-menu-item-selected, '.
+      '.device-desktop .phabricator-side-menu '.
+        'a.phabricator-menu-item-selected:hover, '.
+      '.phabricator-filetree a.phabricator-filetree-item:hover, '.
+      '.phabricator-filetree a.phabricator-active-nav-focus');
     foreach ($sprites as $sprite) {
       $sheet->addSprite($sprite);
     }

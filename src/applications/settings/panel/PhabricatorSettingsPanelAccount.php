@@ -62,7 +62,7 @@ final class PhabricatorSettingsPanelAccount
     }
 
     $timezone_ids = DateTimeZone::listIdentifiers();
-    $timezone_id_map = array_combine($timezone_ids, $timezone_ids);
+    $timezone_id_map = array_fuse($timezone_ids);
 
     $form = new AphrontFormView();
     $form
@@ -90,8 +90,8 @@ final class PhabricatorSettingsPanelAccount
 
     $panel = new AphrontPanelView();
     $panel->setHeader('Account Settings');
-    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
     $panel->appendChild($form);
+    $panel->setNoBackground();
 
     return array(
       $notice,

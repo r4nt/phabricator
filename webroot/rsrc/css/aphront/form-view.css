@@ -6,8 +6,8 @@
  * These styles are overrides for .aphront-form-view
  */
 .aphront-form-view-shaded {
-  border: 1px solid #c4c4c4;
-  background: #e7e7e7;
+  border: 1px solid #d4dae0;
+  background: #f4f5f8;
 }
 
 .aphront-form-view-padded {
@@ -25,18 +25,29 @@
   color: #666666;
 }
 
+.device-phone .aphront-form-view label.aphront-form-label {
+  display: block;
+  float: none;
+  text-align: left;
+  width: 100%;
+}
+
 .aphront-form-input {
   margin-left: 20%;
   margin-right: 25%;
   width: 55%;
 }
 
+.device-phone .aphront-form-input {
+  margin-left: 0%;
+  margin-right: 0%;
+  width: 100%;
+}
+
 .aphront-form-control-text .aphront-form-input input,
 .aphront-form-control-password .aphront-form-input input {
   font-size: 13px;
-  height: 26px;
-  padding: 4px 6px;
-  line-height: 20px;
+  padding: 4px 4px;
   color: #333;
   vertical-align: middle;
   background-color: #ffffff;
@@ -53,6 +64,15 @@
   padding-top: 4px;
 }
 
+.device-phone .aphront-form-error {
+  float: none;
+  width: 100%;
+}
+
+.device-phone .aphront-form-drag-and-drop-upload {
+  display: none;
+}
+
 .aphront-form-required {
   font-weight: normal;
   color: #888888;
@@ -61,6 +81,7 @@
 
 .aphront-form-input input,
 .aphront-form-input textarea {
+  font-size: 13px;
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -104,6 +125,10 @@
   text-align: right;
   margin-right: 25%;
   margin-left: 20%;
+}
+
+.device-phone .aphront-form-view .aphront-form-caption {
+  margin-right: 0%;
 }
 
 /* override for when inside an aphront-panel-view */
@@ -171,6 +196,7 @@ table.aphront-form-control-checkbox-layout th {
 }
 
 .aphront-form-control-image .default-image {
+  display: inline;
   width: 12px;
 }
 

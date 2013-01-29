@@ -44,4 +44,20 @@ final class PhabricatorFeedStoryPhriction extends PhabricatorFeedStory {
     return $view;
   }
 
+  public function renderText() {
+    $author_name = $this->getHandle($this->getAuthorPHID())->getLinkName();
+
+    $document_handle = $this->getHandle($this->getPrimaryObjectPHID());
+    $document_title = $document_handle->getLinkName();
+    $document_uri = PhabricatorEnv::getURI($document_handle->getURI());
+
+    $action = $this->getValue('action');
+    $verb = PhrictionActionConstants::getActionPastTenseVerb($action);
+
+    $text = "{$author_name} {$verb} the document".
+            "{$document_title} {$document_uri}";
+
+    return $text;
+  }
+
 }

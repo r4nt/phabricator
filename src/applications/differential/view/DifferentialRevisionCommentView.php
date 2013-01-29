@@ -119,6 +119,7 @@ final class DifferentialRevisionCommentView extends AphrontView {
     $verb = phutil_escape_html($verb);
 
     $actions = array();
+    // TODO: i18n
     switch ($comment->getAction()) {
       case DifferentialAction::ACTION_ADDCCS:
         $actions[] = "{$author_link} added CCs: ".
@@ -180,10 +181,11 @@ final class DifferentialRevisionCommentView extends AphrontView {
     } else {
       $xaction_view->setEpoch($comment->getDateCreated());
       if ($this->anchorName) {
-        $anchor_name = $this->anchorName;
-        $anchor_text = 'D'.$comment->getRevisionID().'#'.$anchor_name;
+        $anchor_text =
+          'D'.$comment->getRevisionID().
+          '#'.preg_replace('/^comment-/', '', $this->anchorName);
 
-        $xaction_view->setAnchor($anchor_name, $anchor_text);
+        $xaction_view->setAnchor($this->anchorName, $anchor_text);
       }
     }
 

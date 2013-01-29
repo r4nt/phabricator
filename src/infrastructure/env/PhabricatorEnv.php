@@ -51,40 +51,17 @@
 final class PhabricatorEnv {
 
   private static $sourceStack;
+  private static $repairSource;
+  private static $requestBaseURI;
 
   /**
    * @phutil-external-symbol class PhabricatorStartup
    */
   public static function initializeWebEnvironment() {
-    $env = self::getSelectedEnvironmentName();
-    if (!$env) {
-      PhabricatorStartup::didFatal(
-        "The 'PHABRICATOR_ENV' environmental variable is not defined. Modify ".
-        "your httpd.conf to include 'SetEnv PHABRICATOR_ENV <env>', where ".
-        "'<env>' is one of 'development', 'production', or a custom ".
-        "environment.");
-    }
-
     self::initializeCommonEnvironment();
   }
 
   public static function initializeScriptEnvironment() {
-    $env = self::getSelectedEnvironmentName();
-    if (!$env) {
-      echo phutil_console_wrap(
-        phutil_console_format(
-          "**ERROR**: PHABRICATOR_ENV Not Set\n\n".
-          "Define the __PHABRICATOR_ENV__ environment variable before ".
-          "running this script. You can do it on the command line like ".
-          "this:\n\n".
-          "  $ PHABRICATOR_ENV=__custom/myconfig__ %s ...\n\n".
-          "Replace __custom/myconfig__ with the path to your configuration ".
-          "file. For more information, see the 'Configuration Guide' in the ".
-          "Phabricator documentation.\n\n",
-          $GLOBALS['argv'][0]));
-      exit(1);
-    }
-
     self::initializeCommonEnvironment();
 
     // NOTE: This is dangerous in general, but we know we're in a script context
@@ -102,15 +79,19 @@ final class PhabricatorEnv {
 
 
   private static function initializeCommonEnvironment() {
-    $env = self::getSelectedEnvironmentName();
+    PhutilErrorHandler::initialize();
 
     self::buildConfigurationSourceStack();
 
-    PhutilErrorHandler::initialize();
-
+    // Force a valid timezone. If both PHP and Phabricator configuration are
+    // invalid, use UTC.
     $tz = PhabricatorEnv::getEnvConfig('phabricator.timezone');
     if ($tz) {
-      date_default_timezone_set($tz);
+      @date_default_timezone_set($tz);
+    }
+    $ok = @date_default_timezone_set(date_default_timezone_get());
+    if (!$ok) {
+      date_default_timezone_set('UTC');
     }
 
     // Append any paths to $PATH if we need to.
@@ -119,10 +100,6 @@ final class PhabricatorEnv {
       $current_env_path = getenv('PATH');
       $new_env_paths = implode(PATH_SEPARATOR, $paths);
       putenv('PATH='.$current_env_path.PATH_SEPARATOR.$new_env_paths);
-    }
-
-    foreach (PhabricatorEnv::getEnvConfig('load-libraries') as $library) {
-      phutil_load_library($library);
     }
 
     PhabricatorEventEngine::initialize();
@@ -137,18 +114,64 @@ final class PhabricatorEnv {
     $stack = new PhabricatorConfigStackSource();
     self::$sourceStack = $stack;
 
-    $stack->pushSource(
-      id(new PhabricatorConfigDefaultSource())
-        ->setName(pht('Global Default')));
+    $default_source = id(new PhabricatorConfigDefaultSource())
+      ->setName(pht('Global Default'));
+    $stack->pushSource($default_source);
 
     $env = self::getSelectedEnvironmentName();
-    $stack->pushSource(
-      id(new PhabricatorConfigFileSource($env))
-        ->setName(pht("File '%s'", $env)));
+    if ($env) {
+      $stack->pushSource(
+        id(new PhabricatorConfigFileSource($env))
+          ->setName(pht("File '%s'", $env)));
+    }
 
     $stack->pushSource(
       id(new PhabricatorConfigLocalSource())
         ->setName(pht("Local Config")));
+
+    // If the install overrides the database adapter, we might need to load
+    // the database adapter class before we can push on the database config.
+    // This config is locked and can't be edited from the web UI anyway.
+    foreach (PhabricatorEnv::getEnvConfig('load-libraries') as $library) {
+      phutil_load_library($library);
+    }
+
+    // If custom libraries specify config options, they won't get default
+    // values as the Default source has already been loaded, so we get it to
+    // pull in all options from non-phabricator libraries now they are loaded.
+    $default_source->loadExternalOptions();
+
+    try {
+      $stack->pushSource(
+        id(new PhabricatorConfigDatabaseSource('default'))
+          ->setName(pht("Database")));
+    } catch (AphrontQueryException $exception) {
+      // If the database is not available, just skip this configuration
+      // source. This happens during `bin/storage upgrade`, `bin/conf` before
+      // schema setup, etc.
+    }
+  }
+
+  public static function repairConfig($key, $value) {
+    if (!self::$repairSource) {
+      self::$repairSource = id(new PhabricatorConfigDictionarySource(array()))
+        ->setName(pht("Repaired Config"));
+      self::$sourceStack->pushSource(self::$repairSource);
+    }
+    self::$repairSource->setKeys(array($key => $value));
+  }
+
+  public static function getUnrepairedEnvConfig($key, $default = null) {
+    foreach (self::$sourceStack->getStack() as $source) {
+      if ($source === self::$repairSource) {
+        continue;
+      }
+      $result = $source->getKeys(array($key));
+      if ($result) {
+        return $result[$key];
+      }
+    }
+    return $default;
   }
 
   public static function getSelectedEnvironmentName() {
@@ -182,11 +205,17 @@ final class PhabricatorEnv {
   /**
    * Get the current configuration setting for a given key.
    *
+   * If the key is not found, then throw an Exception.
+   *
    * @task read
    */
-  public static function getEnvConfig($key, $default = null) {
+  public static function getEnvConfig($key) {
     $result = self::$sourceStack->getKeys(array($key));
-    return idx($result, $key, $default);
+    if (array_key_exists($key, $result)) {
+      return $result[$key];
+    } else {
+      throw new Exception("No config value specified for key '{$key}'.");
+    }
   }
 
 
@@ -196,7 +225,7 @@ final class PhabricatorEnv {
    * @task read
    */
   public static function getURI($path) {
-    return rtrim(self::getEnvConfig('phabricator.base-uri'), '/').$path;
+    return rtrim(self::getAnyBaseURI(), '/').$path;
   }
 
 
@@ -216,7 +245,7 @@ final class PhabricatorEnv {
 
     $production_domain = self::getEnvConfig('phabricator.production-uri');
     if (!$production_domain) {
-      $production_domain = self::getEnvConfig('phabricator.base-uri');
+      $production_domain = self::getAnyBaseURI();
     }
     return rtrim($production_domain, '/').$path;
   }
@@ -230,7 +259,7 @@ final class PhabricatorEnv {
   public static function getCDNURI($path) {
     $alt = self::getEnvConfig('security.alternate-file-domain');
     if (!$alt) {
-      $alt = self::getEnvConfig('phabricator.base-uri');
+      $alt = self::getAnyBaseURI();
     }
     $uri = new PhutilURI($alt);
     $uri->setPath($path);
@@ -255,15 +284,31 @@ final class PhabricatorEnv {
    */
   public static function newObjectFromConfig($key, $args = array()) {
     $class = self::getEnvConfig($key);
-    $object = newv($class, $args);
-    $instanceof = idx(self::getRequiredClasses(), $key);
-    if (!($object instanceof $instanceof)) {
-      throw new Exception("Config setting '$key' must be an instance of ".
-        "'$instanceof', is '".get_class($object)."'.");
-    }
-    return $object;
+    return newv($class, $args);
   }
 
+  public static function getAnyBaseURI() {
+    $base_uri = self::getEnvConfig('phabricator.base-uri');
+
+    if (!$base_uri) {
+      $base_uri = self::getRequestBaseURI();
+    }
+
+    if (!$base_uri) {
+      throw new Exception(
+        "Define 'phabricator.base-uri' in your configuration to continue.");
+    }
+
+    return $base_uri;
+  }
+
+  public static function getRequestBaseURI() {
+    return self::$requestBaseURI;
+  }
+
+  public static function setRequestBaseURI($uri) {
+    self::$requestBaseURI = $uri;
+  }
 
 /* -(  Unit Test Support  )-------------------------------------------------- */
 
@@ -293,6 +338,7 @@ final class PhabricatorEnv {
     $source = self::$sourceStack->popSource();
     $stack_key = spl_object_hash($source);
     if ($stack_key !== $key) {
+      self::$sourceStack->pushSource($source);
       throw new Exception(
         "Scoped environments were destroyed in a diffent order than they ".
         "were initialized.");
@@ -379,33 +425,6 @@ final class PhabricatorEnv {
 
 
 /* -(  Internals  )---------------------------------------------------------- */
-
-
-  /**
-   * @task internal
-   */
-  public static function getRequiredClasses() {
-    return array(
-      'translation.provider' => 'PhabricatorTranslation',
-      'metamta.mail-adapter' => 'PhabricatorMailImplementationAdapter',
-      'metamta.maniphest.reply-handler' => 'PhabricatorMailReplyHandler',
-      'metamta.differential.reply-handler' => 'PhabricatorMailReplyHandler',
-      'metamta.diffusion.reply-handler' => 'PhabricatorMailReplyHandler',
-      'metamta.package.reply-handler' => 'PhabricatorMailReplyHandler',
-      'storage.engine-selector' => 'PhabricatorFileStorageEngineSelector',
-      'search.engine-selector' => 'PhabricatorSearchEngineSelector',
-      'differential.field-selector' => 'DifferentialFieldSelector',
-      'maniphest.custom-task-extensions-class' => 'ManiphestTaskExtensions',
-      'aphront.default-application-configuration-class' =>
-        'AphrontApplicationConfiguration',
-      'controller.oauth-registration' =>
-        'PhabricatorOAuthRegistrationController',
-      'mysql.implementation' => 'AphrontMySQLDatabaseConnectionBase',
-      'differential.attach-task-class' => 'DifferentialTasksAttacher',
-      'mysql.configuration-provider' => 'DatabaseConfigurationProvider',
-      'syntax-highlighter.engine' => 'PhutilSyntaxHighlighterEngine',
-    );
-  }
 
 
   /**

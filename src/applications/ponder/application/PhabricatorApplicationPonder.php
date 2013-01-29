@@ -20,6 +20,10 @@ final class PhabricatorApplicationPonder extends PhabricatorApplication {
     );
   }
 
+  public function getTitleGlyph() {
+    return "\xE2\x97\xB3";
+  }
+
   public function loadStatus(PhabricatorUser $user) {
     // replace with "x new unanswered questions" or some such
     $status = array();
@@ -29,6 +33,10 @@ final class PhabricatorApplicationPonder extends PhabricatorApplication {
 
   public function getApplicationGroup() {
     return self::GROUP_COMMUNICATION;
+  }
+
+  public function isBeta() {
+    return true;
   }
 
   public function getroutes() {

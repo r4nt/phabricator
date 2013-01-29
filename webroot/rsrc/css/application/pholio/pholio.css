@@ -1,0 +1,23 @@
+/**
+ * @provides pholio-css
+ */
+.pholio-mock-image-container {
+  background-color: #282828;
+  text-align: center;
+}
+
+.pholio-mock-carousel {
+  background-color: #282828;
+  text-align: center;
+}
+
+.pholio-mock-carousel-thumbnail {
+  margin-right: 5px;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.pholio-mock-image {
+  margin: 10px 0px;
+  display: inline-block;
+}

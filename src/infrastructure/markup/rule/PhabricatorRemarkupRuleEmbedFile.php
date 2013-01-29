@@ -7,6 +7,7 @@ final class PhabricatorRemarkupRuleEmbedFile
   extends PhutilRemarkupRule {
 
   const KEY_RULE_EMBED_FILE = 'rule.embed.file';
+  const KEY_EMBED_FILE_PHIDS = 'phabricator.embedded-file-phids';
 
   public function apply($text) {
     return preg_replace_callback(
@@ -54,10 +55,20 @@ final class PhabricatorRemarkupRuleEmbedFile
       case 'full':
         $attrs['src'] = $file->getBestURI();
         $options['image_class'] = null;
+        $file_data = $file->getMetadata();
+        $height = idx($file_data, PhabricatorFile::METADATA_IMAGE_HEIGHT);
+        if ($height) {
+          $attrs['height'] = $height;
+        }
+        $width = idx($file_data, PhabricatorFile::METADATA_IMAGE_WIDTH);
+        if ($width) {
+          $attrs['width'] = $width;
+        }
         break;
       case 'thumb':
       default:
         $attrs['src'] = $file->getPreview220URI();
+        $attrs['width'] = '220';
         $options['image_class'] = 'phabricator-remarkup-embed-image';
         break;
     }
@@ -87,6 +98,7 @@ final class PhabricatorRemarkupRuleEmbedFile
       return;
     }
 
+    $file_phids = array();
     foreach ($metadata as $phid => $bundles) {
       foreach ($bundles as $data) {
 
@@ -159,7 +171,9 @@ final class PhabricatorRemarkupRuleEmbedFile
 
         $engine->overwriteStoredText($data['token'], $embed);
       }
+      $file_phids[] = $phid;
     }
+    $engine->setTextMetadata(self::KEY_EMBED_FILE_PHIDS, $file_phids);
     $engine->setTextMetadata($metadata_key, array());
   }
 

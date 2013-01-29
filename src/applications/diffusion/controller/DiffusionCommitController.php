@@ -52,6 +52,7 @@ final class DiffusionCommitController extends DiffusionController {
       ->setNavigationMarker(true);
 
     $is_foreign = $commit_data->getCommitDetail('foreign-svn-stub');
+    $changesets = null;
     if ($is_foreign) {
       $subpath = $commit_data->getCommitDetail('svn-subpath');
 
@@ -195,6 +196,7 @@ final class DiffusionCommitController extends DiffusionController {
       }
 
       $change_panel->appendChild($change_table);
+      $change_panel->setNoBackground();
 
       $content[] = $change_panel;
 
@@ -318,22 +320,26 @@ final class DiffusionCommitController extends DiffusionController {
       $repository,
       $commit->getCommitIdentifier()
     );
-    $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
-      ->setAnchorName('top')
-      ->setTitle($short_name)
-      ->setBaseURI(new PhutilURI('/'.$commit_id))
-      ->build($changesets);
-    foreach ($content as $child) {
-      $nav->appendChild($child);
-    }
 
     $crumbs = $this->buildCrumbs(array(
       'commit' => true,
     ));
-    $nav->setCrumbs($crumbs);
+
+    if ($changesets) {
+      $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
+        ->setAnchorName('top')
+        ->setTitle($short_name)
+        ->setBaseURI(new PhutilURI('/'.$commit_id))
+        ->build($changesets)
+        ->setCrumbs($crumbs)
+        ->appendChild($content);
+      $content = $nav;
+    } else {
+      $content = array($crumbs, $content);
+    }
 
     return $this->buildApplicationPage(
-      $nav,
+      $content,
       array(
         'title' => $commit_id
       )
@@ -498,6 +504,7 @@ final class DiffusionCommitController extends DiffusionController {
     $panel->setHeader('Audits');
     $panel->setCaption('Audits you are responsible for are highlighted.');
     $panel->appendChild($view);
+    $panel->setNoBackground();
 
     return $panel;
   }
@@ -746,8 +753,9 @@ final class DiffusionCommitController extends DiffusionController {
 
     $status_concern = PhabricatorAuditCommitStatusConstants::CONCERN_RAISED;
     $concern_raised = ($commit->getAuditStatus() == $status_concern);
-
-    if ($user_is_author && $concern_raised) {
+    $can_close_option = PhabricatorEnv::getEnvConfig(
+      'audit.can-author-close-audit');
+    if ($can_close_option && $user_is_author && $concern_raised) {
       $actions[PhabricatorAuditActionConstants::CLOSE] = true;
     }
 
@@ -795,6 +803,7 @@ final class DiffusionCommitController extends DiffusionController {
     $panel->setHeader('Merged Changes');
     $panel->setCaption($caption);
     $panel->appendChild($history_table);
+    $panel->setNoBackground();
 
     return $panel;
   }

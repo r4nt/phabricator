@@ -133,25 +133,7 @@ final class DiffusionBrowseFileController extends DiffusionController {
       return;
     }
 
-    $file_history = DiffusionHistoryQuery::newFromDiffusionRequest(
-      $drequest)->setLimit(1)->loadHistory();
-
-    $lint_request = clone $drequest;
-    $lint_request->setCommit($branch->getLintCommit());
-    try {
-      $lint_history = DiffusionHistoryQuery::newFromDiffusionRequest(
-        $lint_request)->setLimit(1)->loadHistory();
-    } catch (Exception $ex) {
-      // This can happen if lintCommit is invalid.
-      $lint_history = null;
-    }
-
-    $this->lintCommit = '';
-    if (!$file_history || !$lint_history ||
-        reset($file_history)->getCommitIdentifier() !=
-        reset($lint_history)->getCommitIdentifier()) {
-      $this->lintCommit = $branch->getLintCommit();
-    }
+    $this->lintCommit = $branch->getLintCommit();
 
     $conn = id(new PhabricatorRepository())->establishConnection('r');
 
@@ -355,21 +337,14 @@ final class DiffusionBrowseFileController extends DiffusionController {
     } else if ($this->lintCommit === null) {
       $lint_text = pht('Lint not Available');
 
-    } else if ($this->lintCommit) {
+    } else {
       $lint_text = pht(
-        'Switch for %d Lint Message(s)',
+        'Show %d Lint Message(s)',
         count($this->lintMessages));
       $href = $this->getDiffusionRequest()->generateURI(array(
         'action' => 'browse',
         'commit' => $this->lintCommit,
       ))->alter('lint', '');
-
-    } else if (!$this->lintMessages) {
-      $lint_text = pht('No Lint Messages');
-
-    } else {
-      $lint_text = pht('Show %d Lint Message(s)', count($this->lintMessages));
-      $href = $base_uri->alter('lint', '');
     }
 
     $lint_button = $this->createViewAction(
@@ -492,8 +467,6 @@ final class DiffusionBrowseFileController extends DiffusionController {
         // with same color; otherwise generate blame info. The newer a change
         // is, the more saturated the color.
 
-        // TODO: SVN doesn't always give us blame for the last line, if empty?
-        // Bug with our stuff or with SVN?
         $rev = idx($rev_list, $k, $last_rev);
 
         if ($last_rev == $rev) {
@@ -796,60 +769,6 @@ final class DiffusionBrowseFileController extends DiffusionController {
         '</tr>';
     }
     return $rows;
-  }
-
-  private static function renderRevision(DiffusionRequest $drequest,
-    $revision) {
-
-    $callsign = $drequest->getCallsign();
-
-    $name = 'r'.$callsign.$revision;
-    return phutil_render_tag(
-      'a',
-      array(
-           'href' => '/'.$name,
-      ),
-      $name
-    );
-  }
-
-
-  private static function renderBrowse(
-    DiffusionRequest $drequest,
-    $path,
-    $name = null,
-    $rev = null,
-    $line = null,
-    $view = null,
-    $title = null) {
-
-    $callsign = $drequest->getCallsign();
-
-    if ($name === null) {
-      $name = $path;
-    }
-
-    $at = null;
-    if ($rev) {
-      $at = ';'.$rev;
-    }
-
-    if ($view) {
-      $view = '?view='.$view;
-    }
-
-    if ($line) {
-      $line = '$'.$line;
-    }
-
-    return phutil_render_tag(
-      'a',
-      array(
-        'href' => "/diffusion/{$callsign}/browse/{$path}{$at}{$line}{$view}",
-        'title' => $title,
-      ),
-      $name
-    );
   }
 
   private function loadFileForData($path, $data) {

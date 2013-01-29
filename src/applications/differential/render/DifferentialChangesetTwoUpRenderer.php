@@ -1,42 +1,10 @@
 <?php
 
 final class DifferentialChangesetTwoUpRenderer
-  extends DifferentialChangesetRenderer {
+  extends DifferentialChangesetHTMLRenderer {
 
-  public function renderChangesetTable($contents) {
-    $changeset = $this->getChangeset();
-    $props = $this->renderPropertyChangeHeader($changeset);
-    $table = null;
-    if ($contents) {
-      $table = javelin_render_tag(
-        'table',
-        array(
-          'class' => 'differential-diff remarkup-code PhabricatorMonospaced',
-          'sigil' => 'differential-diff',
-        ),
-        $contents);
-    }
-
-    if (!$table && !$props) {
-      $notice = $this->renderChangeTypeHeader($changeset, true);
-    } else {
-      $notice = $this->renderChangeTypeHeader($changeset, false);
-    }
-
-    $result = implode(
-      "\n",
-      array(
-        $notice,
-        $props,
-        $table,
-      ));
-
-    // TODO: Let the user customize their tab width / display style.
-    $result = str_replace("\t", '  ', $result);
-
-    // TODO: We should possibly post-process "\r" as well.
-
-    return $result;
+  public function isOneUpRenderer() {
+    return false;
   }
 
   public function renderTextChange(
@@ -44,11 +12,10 @@ final class DifferentialChangesetTwoUpRenderer
     $range_len,
     $rows) {
 
-    $missing_old = $this->getMissingOldLines();
-    $missing_new = $this->getMissingNewLines();
+    $hunk_starts = $this->getHunkStartLines();
 
     $context_not_available = null;
-    if ($missing_old || $missing_new) {
+    if ($hunk_starts) {
       $context_not_available = javelin_render_tag(
         'tr',
         array(
@@ -128,8 +95,8 @@ final class DifferentialChangesetTwoUpRenderer
               ),
             ),
             $is_first_block
-              ? "Show First 20 Lines"
-              : "\xE2\x96\xB2 Show 20 Lines");
+              ? pht("Show First 20 Lines")
+              : pht("\xE2\x96\xB2 Show 20 Lines"));
         }
 
         $contents[] = javelin_render_tag(
@@ -144,7 +111,7 @@ final class DifferentialChangesetTwoUpRenderer
               'range'  => "{$top}-{$len}/{$top}-{$len}",
             ),
           ),
-          'Show All '.$len.' Lines');
+          pht('Show All %d Lines', $len));
 
         $is_last_block = false;
         if ($ii + $len >= $rows) {
@@ -164,8 +131,8 @@ final class DifferentialChangesetTwoUpRenderer
               ),
             ),
             $is_last_block
-              ? "Show Last 20 Lines"
-              : "\xE2\x96\xBC Show 20 Lines");
+              ? pht("Show Last 20 Lines")
+              : pht("\xE2\x96\xBC Show 20 Lines"));
         }
 
         $context = null;
@@ -282,8 +249,7 @@ final class DifferentialChangesetTwoUpRenderer
       }
       $n_classes .= ' right'.$n_colspan;
 
-      if (($o_num && !empty($missing_old[$o_num])) ||
-          ($n_num && !empty($missing_new[$n_num]))) {
+      if (isset($hunk_starts[$o_num])) {
         $html[] = $context_not_available;
       }
 
@@ -362,7 +328,7 @@ final class DifferentialChangesetTwoUpRenderer
       }
     }
 
-    return implode('', $html);
+    return $this->wrapChangeInTable(implode('', $html));
   }
 
   public function renderFileChange($old_file = null,
@@ -440,7 +406,7 @@ final class DifferentialChangesetTwoUpRenderer
       $th_new = '<th id="C'.$id.'NL1">1</th>';
     }
 
-    $output = $this->renderChangesetTable(
+    $output =
       '<tr class="differential-image-diff">'.
       $th_old.
       '<td class="left differential-old-image">'.$old.'</td>'.
@@ -450,9 +416,11 @@ final class DifferentialChangesetTwoUpRenderer
       '</td>'.
       '</tr>'.
       implode('', $html_old).
-      implode('', $html_new));
+      implode('', $html_new);
 
-    return $output;
+    $output = $this->wrapChangeInTable($output);
+
+    return $this->renderChangesetTable($output);
   }
 
 }

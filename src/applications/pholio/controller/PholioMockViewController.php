@@ -18,6 +18,8 @@ final class PholioMockViewController extends PholioController {
     $mock = id(new PholioMockQuery())
       ->setViewer($user)
       ->withIDs(array($this->id))
+      ->needImages(true)
+      ->needCoverFiles(true)
       ->executeOne();
 
     if (!$mock) {
@@ -60,9 +62,10 @@ final class PholioMockViewController extends PholioController {
     $actions = $this->buildActionView($mock);
     $properties = $this->buildPropertyView($mock, $engine, $subscribers);
 
-    $carousel =
-      '<h1 style="margin: 2em; padding: 1em; border: 1px dashed grey;">'.
-        'Carousel Goes Here</h1>';
+    require_celerity_resource('pholio-css');
+
+    $output = new PholioMockImagesView();
+    $output->setMock($mock);
 
     $xaction_view = id(new PhabricatorApplicationTransactionView())
       ->setUser($this->getRequest()->getUser())
@@ -75,10 +78,11 @@ final class PholioMockViewController extends PholioController {
       $header,
       $actions,
       $properties,
-      $carousel,
+      $output->render(),
       $xaction_view,
       $add_comment,
     );
+
 
     return $this->buildApplicationPage(
       $content,

@@ -740,10 +740,7 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
    * specified by the `metamta.user-address-format` configuration value.
    */
   private function getUserName($user) {
-    $format = PhabricatorEnv::getEnvConfig(
-      'metamta.user-address-format',
-      'full'
-    );
+    $format = PhabricatorEnv::getEnvConfig('metamta.user-address-format');
 
     switch ($format) {
       case 'short':
@@ -809,7 +806,7 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
       return array();
     }
 
-    $phids = array_combine($phids, $phids);
+    $phids = array_fuse($phids);
 
 
     // Exclude PHIDs explicitly marked for exclusion. We use this to prevent

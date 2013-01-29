@@ -253,10 +253,14 @@ final class PhabricatorConfigEditController
         }
         break;
       case 'string':
+      case 'enum':
         $set_value = (string)$value;
         break;
       case 'list<string>':
         $set_value = $request->getStrList('value');
+        break;
+      case 'set':
+        $set_value = array_fill_keys($request->getStrList('value'), true);
         break;
       case 'bool':
         switch ($value) {
@@ -293,6 +297,7 @@ final class PhabricatorConfigEditController
           $errors[] = pht(
             'The given value must be valid JSON. This means, among '.
             'other things, that you must wrap strings in double-quotes.');
+        } else {
           $set_value = $json;
         }
         break;
@@ -324,13 +329,16 @@ final class PhabricatorConfigEditController
     switch ($type) {
       case 'int':
       case 'string':
+      case 'enum':
         return $value;
       case 'bool':
         return $value ? 'true' : 'false';
       case 'list<string>':
         return implode("\n", nonempty($value, array()));
+      case 'set':
+        return implode("\n", nonempty(array_keys($value), array()));
       default:
-        return $this->prettyPrintJSON($value);
+        return PhabricatorConfigJSON::prettyPrintJSON($value);
     }
   }
 
@@ -354,6 +362,15 @@ final class PhabricatorConfigEditController
               'false' => idx($option->getBoolOptions(), 1),
             ));
         break;
+      case 'enum':
+        $options = array_mergev(
+          array(
+            array('' => pht('(Use Default)')),
+            $option->getEnumOptions(),
+          ));
+        $control = id(new AphrontFormSelectControl())
+          ->setOptions($options);
+        break;
       case 'class':
         $symbols = id(new PhutilSymbolLoader())
           ->setType('class')
@@ -370,6 +387,7 @@ final class PhabricatorConfigEditController
           ->setOptions($names);
         break;
       case 'list<string>':
+      case 'set':
         $control = id(new AphrontFormTextAreaControl())
           ->setCaption(pht('Separate values with newlines or commas.'));
         break;
@@ -462,7 +480,8 @@ final class PhabricatorConfigEditController
       if (!array_key_exists($option->getKey(), $value)) {
         $value = '<em>'.pht('(empty)').'</em>';
       } else {
-        $value = $this->prettyPrintJSON($value[$option->getKey()]);
+        $value = PhabricatorConfigJSON::prettyPrintJSON(
+          $value[$option->getKey()]);
       }
 
       $table[] = '<tr>';

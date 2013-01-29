@@ -281,15 +281,6 @@ final class ManiphestTaskListController extends ManiphestController {
     }
 
     $filter = new AphrontListFilterView();
-    $filter->addButton(
-      phutil_render_tag(
-        'a',
-        array(
-          'href'  => (string)$create_uri,
-          'class' => 'green button',
-        ),
-        'Create New Task'));
-
     if (empty($key)) {
       $filter->appendChild($form);
     }
@@ -356,7 +347,7 @@ final class ManiphestTaskListController extends ManiphestController {
 
         $count = number_format(count($list));
 
-        $lists->appendChild(
+        $header =
           javelin_render_tag(
             'h1',
             array(
@@ -366,9 +357,15 @@ final class ManiphestTaskListController extends ManiphestController {
                 'priority' => head($list)->getPriority(),
               ),
             ),
-            phutil_escape_html($group).' ('.$count.')'));
+            phutil_escape_html($group).' ('.$count.')');
 
-        $lists->appendChild($task_list);
+
+        $panel = new AphrontPanelView();
+        $panel->appendChild($header);
+        $panel->appendChild($task_list);
+        $panel->setNoBackground();
+
+        $lists->appendChild($panel);
       }
       $lists->appendChild('</div>');
       $selector->appendChild($lists);
@@ -400,10 +397,24 @@ final class ManiphestTaskListController extends ManiphestController {
     $list_container->appendChild('</div>');
     $nav->appendChild($list_container);
 
+    $title = pht('Task List');
+
+    $crumbs = $this->buildApplicationCrumbs()
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName($title))
+      ->addAction(
+        id(new PhabricatorMenuItemView())
+          ->setHref($this->getApplicationURI('/task/create/'))
+          ->setName(pht('Create Task'))
+          ->setIcon('create'));
+
+    $nav->setCrumbs($crumbs);
+
     return $this->buildStandardPageResponse(
       $nav,
       array(
-        'title' => 'Task List',
+        'title' => $title,
       ));
   }
 

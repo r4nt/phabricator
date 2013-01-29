@@ -658,7 +658,7 @@
     },
     "action-new-white"              : {
       "name" : "action-new-white",
-      "rule" : ".action-new-white, .device-desktop .phabricator-action-view:hover .action-new",
+      "rule" : ".action-new-white, .device-desktop .phabricator-action-view:hover .action-new, .phabricator-application-launch-create:hover .phabricator-application-create-icon.action-new-grey",
       "hash" : "782f8bc8dc883c0637910e5fbc3c6f9f"
     },
     "action-none"                   : {

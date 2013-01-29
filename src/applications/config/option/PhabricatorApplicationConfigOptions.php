@@ -56,6 +56,24 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
               $option->getBaseClass()));
         }
         break;
+      case 'set':
+        $valid = true;
+        if (!is_array($value)) {
+          throw new PhabricatorConfigValidationException(
+            pht(
+              "Option '%s' must be a set, but value is not an array.",
+              $option->getKey()));
+        }
+        foreach ($value as $v) {
+          if ($v !== true) {
+            throw new PhabricatorConfigValidationException(
+              pht(
+                "Option '%s' must be a set, but array contains values other ".
+                "than 'true'.",
+                $option->getKey()));
+          }
+        }
+        break;
       case 'list<string>':
         $valid = true;
         if (!is_array($value)) {
@@ -114,7 +132,7 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
       ->setGroup($this);
   }
 
-  final public static function loadAll() {
+  final public static function loadAll($external_only = false) {
     $symbols = id(new PhutilSymbolLoader())
       ->setAncestorClass('PhabricatorApplicationConfigOptions')
       ->setConcreteOnly(true)
@@ -122,6 +140,10 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
 
     $groups = array();
     foreach ($symbols as $symbol) {
+      if ($external_only && $symbol['library'] == 'phabricator') {
+        continue;
+      }
+
       $obj = newv($symbol['name'], array());
       $key = $obj->getKey();
       if (isset($groups[$key])) {
@@ -138,8 +160,8 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
     return $groups;
   }
 
-  final public static function loadAllOptions() {
-    $groups = self::loadAll();
+  final public static function loadAllOptions($external_only = false) {
+    $groups = self::loadAll($external_only);
 
     $options = array();
     foreach ($groups as $group) {
@@ -157,5 +179,12 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
     return $options;
   }
 
+  /**
+   * Deformat a HEREDOC for use in remarkup by converting line breaks to
+   * spaces.
+   */
+  final protected function deformat($string) {
+    return preg_replace('/(?<=\S)\n(?=\S)/', ' ', $string);
+  }
 
 }

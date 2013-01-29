@@ -18,14 +18,11 @@ final class PhabricatorApplicationConfig extends PhabricatorApplication {
     return self::GROUP_ADMIN;
   }
 
-  public function shouldAppearInLaunchView() {
-    return false;
-  }
-
   public function getRoutes() {
     return array(
       '/config/' => array(
         ''                          => 'PhabricatorConfigListController',
+        'all/'                      => 'PhabricatorConfigAllController',
         'edit/(?P<key>[\w\.\-]+)/'  => 'PhabricatorConfigEditController',
         'group/(?P<key>[^/]+)/'     => 'PhabricatorConfigGroupController',
         'issue/' => array(

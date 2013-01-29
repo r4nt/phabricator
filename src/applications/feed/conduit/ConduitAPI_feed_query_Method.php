@@ -22,7 +22,7 @@ final class ConduitAPI_feed_query_Method extends ConduitAPIMethod {
       'filterPHIDs' => 'optional list <phid>',
       'limit' => 'optional int (default '.$this->getDefaultLimit().')',
       'after' => 'optional int',
-      'view' => 'optional string (data, html, html-summary)',
+      'view' => 'optional string (data, html, html-summary, text)',
     );
   }
 
@@ -31,6 +31,7 @@ final class ConduitAPI_feed_query_Method extends ConduitAPIMethod {
         'html' => 'Full HTML presentation of story',
         'data' => 'Dictionary with various data of the story',
         'html-summary' => 'Story contains only the title of the story',
+        'text' => 'Simple one-line plain text representation of story',
     );
   }
 
@@ -77,13 +78,7 @@ final class ConduitAPI_feed_query_Method extends ConduitAPIMethod {
     $stories = $query->execute();
 
     if ($stories) {
-      $handle_phids = array_mergev(mpull($stories, 'getRequiredHandlePHIDs'));
-      $handles = id(new PhabricatorObjectHandleData($handle_phids))
-        ->loadHandles();
-
       foreach ($stories as $story) {
-
-        $story->setHandles($handles);
 
         $story_data = $story->getStoryData();
 
@@ -108,6 +103,15 @@ final class ConduitAPI_feed_query_Method extends ConduitAPIMethod {
               'authorPHID' => $story_data->getAuthorPHID(),
               'chronologicalKey' => $story_data->getChronologicalKey(),
               'data' => $story_data->getStoryData(),
+            );
+          break;
+          case 'text':
+            $data = array(
+              'class' => $story_data->getStoryType(),
+              'epoch' => $story_data->getEpoch(),
+              'authorPHID' => $story_data->getAuthorPHID(),
+              'chronologicalKey' => $story_data->getChronologicalKey(),
+              'text' => $story->renderText()
             );
           break;
           default:

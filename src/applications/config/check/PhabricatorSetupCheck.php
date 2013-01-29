@@ -6,6 +6,10 @@ abstract class PhabricatorSetupCheck {
 
   abstract protected function executeChecks();
 
+  public function getExecutionOrder() {
+    return 1;
+  }
+
   final protected function newIssue($key) {
     $issue = id(new PhabricatorSetupIssue())
       ->setIssueKey($key);
@@ -34,20 +38,49 @@ abstract class PhabricatorSetupCheck {
     $cache->setKey('phabricator.setup.issues', $count);
   }
 
+  final public static function getConfigNeedsRepair() {
+    $cache = PhabricatorCaches::getSetupCache();
+    return $cache->getKey('phabricator.setup.needs-repair');
+  }
+
+  final public static function setConfigNeedsRepair($needs_repair) {
+    $cache = PhabricatorCaches::getSetupCache();
+    $cache->setKey('phabricator.setup.needs-repair', $needs_repair);
+  }
+
+  final public static function deleteSetupCheckCache() {
+    $cache = PhabricatorCaches::getSetupCache();
+    $cache->deleteKeys(
+      array(
+        'phabricator.setup.needs-repair',
+        'phabricator.setup.issues',
+      ));
+  }
+
   final public static function willProcessRequest() {
     $issue_count = self::getOpenSetupIssueCount();
-    if ($issue_count !== null) {
-      // We've already run setup checks, didn't hit any fatals, and then set
-      // an issue count. This means we're good and don't need to do any extra
-      // work.
-      return null;
+    if ($issue_count === null) {
+      $issues = self::runAllChecks();
+      foreach ($issues as $issue) {
+        if ($issue->getIsFatal()) {
+          $view = id(new PhabricatorSetupIssueView())
+            ->setIssue($issue);
+          return id(new PhabricatorConfigResponse())
+            ->setView($view);
+        }
+      }
+      self::setOpenSetupIssueCount(count($issues));
     }
 
-    $issues = self::runAllChecks();
-
-    self::setOpenSetupIssueCount(count($issues));
-
-    return null;
+    // Try to repair configuration unless we have a clean bill of health on it.
+    // We need to keep doing this on every page load until all the problems
+    // are fixed, which is why it's separate from setup checks (which run
+    // once per restart).
+    $needs_repair = self::getConfigNeedsRepair();
+    if ($needs_repair !== false) {
+      $needs_repair = self::repairConfig();
+      self::setConfigNeedsRepair($needs_repair);
+    }
   }
 
   final public static function runAllChecks() {
@@ -61,6 +94,8 @@ abstract class PhabricatorSetupCheck {
       $checks[] = newv($symbol['name'], array());
     }
 
+    $checks = msort($checks, 'getExecutionOrder');
+
     $issues = array();
     foreach ($checks as $check) {
       $check->runSetupChecks();
@@ -70,10 +105,31 @@ abstract class PhabricatorSetupCheck {
             "Two setup checks raised an issue with key '{$key}'!");
         }
         $issues[$key] = $issue;
+        if ($issue->getIsFatal()) {
+          break 2;
+        }
       }
     }
 
     return $issues;
+  }
+
+  final public static function repairConfig() {
+    $needs_repair = false;
+
+    $options = PhabricatorApplicationConfigOptions::loadAllOptions();
+    foreach ($options as $option) {
+      try {
+        $option->getGroup()->validateOption(
+          $option,
+          PhabricatorEnv::getEnvConfig($option->getKey()));
+      } catch (PhabricatorConfigValidationException $ex) {
+        PhabricatorEnv::repairConfig($option->getKey(), $option->getDefault());
+        $needs_repair = true;
+      }
+    }
+
+    return $needs_repair;
   }
 
 }

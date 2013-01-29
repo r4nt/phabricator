@@ -21,6 +21,11 @@
       "rule" : ".app-conduit-dark",
       "hash" : "01fba8ca32f1cfefb3516b45c9d28b40"
     },
+    "app-conpherence-dark"  : {
+      "name" : "app-conpherence-dark",
+      "rule" : ".app-conpherence-dark",
+      "hash" : "dbb6fdd5f082a604b4ef10b7eeedbfa2"
+    },
     "app-countdown-dark"    : {
       "name" : "app-countdown-dark",
       "rule" : ".app-countdown-dark",
@@ -55,6 +60,11 @@
       "name" : "app-fact-dark",
       "rule" : ".app-fact-dark",
       "hash" : "0c1be568e1ac05fca814718600190369"
+    },
+    "app-feed-dark"         : {
+      "name" : "app-feed-dark",
+      "rule" : ".app-feed-dark",
+      "hash" : "830232709eedbe6ce7cdbcebf182c86c"
     },
     "app-files-dark"        : {
       "name" : "app-files-dark",

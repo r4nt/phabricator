@@ -7,19 +7,11 @@ final class PhabricatorApplicationApplications extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'Manage Applications';
+    return 'Installed Applications';
   }
 
   public function getIconName() {
     return 'applications';
-  }
-
-  public function getRoutes() {
-    return array(
-      '/applications/' => array(
-        '' => 'PhabricatorApplicationsListController'
-      ),
-    );
   }
 
   public function getTitleGlyph() {
@@ -28,6 +20,18 @@ final class PhabricatorApplicationApplications extends PhabricatorApplication {
 
   public function shouldAppearInLaunchView() {
     return false;
+  }
+
+ public function getRoutes() {
+    return array(
+      '/applications/' => array(
+        ''                          => 'PhabricatorApplicationsListController',
+        'view/(?P<application>\w+)/' =>
+          'PhabricatorApplicationDetailViewController',
+
+        ),
+
+    );
   }
 
 }
