@@ -118,7 +118,7 @@ final class PhabricatorMainMenuView extends AphrontView {
   }
 
   private function renderPhabricatorMenuButton($header_id) {
-    return javelin_render_tag(
+    return javelin_tag(
       'a',
       array(
         'class' => 'phabricator-main-menu-expand-button '.
@@ -130,7 +130,7 @@ final class PhabricatorMainMenuView extends AphrontView {
           ),
         ),
       ),
-      phutil_render_tag(
+      phutil_tag(
         'span',
         array(
           'class' => 'phabricator-menu-button-icon sprite-menu menu-icon-eye',
@@ -139,7 +139,7 @@ final class PhabricatorMainMenuView extends AphrontView {
   }
 
   public function renderApplicationMenuButton($header_id) {
-    return javelin_render_tag(
+    return javelin_tag(
       'a',
       array(
         'class' => 'phabricator-main-menu-expand-button '.
@@ -151,7 +151,7 @@ final class PhabricatorMainMenuView extends AphrontView {
           ),
         ),
       ),
-      phutil_render_tag(
+      phutil_tag(
         'span',
         array(
           'class' => 'phabricator-menu-button-icon sprite-menu menu-icon-app',
@@ -164,7 +164,6 @@ final class PhabricatorMainMenuView extends AphrontView {
     $controller = $this->getController();
 
     $applications = PhabricatorApplication::getAllInstalledApplications();
-    $applications = msort($applications, 'getName');
 
     $core = array();
     $more = array();
@@ -184,7 +183,7 @@ final class PhabricatorMainMenuView extends AphrontView {
         if ($application->getApplicationGroup() == $group_core) {
           $core[] = $item;
         } else {
-          $more[] = $item;
+          $more[$application->getName()] = $item;
         }
       }
 
@@ -200,7 +199,9 @@ final class PhabricatorMainMenuView extends AphrontView {
     $view->addClass('phabricator-core-menu');
 
     $search = $this->renderSearch();
-    $view->appendChild($search);
+    if ($search) {
+      $view->addMenuItem($search);
+    }
 
     $view
       ->newLabel(pht('Home'))
@@ -235,7 +236,6 @@ final class PhabricatorMainMenuView extends AphrontView {
     }
 
     if ($actions) {
-      $actions = msort($actions, 'getSortOrder');
       $view->addMenuItem(
         id(new PhabricatorMenuItemView())
           ->addClass('phabricator-core-item-device')
@@ -260,6 +260,7 @@ final class PhabricatorMainMenuView extends AphrontView {
           ->addClass('phabricator-core-item-device')
           ->setType(PhabricatorMenuItemView::TYPE_LABEL)
           ->setName(pht('More Applications')));
+      ksort($more);
       foreach ($more as $item) {
         $item->addClass('phabricator-core-item-device');
         $view->addMenuItem($item);
@@ -271,13 +272,13 @@ final class PhabricatorMainMenuView extends AphrontView {
   }
 
   private function renderPhabricatorLogo() {
-    return phutil_render_tag(
+    return phutil_tag(
       'a',
       array(
         'class' => 'phabricator-main-menu-logo',
         'href'  => '/',
       ),
-      phutil_render_tag(
+      phutil_tag(
         'span',
         array(
           'class' => 'sprite-menu phabricator-main-menu-logo-image',
@@ -316,15 +317,15 @@ final class PhabricatorMainMenuView extends AphrontView {
         $message_count_number = "\xE2\x88\x9E";
       }
 
-      $message_count_tag = phutil_render_tag(
+      $message_count_tag = phutil_tag(
         'span',
         array(
           'id'    => $message_count_id,
           'class' => 'phabricator-main-menu-message-count'
         ),
-        phutil_escape_html($message_count_number));
+        $message_count_number);
 
-      $message_icon_tag = phutil_render_tag(
+      $message_icon_tag = phutil_tag(
         'span',
         array(
           'class' => 'sprite-menu phabricator-main-menu-message-icon',
@@ -335,14 +336,17 @@ final class PhabricatorMainMenuView extends AphrontView {
         $container_classes[] = 'message-unread';
       }
 
-      $message_tag = phutil_render_tag(
+      $message_tag = phutil_tag(
         'a',
         array(
           'href'  => '/conpherence/',
           'class' => implode(' ', $container_classes),
           'id'    => $message_id,
         ),
-        $message_icon_tag.$message_count_tag);
+        array(
+          $message_icon_tag,
+          $message_count_tag,
+        ));
     }
 
     $count_id = celerity_generate_unique_node_id();
@@ -356,15 +360,15 @@ final class PhabricatorMainMenuView extends AphrontView {
       $count_number = "\xE2\x88\x9E";
     }
 
-    $count_tag = phutil_render_tag(
+    $count_tag = phutil_tag(
       'span',
       array(
         'id'    => $count_id,
         'class' => 'phabricator-main-menu-alert-count'
       ),
-      phutil_escape_html($count_number));
+      $count_number);
 
-    $icon_tag = phutil_render_tag(
+    $icon_tag = phutil_tag(
       'span',
       array(
         'class' => 'sprite-menu phabricator-main-menu-alert-icon',
@@ -375,14 +379,14 @@ final class PhabricatorMainMenuView extends AphrontView {
       $container_classes[] = 'alert-unread';
     }
 
-    $bubble_tag = phutil_render_tag(
+    $bubble_tag = phutil_tag(
       'a',
       array(
         'href'  => '/notification/',
         'class' => implode(' ', $container_classes),
         'id'    => $bubble_id,
       ),
-      $icon_tag.$count_tag);
+      array($icon_tag, $count_tag));
 
     Javelin::initBehavior(
       'aphlict-dropdown',
@@ -393,7 +397,7 @@ final class PhabricatorMainMenuView extends AphrontView {
         'loadingText' => pht('Loading...'),
       ));
 
-    $notification_dropdown = javelin_render_tag(
+    $notification_dropdown = javelin_tag(
       'div',
       array(
         'id'    => $dropdown_id,
@@ -408,7 +412,7 @@ final class PhabricatorMainMenuView extends AphrontView {
   }
 
   private function renderMenuIcon($name) {
-    return phutil_render_tag(
+    return phutil_tag(
       'span',
       array(
         'class' => 'phabricator-core-menu-icon '.

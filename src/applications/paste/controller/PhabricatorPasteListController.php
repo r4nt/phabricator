@@ -85,7 +85,8 @@ final class PhabricatorPasteListController extends PhabricatorPasteController {
       $created = phabricator_date($paste->getDateCreated(), $user);
       $author = $this->getHandle($paste->getAuthorPHID())->renderLink();
       $source_code = $this->buildSourceCodeView($paste, 5)->render();
-      $source_code = phutil_render_tag(
+
+      $source_code = phutil_tag(
         'div',
         array(
           'class' => 'phabricator-source-code-summary',
@@ -94,9 +95,8 @@ final class PhabricatorPasteListController extends PhabricatorPasteController {
 
       $line_count = count(explode("\n", $paste->getContent()));
       $line_count = pht(
-        '%2$s Line(s)',
-        $line_count,
-        PhutilTranslator::getInstance()->formatNumber($line_count));
+        '%s Line(s)',
+        new PhutilNumber($line_count));
 
       $item = id(new PhabricatorObjectItemView())
         ->setHeader($paste->getFullName())

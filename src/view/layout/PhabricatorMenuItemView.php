@@ -5,13 +5,14 @@ final class PhabricatorMenuItemView extends AphrontTagView {
   const TYPE_LINK     = 'type-link';
   const TYPE_SPACER   = 'type-spacer';
   const TYPE_LABEL    = 'type-label';
+  const TYPE_BUTTON   = 'type-button';
+  const TYPE_CUSTOM   = 'type-custom';
 
   private $name;
   private $href;
   private $type = self::TYPE_LINK;
   private $isExternal;
   private $key;
-  private $sortOrder = 1.0;
   private $icon;
   private $selected;
 
@@ -87,15 +88,6 @@ final class PhabricatorMenuItemView extends AphrontTagView {
     return $this->isExternal;
   }
 
-  public function setSortOrder($order) {
-    $this->sortOrder = $order;
-    return $this;
-  }
-
-  public function getSortOrder() {
-    return $this->sortOrder;
-  }
-
   protected function getTagName() {
     return $this->href ? 'a' : 'div';
   }
@@ -117,15 +109,19 @@ final class PhabricatorMenuItemView extends AphrontTagView {
       if ($this->isExternal) {
         $external = " \xE2\x86\x97";
       }
-      $name = phutil_render_tag(
+      $name = phutil_tag(
         'span',
         array(
           'class' => 'phabricator-menu-item-name',
         ),
-        phutil_escape_html($this->name.$external));
+        $this->name.$external);
     }
 
-    return $this->renderChildren().$name;
+    return $this->renderHTMLView(
+      array(
+        $this->renderHTMLChildren(),
+        $name,
+      ));
   }
 
 }

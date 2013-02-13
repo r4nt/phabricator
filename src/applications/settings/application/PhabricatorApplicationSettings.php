@@ -14,6 +14,10 @@ final class PhabricatorApplicationSettings extends PhabricatorApplication {
     return 'settings';
   }
 
+  public function canUninstall() {
+    return false;
+  }
+
   public function getRoutes() {
     return array(
       '/settings/' => array(
@@ -40,7 +44,6 @@ final class PhabricatorApplicationSettings extends PhabricatorApplication {
       $item->setIcon('settings');
       $item->setSelected($selected);
       $item->setHref('/settings/');
-      $item->setSortOrder(0.90);
       $items[] = $item;
     }
 

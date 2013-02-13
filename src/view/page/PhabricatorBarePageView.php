@@ -66,7 +66,7 @@ class PhabricatorBarePageView extends AphrontPageView {
 
     $viewport_tag = null;
     if ($this->getDeviceReady()) {
-      $viewport_tag = phutil_render_tag(
+      $viewport_tag = phutil_tag(
         'meta',
         array(
           'name' => 'viewport',
@@ -83,7 +83,11 @@ class PhabricatorBarePageView extends AphrontPageView {
 
       '<script type="text/javascript">'.
         $framebust.
-        'window.__DEV__=1;'.
+        'window.__DEV__='.
+        (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')
+          ? '1'
+          : '0').
+        ';'.
       '</script>',
 
       $response->renderResourcesOfType('css'),

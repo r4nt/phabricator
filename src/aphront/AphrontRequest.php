@@ -199,15 +199,7 @@ final class AphrontRequest {
     // No token in the request, check the HTTP header which is added for Ajax
     // requests.
     if (empty($token)) {
-
-      // PHP mangles HTTP headers by uppercasing them and replacing hyphens with
-      // underscores, then prepending 'HTTP_'.
-      $php_index = self::getCSRFHeaderName();
-      $php_index = strtoupper($php_index);
-      $php_index = str_replace('-', '_', $php_index);
-      $php_index = 'HTTP_'.$php_index;
-
-      $token = idx($_SERVER, $php_index);
+      $token = self::getHTTPHeader(self::getCSRFHeaderName());
     }
 
     $valid = $this->getUser()->validateCSRFToken($token);
@@ -226,6 +218,26 @@ final class AphrontRequest {
         $more_info = "(This was an Ajax request, {$token_info}.)";
       } else {
         $more_info = "(This was a web request, {$token_info}.)";
+      }
+
+      // Give a more detailed explanation of how to avoid the exception
+      // in developer mode.
+      if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')) {
+        $more_info = $more_info .
+          "To avoid this error, use phabricator_form() to construct forms. " .
+          "If you are already using phabricator_form(), make sure the form " .
+          "'action' uses a relative URI (i.e., begins with a '/'). Forms " .
+          "using absolute URIs do not include CSRF tokens, to prevent " .
+          "leaking tokens to external sites.\n\n" .
+          "If this page performs writes which do not require CSRF " .
+          "protection (usually, filling caches or logging), you can use " .
+          "AphrontWriteGuard::beginScopedUnguardedWrites() to temporarily " .
+          "bypass CSRF protection while writing. You should use this only " .
+          "for writes which can not be protected with normal CSRF " .
+          "mechanisms.\n\n" .
+          "Some UI elements (like PhabricatorActionListView) also have " .
+          "methods which will allow you to render links as forms (like " .
+          "setRenderAsForm(true)).";
       }
 
       // This should only be able to happen if you load a form, pull your
@@ -409,5 +421,15 @@ final class AphrontRequest {
     return $result;
   }
 
+
+  public static function getHTTPHeader($name, $default = null) {
+    // PHP mangles HTTP headers by uppercasing them and replacing hyphens with
+    // underscores, then prepending 'HTTP_'.
+    $php_index = strtoupper($name);
+    $php_index = str_replace('-', '_', $php_index);
+    $php_index = 'HTTP_'.$php_index;
+
+    return idx($_SERVER, $php_index, $default);
+  }
 
 }

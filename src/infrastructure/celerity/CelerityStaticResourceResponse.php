@@ -103,10 +103,10 @@ final class CelerityStaticResourceResponse {
   }
 
   private function renderResource(array $resource) {
-    $uri = PhabricatorEnv::getCDNURI($resource['uri']);
+    $uri = $this->getURI($resource);
     switch ($resource['type']) {
       case 'css':
-        return phutil_render_tag(
+        return phutil_tag(
           'link',
           array(
             'rel'   => 'stylesheet',
@@ -114,7 +114,7 @@ final class CelerityStaticResourceResponse {
             'href'  => $uri,
           ));
       case 'js':
-        return phutil_render_tag(
+        return phutil_tag(
           'script',
           array(
             'type'  => 'text/javascript',
@@ -128,7 +128,8 @@ final class CelerityStaticResourceResponse {
   public function renderHTMLFooter() {
     $data = array();
     if ($this->metadata) {
-      $json_metadata = json_encode($this->metadata);
+      $json_metadata = AphrontResponse::encodeJSONForHTTPResponse(
+        $this->metadata);
       $this->metadata = array();
     } else {
       $json_metadata = '{}';
@@ -146,6 +147,7 @@ final class CelerityStaticResourceResponse {
       $higher_priority_names = array(
         'refresh-csrf',
         'aphront-basic-tokenizer',
+        'dark-console',
       );
 
       $higher_priority_behaviors = array_select_keys(
@@ -164,7 +166,9 @@ final class CelerityStaticResourceResponse {
         if (!$group) {
           continue;
         }
-        $onload[] = 'JX.initBehaviors('.json_encode($group).')';
+        $group_json = AphrontResponse::encodeJSONForHTTPResponse(
+          $group);
+        $onload[] = 'JX.initBehaviors('.$group_json.')';
       }
     }
 
@@ -202,13 +206,41 @@ final class CelerityStaticResourceResponse {
     $this->resolveResources();
     $resources = array();
     foreach ($this->packaged as $resource) {
-      $resources[] = PhabricatorEnv::getCDNURI($resource['uri']);
+      $resources[] = $this->getURI($resource);
     }
     if ($resources) {
       $response['javelin_resources'] = $resources;
     }
 
     return $response;
+  }
+
+  private function getURI($resource) {
+    $uri = $resource['uri'];
+
+    // In developer mode, we dump file modification times into the URI. When a
+    // page is reloaded in the browser, any resources brought in by Ajax calls
+    // do not trigger revalidation, so without this it's very difficult to get
+    // changes to Ajaxed-in CSS to work (you must clear your cache or rerun
+    // the map script). In production, we can assume the map script gets run
+    // after changes, and safely skip this.
+    if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')) {
+      $root = dirname(phutil_get_library_root('phabricator')).'/webroot/';
+      if (isset($resource['disk'])) {
+        $mtime = (int)filemtime($root.$resource['disk']);
+      } else {
+        $mtime = 0;
+        foreach ($resource['symbols'] as $symbol) {
+          $map = CelerityResourceMap::getInstance();
+          $symbol_info = $map->lookupSymbolInformation($symbol);
+          $mtime = max($mtime, (int)filemtime($root.$symbol_info['disk']));
+        }
+      }
+
+      $uri = preg_replace('@^/res/@', '/res/'.$mtime.'T/', $uri);
+    }
+
+    return PhabricatorEnv::getCDNURI($uri);
   }
 
 }

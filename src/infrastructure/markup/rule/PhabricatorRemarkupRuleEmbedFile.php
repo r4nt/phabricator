@@ -50,34 +50,41 @@ final class PhabricatorRemarkupRuleEmbedFile
     $file_name = coalesce($options['name'], $file->getName());
     $options['name'] = $file_name;
 
+    $is_viewable_image = $file->isViewableImage();
+
     $attrs = array();
-    switch ((string)$options['size']) {
-      case 'full':
-        $attrs['src'] = $file->getBestURI();
-        $options['image_class'] = null;
-        $file_data = $file->getMetadata();
-        $height = idx($file_data, PhabricatorFile::METADATA_IMAGE_HEIGHT);
-        if ($height) {
-          $attrs['height'] = $height;
-        }
-        $width = idx($file_data, PhabricatorFile::METADATA_IMAGE_WIDTH);
-        if ($width) {
-          $attrs['width'] = $width;
-        }
-        break;
-      case 'thumb':
-      default:
-        $attrs['src'] = $file->getPreview220URI();
-        $attrs['width'] = '220';
-        $options['image_class'] = 'phabricator-remarkup-embed-image';
-        break;
+    if ($is_viewable_image) {
+      switch ((string)$options['size']) {
+        case 'full':
+          $attrs['src'] = $file->getBestURI();
+          $options['image_class'] = null;
+          $file_data = $file->getMetadata();
+          $height = idx($file_data, PhabricatorFile::METADATA_IMAGE_HEIGHT);
+          if ($height) {
+            $attrs['height'] = $height;
+          }
+          $width = idx($file_data, PhabricatorFile::METADATA_IMAGE_WIDTH);
+          if ($width) {
+            $attrs['width'] = $width;
+          }
+          break;
+        case 'thumb':
+        default:
+          $attrs['src'] = $file->getPreview220URI();
+          $dimensions =
+            PhabricatorImageTransformer::getPreviewDimensions($file, 220);
+          $attrs['width'] = $dimensions['sdx'];
+          $attrs['height'] = $dimensions['sdy'];
+          $options['image_class'] = 'phabricator-remarkup-embed-image';
+          break;
+      }
     }
     $bundle['attrs'] = $attrs;
     $bundle['options'] = $options;
 
     $bundle['meta'] = array(
       'phid'     => $file->getPHID(),
-      'viewable' => $file->isViewableImage(),
+      'viewable' => $is_viewable_image,
       'uri'      => $file->getBestURI(),
       'dUri'     => $file->getDownloadURI(),
       'name'     => $options['name'],
@@ -118,9 +125,9 @@ final class PhabricatorRemarkupRuleEmbedFile
         }
 
         require_celerity_resource('lightbox-attachment-css');
-        $img = phutil_render_tag('img', $data['attrs']);
+        $img = phutil_tag('img', $data['attrs']);
 
-        $embed = javelin_render_tag(
+        $embed = javelin_tag(
           'a',
           array(
             'href'        => $meta['uri'],
@@ -161,7 +168,7 @@ final class PhabricatorRemarkupRuleEmbedFile
         }
 
         if ($layout_class) {
-          $embed = phutil_render_tag(
+          $embed = phutil_tag(
             'div',
             array(
               'class' => $layout_class,

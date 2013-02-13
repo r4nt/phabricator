@@ -238,7 +238,7 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
         $diff);
       $adapter->setExplicitCCs($new['ccs']);
       $adapter->setExplicitReviewers($new['rev']);
-      $adapter->setForbiddenCCs($revision->getUnsubscribedPHIDs());
+      $adapter->setForbiddenCCs($revision->loadUnsubscribedPHIDs());
 
       $xscript = HeraldEngine::loadAndApplyRules($adapter);
       $xscript_uri = '/herald/transcript/'.$xscript->getID().'/';
@@ -496,31 +496,29 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
   public static function addCCAndUpdateRevision(
     $revision,
     $phid,
-    $reason) {
+    PhabricatorUser $actor) {
 
-    self::addCC($revision, $phid, $reason);
+    self::addCC($revision, $phid, $actor->getPHID());
 
-    $unsubscribed = $revision->getUnsubscribed();
-    if (isset($unsubscribed[$phid])) {
-      unset($unsubscribed[$phid]);
-      $revision->setUnsubscribed($unsubscribed);
-      $revision->save();
-    }
+    $type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_UNSUBSCRIBER;
+    id(new PhabricatorEdgeEditor())
+      ->setActor($actor)
+      ->removeEdge($revision->getPHID(), $type, $phid)
+      ->save();
   }
 
   public static function removeCCAndUpdateRevision(
     $revision,
     $phid,
-    $reason) {
+    PhabricatorUser $actor) {
 
-    self::removeCC($revision, $phid, $reason);
+    self::removeCC($revision, $phid, $actor->getPHID());
 
-    $unsubscribed = $revision->getUnsubscribed();
-    if (empty($unsubscribed[$phid])) {
-      $unsubscribed[$phid] = true;
-      $revision->setUnsubscribed($unsubscribed);
-      $revision->save();
-    }
+    $type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_UNSUBSCRIBER;
+    id(new PhabricatorEdgeEditor())
+      ->setActor($actor)
+      ->addEdge($revision->getPHID(), $type, $phid)
+      ->save();
   }
 
   public static function addCC(

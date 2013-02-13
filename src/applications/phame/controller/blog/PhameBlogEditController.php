@@ -122,7 +122,8 @@ final class PhameBlogEditController
         ->setName('description')
         ->setValue($blog->getDescription())
         ->setID('blog-description')
-        ->setUser($user))
+        ->setUser($user)
+        ->setDisableMacros(true))
       ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setUser($user)
@@ -149,8 +150,7 @@ final class PhameBlogEditController
         ->setLabel('Custom Domain')
         ->setName('custom_domain')
         ->setValue($blog->getDomain())
-        ->setCaption('Must include at least one dot (.), e.g. '.
-        'blog.example.com')
+        ->setCaption('Must include at least one dot (.), e.g. blog.example.com')
         ->setError($e_custom_domain)
       )
       ->appendChild(

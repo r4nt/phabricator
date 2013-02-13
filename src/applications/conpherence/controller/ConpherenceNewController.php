@@ -12,7 +12,7 @@ final class ConpherenceNewController extends ConpherenceController {
     $conpherence = id(new ConpherenceThread())
       ->attachParticipants(array())
       ->attachFilePHIDs(array());
-    $title = pht('New Conpherence');
+    $title = pht('New Conversation');
     $participants = array();
     $message = '';
     $files = array();
@@ -92,11 +92,10 @@ final class ConpherenceNewController extends ConpherenceController {
             ->setTitle('Success')
             ->addCancelButton('#', 'Okay')
             ->appendChild(
-              phutil_render_tag('p',
-              array(),
-              pht('Message sent successfully.')
-            )
-          );
+              phutil_tag(
+                'p',
+                array(),
+                pht('Message sent successfully.')));
           $response = id(new AphrontDialogResponse())
             ->setDialog($dialog);
         } else {

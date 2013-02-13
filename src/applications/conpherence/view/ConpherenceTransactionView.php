@@ -7,6 +7,12 @@ final class ConpherenceTransactionView extends AphrontView {
 
   private $conpherenceTransaction;
   private $handles;
+  private $markupEngine;
+
+  public function setMarkupEngine(PhabricatorMarkupEngine $markup_engine) {
+    $this->markupEngine = $markup_engine;
+    return $this;
+  }
 
   public function setHandles(array $handles) {
     assert_instances_of($handles, 'PhabricatorObjectHandle');
@@ -35,9 +41,13 @@ final class ConpherenceTransactionView extends AphrontView {
       ->setEpoch($transaction->getDateCreated())
       ->setContentSource($transaction->getContentSource());
 
+    $content = null;
     $content_class = null;
+    $content = null;
     switch ($transaction->getTransactionType()) {
       case ConpherenceTransactionType::TYPE_TITLE:
+      case ConpherenceTransactionType::TYPE_PICTURE:
+      case ConpherenceTransactionType::TYPE_PICTURE_CROP:
         $content = $transaction->getTitle();
         $transaction_view->addClass('conpherence-edited');
         break;
@@ -46,13 +56,13 @@ final class ConpherenceTransactionView extends AphrontView {
         break;
       case ConpherenceTransactionType::TYPE_PICTURE:
         $img = $transaction->getHandle($transaction->getNewValue());
-        $content = $transaction->getTitle() .
-          phutil_render_tag(
+        $content = array(
+          $transaction->getTitle(),
+          phutil_tag(
             'img',
             array(
               'src' => $img->getImageURI()
-            )
-          );
+            )));
         $transaction_view->addClass('conpherence-edited');
         break;
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
@@ -61,22 +71,9 @@ final class ConpherenceTransactionView extends AphrontView {
         break;
       case PhabricatorTransactions::TYPE_COMMENT:
         $comment = $transaction->getComment();
-        $file_ids =
-          PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
-            array($comment->getContent())
-          );
-        $markup_field = ConpherenceTransactionComment::MARKUP_FIELD_COMMENT;
-        $engine = id(new PhabricatorMarkupEngine())
-          ->setViewer($this->getUser());
-        $engine->addObject(
+        $content = $this->markupEngine->getOutput(
           $comment,
-          $markup_field
-        );
-        $engine->process();
-        $content = $engine->getOutput(
-          $comment,
-          $markup_field
-        );
+          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
         $content_class = 'conpherence-message phabricator-remarkup';
         $transaction_view
           ->setImageURI($author->getImageURI())
@@ -85,12 +82,12 @@ final class ConpherenceTransactionView extends AphrontView {
     }
 
     $transaction_view
-      ->appendChild(phutil_render_tag(
+      ->appendChild(phutil_tag(
         'div',
         array(
           'class' => $content_class
         ),
-        $content)
+        $this->renderHTMLView($content))
       );
 
     return $transaction_view->render();

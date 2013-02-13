@@ -31,6 +31,7 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
       case ConpherenceTransactionType::TYPE_PICTURE:
         return false;
       case ConpherenceTransactionType::TYPE_FILES:
+      case ConpherenceTransactionType::TYPE_PICTURE_CROP:
         return true;
     }
 
@@ -45,12 +46,17 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
 
     switch ($this->getTransactionType()) {
       case ConpherenceTransactionType::TYPE_TITLE:
-        if ($old) {
+        if ($old && $new) {
           $title = pht(
             '%s renamed this conpherence from "%s" to "%s".',
             $this->renderHandleLink($author_phid),
             phutil_escape_html($old),
             phutil_escape_html($new));
+        } else if ($old) {
+          $title = pht(
+            '%s deleted the conpherence name "%s".',
+            $this->renderHandleLink($author_phid),
+            phutil_escape_html($old));
         } else {
           $title = pht(
             '%s named this conpherence "%s".',
@@ -107,12 +113,10 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
     $phids[] = $this->getAuthorPHID();
     switch ($this->getTransactionType()) {
       case ConpherenceTransactionType::TYPE_PICTURE:
-        $phids[] = $new;
-        break;
       case ConpherenceTransactionType::TYPE_TITLE:
+      case ConpherenceTransactionType::TYPE_FILES:
         break;
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
-      case ConpherenceTransactionType::TYPE_FILES:
         $phids = array_merge($phids, $this->getOldValue());
         $phids = array_merge($phids, $this->getNewValue());
         break;

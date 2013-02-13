@@ -52,6 +52,7 @@ final class DifferentialRevisionDetailView extends AphrontView {
         ->setName($action['name'])
         ->setHref(idx($action, 'href'))
         ->setWorkflow(idx($action, 'sigil') == 'workflow')
+        ->setRenderAsForm(!empty($action['instant']))
         ->setUser($user)
         ->setDisabled(idx($action, 'disabled', false));
       $actions->addAction($obj);
@@ -66,10 +67,10 @@ final class DifferentialRevisionDetailView extends AphrontView {
       switch ($local_vcs) {
         case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
         case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-          $next_step = '<tt>arc land</tt>';
+          $next_step = phutil_tag('tt', array(), 'arc land');
           break;
         case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-          $next_step = '<tt>arc commit</tt>';
+          $next_step = phutil_tag('tt', array(), 'arc commit');
           break;
       }
     }
@@ -79,7 +80,7 @@ final class DifferentialRevisionDetailView extends AphrontView {
 
     foreach ($this->auxiliaryFields as $field) {
       $value = $field->renderValueForRevisionView();
-      if (strlen($value)) {
+      if ($value !== null) {
         $label = rtrim($field->renderLabelForRevisionView(), ':');
         $properties->addProperty($label, $value);
       }

@@ -1,6 +1,12 @@
 <?php
 
 final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
+  private $disableMacro = false;
+
+  public function setDisableMacros($disable) {
+    $this->disableMacro = $disable;
+    return $this;
+  }
 
   protected function renderInput() {
     $id = $this->getID();
@@ -48,25 +54,27 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       ),
       'table' => array(
         'tip' => pht('Table'),
-      ),
-      array(
+      )
+    );
+    if (!$this->disableMacro and function_exists('imagettftext')) {
+      $actions[] = array(
         'spacer' => true,
-      ),
-      'meme' => array(
+        );
+      $actions['meme'] = array(
         'tip' => pht('Meme'),
-      ),
-      'help'  => array(
+      );
+    }
+    $actions['help'] = array(
         'tip' => pht('Help'),
         'align' => 'right',
         'href'  => PhabricatorEnv::getDoclink(
           'article/Remarkup_Reference.html'),
-      ),
-    );
+      );
 
     $buttons = array();
     foreach ($actions as $action => $spec) {
       if (idx($spec, 'spacer')) {
-        $buttons[] = phutil_render_tag(
+        $buttons[] = phutil_tag(
           'span',
           array(
             'class' => 'remarkup-assist-separator',
@@ -74,7 +82,6 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           '');
         continue;
       }
-
       $classes = array();
       $classes[] = 'remarkup-assist-button';
       if (idx($spec, 'align') == 'right') {
@@ -99,7 +106,7 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
 
       require_celerity_resource('sprite-icon-css');
 
-      $buttons[] = javelin_render_tag(
+      $buttons[] = javelin_tag(
         'a',
         array(
           'class'       => implode(' ', $classes),
@@ -110,7 +117,7 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           'target'      => $target,
           'tabindex'    => -1,
         ),
-        phutil_render_tag(
+        phutil_tag(
           'div',
           array(
             'class' => 'remarkup-assist sprite-icon remarkup-assist-'.$action,
@@ -118,12 +125,12 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           ''));
     }
 
-    $buttons = phutil_render_tag(
+    $buttons = phutil_tag(
       'div',
       array(
         'class' => 'remarkup-assist-bar',
       ),
-      implode('', $buttons));
+      $buttons);
 
     $monospaced_textareas = null;
     $monospaced_textareas_class = null;
@@ -142,13 +149,16 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
     $this->setCustomClass(
       'remarkup-assist-textarea '.$monospaced_textareas_class);
 
-    return javelin_render_tag(
+    return javelin_tag(
       'div',
       array(
         'sigil' => 'remarkup-assist-control',
       ),
-      $buttons.
-      parent::renderInput());
+      $this->renderHTMLView(
+        array(
+          $buttons,
+          parent::renderInput(),
+        )));
   }
 
 }

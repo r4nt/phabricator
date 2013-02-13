@@ -5,6 +5,7 @@ final class DifferentialChangesetFileTreeSideNavBuilder {
   private $title;
   private $baseURI;
   private $anchorName;
+  private $collapsed = false;
 
   public function setAnchorName($anchor_name) {
     $this->anchorName = $anchor_name;
@@ -30,12 +31,18 @@ final class DifferentialChangesetFileTreeSideNavBuilder {
     return $this->title;
   }
 
+  public function setCollapsed($collapsed) {
+    $this->collapsed = $collapsed;
+    return $this;
+  }
+
   public function build(array $changesets) {
     assert_instances_of($changesets, 'DifferentialChangeset');
 
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI($this->getBaseURI());
     $nav->setFlexible(true);
+    $nav->setCollapsed($this->collapsed);
 
     $anchor = $this->getAnchorName();
 
@@ -90,21 +97,21 @@ final class DifferentialChangesetFileTreeSideNavBuilder {
         $icon = 'phabricator-filetree-icon-dir';
       }
 
-      $icon = phutil_render_tag(
+      $icon = phutil_tag(
         'span',
         array(
           'class' => 'phabricator-filetree-icon '.$icon,
         ),
         '');
 
-      $name_element = phutil_render_tag(
+      $name_element = phutil_tag(
         'span',
         array(
           'class' => 'phabricator-filetree-name',
         ),
-        phutil_escape_html($name));
+        $name);
 
-      $filetree[] = javelin_render_tag(
+      $filetree[] = javelin_tag(
         $href ? 'a' : 'span',
         array(
           'href' => $href,
@@ -112,14 +119,19 @@ final class DifferentialChangesetFileTreeSideNavBuilder {
           'title' => $title,
           'class' => 'phabricator-filetree-item',
         ),
-        $icon.$name_element);
+        array($icon, $name_element));
     }
     $tree->destroy();
 
-    $filetree =
-      '<div class="phabricator-filetree">'.
-        implode("\n", $filetree).
-      '</div>';
+    $filetree = phutil_tag(
+      'div',
+      array(
+        'class' => 'phabricator-filetree',
+      ),
+      $filetree);
+
+    Javelin::initBehavior('phabricator-file-tree', array());
+
     $nav->addLabel(pht('Changed Files'));
     $nav->addCustomBlock($filetree);
     $nav->setActive(true);

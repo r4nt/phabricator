@@ -153,7 +153,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
         $reviewer_warning->setTitle(pht('No Active Reviewers'));
         if ($revision->getReviewers()) {
           $reviewer_warning->appendChild(
-            phutil_render_tag(
+            phutil_tag(
               'p',
               array(),
               pht('All specified reviewers are disabled and this revision '.
@@ -161,7 +161,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
             ));
         } else {
           $reviewer_warning->appendChild(
-            phutil_render_tag(
+            phutil_tag(
               'p',
               array(),
               pht('This revision has no specified reviewers and needs '.
@@ -180,22 +180,20 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $warning = new AphrontErrorView();
       $warning->setTitle('Very Large Diff');
       $warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $warning->appendChild(
+      $warning->appendChild(hsprintf(
+        '%s <strong>%s</strong>',
         pht(
-          'This diff is very large and affects %2$s files. Load each file '.
+          'This diff is very large and affects %s files. Load each file '.
             'individually.',
-          $count,
-          PhutilTranslator::getInstance()->formatNumber($count)).
-        " <strong>".
-          phutil_render_tag(
-            'a',
-            array(
-              'href' => $request_uri
-                ->alter('large', 'true')
-                ->setFragment('toc'),
-            ),
-            pht('Show All Files Inline')).
-        "</strong>");
+          new PhutilNumber($count)),
+        phutil_tag(
+          'a',
+          array(
+            'href' => $request_uri
+              ->alter('large', 'true')
+              ->setFragment('toc'),
+          ),
+          pht('Show All Files Inline'))));
       $warning = $warning->render();
 
       $my_inlines = id(new DifferentialInlineComment())->loadAllWhere(
@@ -409,29 +407,42 @@ final class DifferentialRevisionViewController extends DifferentialController {
       ->setAnchorName('top')
       ->setNavigationMarker(true);
 
-    $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
-      ->setAnchorName('top')
-      ->setTitle('D'.$revision->getID())
-      ->setBaseURI(new PhutilURI('/D'.$revision->getID()))
-      ->build($changesets);
-    $nav->appendChild(
-      array(
-        $reviewer_warning,
-        $top_anchor,
-        $revision_detail,
-        $page_pane,
-      ));
-
+    $content = array(
+      $reviewer_warning,
+      $top_anchor,
+      $revision_detail,
+      $page_pane,
+    );
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setName($object_id)
         ->setHref('/'.$object_id));
-    $nav->setCrumbs($crumbs);
+
+    $prefs = $user->loadPreferences();
+
+    $pref_filetree = PhabricatorUserPreferences::PREFERENCE_DIFF_FILETREE;
+    if ($prefs->getPreference($pref_filetree)) {
+      $collapsed = $prefs->getPreference(
+        PhabricatorUserPreferences::PREFERENCE_NAV_COLLAPSED,
+        false);
+
+      $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
+        ->setAnchorName('top')
+        ->setTitle('D'.$revision->getID())
+        ->setBaseURI(new PhutilURI('/D'.$revision->getID()))
+        ->setCollapsed((bool)$collapsed)
+        ->build($changesets);
+      $nav->appendChild($content);
+      $nav->setCrumbs($crumbs);
+      $content = $nav;
+    } else {
+      array_unshift($content, $crumbs);
+    }
 
     return $this->buildApplicationPage(
-      $nav,
+      $content,
       array(
         'title' => $object_id.' '.$revision->getTitle(),
       ));
@@ -499,7 +510,6 @@ final class DifferentialRevisionViewController extends DifferentialController {
           'href'    => "/differential/subscribe/{$action}/{$revision_id}/",
           'name'    => $viewer_is_cc ? pht('Unsubscribe') : pht('Subscribe'),
           'instant' => true,
-          'sigil' => 'workflow',
         );
       } else {
         $links[] = array(

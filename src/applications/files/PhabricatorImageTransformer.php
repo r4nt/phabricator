@@ -56,6 +56,29 @@ final class PhabricatorImageTransformer {
       ));
   }
 
+  public function executeConpherenceTransform(
+    PhabricatorFile $file,
+    $top,
+    $left,
+    $width,
+    $height
+  ) {
+
+    $image = $this->crasslyCropTo(
+      $file,
+      $top,
+      $left,
+      $width,
+      $height
+    );
+
+    return PhabricatorFile::newFromFileData(
+      $image,
+      array(
+        'name' => 'conpherence-'.$file->getName(),
+      )
+    );
+  }
 
   private function crudelyCropTo(PhabricatorFile $file, $x, $min_y, $max_y) {
     $data = $file->loadFileData();
@@ -72,38 +95,81 @@ final class PhabricatorImageTransformer {
       $scaled_y = $min_y;
     }
 
+    $cropped = $this->applyScaleWithImagemagick($file, $x, $scaled_y);
+
+    if ($cropped != null) {
+      return $cropped;
+    }
+
     $img = $this->applyScaleTo(
-      $img,
+      $file,
       $x,
       $scaled_y);
 
     return $this->saveImageDataInAnyFormat($img, $file->getMimeType());
   }
 
-  /**
-   * Very crudely scale an image up or down to an exact size.
-   */
-  private function crudelyScaleTo(PhabricatorFile $file, $dx, $dy) {
+  private function crasslyCropTo(PhabricatorFile $file, $top, $left, $w, $h) {
     $data = $file->loadFileData();
     $src = imagecreatefromstring($data);
+    $dst = $this->getBlankDestinationFile($w, $h);
 
-    $dst = $this->applyScaleTo($src, $dx, $dy);
+    $scale = self::getScaleForCrop($file, $w, $h);
+    $orig_x = $left / $scale;
+    $orig_y = $top / $scale;
+    $orig_w = $w / $scale;
+    $orig_h = $h / $scale;
+
+    imagecopyresampled(
+      $dst,
+      $src,
+      0, 0,
+      $orig_x, $orig_y,
+      $w, $h,
+      $orig_w, $orig_h
+    );
 
     return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
   }
 
-  private function applyScaleTo($src, $dx, $dy) {
+
+  /**
+   * Very crudely scale an image up or down to an exact size.
+   */
+  private function crudelyScaleTo(PhabricatorFile $file, $dx, $dy) {
+    $scaled = $this->applyScaleWithImagemagick($file, $dx, $dy);
+
+    if ($scaled != null) {
+      return $scaled;
+    }
+
+    $dst = $this->applyScaleTo($file, $dx, $dy);
+    return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
+  }
+
+  private function getBlankDestinationFile($dx, $dy) {
+    $dst = imagecreatetruecolor($dx, $dy);
+    imagesavealpha($dst, true);
+    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 255, 255, 255, 127));
+
+    return $dst;
+  }
+
+  private function applyScaleTo(PhabricatorFile $file, $dx, $dy) {
+    $data = $file->loadFileData();
+    $src = imagecreatefromstring($data);
+
     $x = imagesx($src);
     $y = imagesy($src);
 
     $scale = min(($dx / $x), ($dy / $y), 1);
 
-    $dst = imagecreatetruecolor($dx, $dy);
-    imagesavealpha($dst, true);
-    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 255, 255, 255, 127));
-
     $sdx = $scale * $x;
     $sdy = $scale * $y;
+
+    $dst = $this->getBlankDestinationFile($dx, $dy);
+    imagesavealpha($dst, true);
+    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 255, 255, 255, 127));
 
     imagecopyresampled(
       $dst,
@@ -114,9 +180,10 @@ final class PhabricatorImageTransformer {
       $x, $y);
 
     return $dst;
+
   }
 
-  private function generatePreview(PhabricatorFile $file, $size) {
+  public static function getPreviewDimensions(PhabricatorFile $file, $size) {
     $data = $file->loadFileData();
     $src = imagecreatefromstring($data);
 
@@ -128,12 +195,53 @@ final class PhabricatorImageTransformer {
     $dx = max($size / 4, $scale * $x);
     $dy = max($size / 4, $scale * $y);
 
-    $dst = imagecreatetruecolor($dx, $dy);
-    imagesavealpha($dst, true);
-    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 255, 255, 255, 127));
-
     $sdx = $scale * $x;
     $sdy = $scale * $y;
+
+    return array(
+      'x' => $x,
+      'y' => $y,
+      'dx' => $dx,
+      'dy' => $dy,
+      'sdx' => $sdx,
+      'sdy' => $sdy
+    );
+  }
+
+  public static function getScaleForCrop(
+    PhabricatorFile $file,
+    $des_width,
+    $des_height) {
+
+    $metadata = $file->getMetadata();
+    $width = $metadata[PhabricatorFile::METADATA_IMAGE_WIDTH];
+    $height = $metadata[PhabricatorFile::METADATA_IMAGE_HEIGHT];
+
+    if ($height < $des_height) {
+      $scale = $height / $des_height;
+    } else if ($width < $des_width) {
+      $scale = $width / $des_width;
+    } else {
+      $scale_x = $des_width / $width;
+      $scale_y = $des_height / $height;
+      $scale = max($scale_x, $scale_y);
+    }
+
+    return $scale;
+  }
+  private function generatePreview(PhabricatorFile $file, $size) {
+    $data = $file->loadFileData();
+    $src = imagecreatefromstring($data);
+
+    $dimensions = self::getPreviewDimensions($file, $size);
+    $x = $dimensions['x'];
+    $y = $dimensions['y'];
+    $dx = $dimensions['dx'];
+    $dy = $dimensions['dy'];
+    $sdx = $dimensions['sdx'];
+    $sdy = $dimensions['sdy'];
+
+    $dst = $this->getBlankDestinationFile($dx, $dy);
 
     imagecopyresampled(
       $dst,
@@ -153,10 +261,14 @@ final class PhabricatorImageTransformer {
     $data = $file->loadFileData();
     $img = imagecreatefromstring($data);
     $phabricator_root = dirname(phutil_get_library_root('phabricator'));
-    $font_path = $phabricator_root.'/resources/font/tuffy.ttf';
-    $white = imagecolorallocate($img, 255, 255, 255);
-    $black = imagecolorallocate($img, 0, 0, 0);
-    $border_width = 3;
+    $font_root = $phabricator_root.'/resources/font/';
+    $font_path = $font_root.'tuffy.ttf';
+    if (Filesystem::pathExists($font_root.'impact.ttf')) {
+      $font_path = $font_root.'impact.ttf';
+    }
+    $text_color = imagecolorallocate($img, 255, 255, 255);
+    $border_color = imagecolorallocatealpha($img, 0, 0, 0, 110);
+    $border_width = 4;
     $font_max = 200;
     $font_min = 5;
     for ($i = $font_max; $i > $font_min; $i--) {
@@ -172,8 +284,8 @@ final class PhabricatorImageTransformer {
           $i,
           $x,
           $y,
-          $white,
-          $black,
+          $text_color,
+          $border_color,
           $border_width,
           $font_path,
           $upper_text);
@@ -191,8 +303,8 @@ final class PhabricatorImageTransformer {
           $i,
           $x,
           $y,
-          $white,
-          $black,
+          $text_color,
+          $border_color,
           $border_width,
           $font_path,
           $lower_text);
@@ -239,7 +351,7 @@ final class PhabricatorImageTransformer {
 
   private function saveImageDataInAnyFormat($data, $preferred_mime = '') {
     switch ($preferred_mime) {
-      case 'image/gif': // GIF doesn't support true color.
+      case 'image/gif': // Gif doesn't support true color
       case 'image/png':
         if (function_exists('imagepng')) {
           ob_start();
@@ -268,6 +380,45 @@ final class PhabricatorImageTransformer {
     }
 
     return $img;
+  }
+
+  private function applyScaleWithImagemagick(PhabricatorFile $file, $dx, $dy) {
+
+    $img_type = $file->getMimeType();
+    $imagemagick = PhabricatorEnv::getEnvConfig('files.enable-imagemagick');
+
+    if ($img_type != 'image/gif' || $imagemagick == false) {
+      return null;
+    }
+
+    $data = $file->loadFileData();
+    $src = imagecreatefromstring($data);
+
+    $x = imagesx($src);
+    $y = imagesy($src);
+
+    $scale = min(($dx / $x), ($dy / $y), 1);
+
+    $sdx = $scale * $x;
+    $sdy = $scale * $y;
+
+    $input = new TempFile();
+    Filesystem::writeFile($input, $data);
+
+    $resized = new TempFile();
+
+    list($err) = exec_manual(
+                 'convert %s -coalesce -resize %sX%s\! %s'
+                  , $input, $sdx, $sdy, $resized
+                  );
+
+    if (!$err) {
+      $new_data = Filesystem::readFile($resized);
+      return $new_data;
+    } else {
+      return null;
+    }
+
   }
 
 }
