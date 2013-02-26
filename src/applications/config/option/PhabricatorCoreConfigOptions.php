@@ -122,6 +122,9 @@ final class PhabricatorCoreConfigOptions
       $this->newOption('config.mask', 'set', array())
         ->setLocked(true)
         ->setDescription(pht('Additional configuration options to mask.')),
+      $this->newOption('config.ignore-issues', 'set', array())
+        ->setLocked(true)
+        ->setDescription(pht('Setup issues to ignore.')),
       $this->newOption('phabricator.env', 'string', null)
         ->setLocked(true)
         ->setDescription(pht('Internal.')),
@@ -131,8 +134,7 @@ final class PhabricatorCoreConfigOptions
       $this->newOption('phabricator.uninstalled-applications', 'set', array())
         ->setLocked(true)
         ->setDescription(
-          pht('Array containing list of Uninstalled applications.')
-          ),
+          pht('Array containing list of Uninstalled applications.')),
       );
   }
 

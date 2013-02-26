@@ -44,7 +44,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
         ),
         array(
           phutil_tag('p', array(), $run_these),
-          phutil_tag('pre', array(), array_interleave("\n", $commands)),
+          phutil_tag('pre', array(), phutil_implode_html("\n", $commands)),
         ));
     }
 
@@ -64,9 +64,10 @@ final class PhabricatorSetupIssueView extends AphrontView {
       // TODO: We should do a better job of detecting how to install extensions
       // on the current system.
       $install_commands = hsprintf(
-        "\$ sudo apt-get install php5-<em>extname</em>  # Debian / Ubuntu\n".
-        "\$ sudo yum install php-<em>extname</em>       # Red Hat / Derivatives"
-      );
+        "\$ sudo apt-get install php5-<em>extname</em>  ".
+        "# Debian / Ubuntu\n".
+        "\$ sudo yum install php-<em>extname</em>       ".
+        "# Red Hat / Derivatives");
 
       $fallback_info = pht(
         "If those commands don't work, try Google. The process of installing ".
@@ -114,7 +115,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       array(
         'class' => 'setup-issue',
       ),
-      $this->renderHTMLView(
+      $this->renderSingleView(
         array(
           $name,
           $description,
@@ -155,7 +156,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
           '<tt>phabricator/ $</tt> ./bin/config set %s <em>value</em>',
           $key);
       }
-      $update = phutil_tag('pre', array(), array_interleave("\n", $update));
+      $update = phutil_tag('pre', array(), phutil_implode_html("\n", $update));
     } else {
       $update = array();
       foreach ($configs as $config) {
@@ -187,7 +188,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       array(
         'class' => 'setup-issue-config',
       ),
-      self::renderHTMLView(
+      self::renderSingleView(
         array(
           $table_info,
           $table,
@@ -293,7 +294,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       array(
         'class' => 'setup-issue-config',
       ),
-      $this->renderHTMLView(
+      $this->renderSingleView(
         array(
           $table_info,
           $table,

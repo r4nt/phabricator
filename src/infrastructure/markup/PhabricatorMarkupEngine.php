@@ -41,7 +41,7 @@ final class PhabricatorMarkupEngine {
 
   private $objects = array();
   private $viewer;
-  private $version = 2;
+  private $version = 4;
 
 
 /* -(  Markup Pipeline  )---------------------------------------------------- */
@@ -160,7 +160,7 @@ final class PhabricatorMarkupEngine {
         "Call process() before getOutput().");
     }
 
-    return new PhutilSafeHTML($this->objects[$key]['output']);
+    return $this->objects[$key]['output'];
   }
 
 
@@ -355,6 +355,7 @@ final class PhabricatorMarkupEngine {
         'uri.allowed-protocols'),
       'syntax-highlighter.engine' => PhabricatorEnv::getEnvConfig(
         'syntax-highlighter.engine'),
+      'preserve-linebreaks' => true,
     );
   }
 
@@ -368,7 +369,7 @@ final class PhabricatorMarkupEngine {
 
     $engine = new PhutilRemarkupEngine();
 
-    $engine->setConfig('preserve-linebreaks', true);
+    $engine->setConfig('preserve-linebreaks', $options['preserve-linebreaks']);
     $engine->setConfig('pygments.enabled', $options['pygments']);
     $engine->setConfig(
       'uri.allowed-protocols',
@@ -422,9 +423,10 @@ final class PhabricatorMarkupEngine {
       $rules[] = new PhabricatorRemarkupRuleMeme();
     }
 
+    $rules[] = new DivinerRemarkupRuleSymbol();
+
     $rules[] = new PhabricatorRemarkupRuleMention();
 
-    $rules[] = new PhutilRemarkupRuleEscapeHTML();
     $rules[] = new PhutilRemarkupRuleBold();
     $rules[] = new PhutilRemarkupRuleItalic();
     $rules[] = new PhutilRemarkupRuleDel();
@@ -450,7 +452,6 @@ final class PhabricatorMarkupEngine {
     foreach ($blocks as $block) {
       if ($block instanceof PhutilRemarkupEngineRemarkupLiteralBlockRule) {
         $literal_rules = array();
-        $literal_rules[] = new PhutilRemarkupRuleEscapeHTML();
         $literal_rules[] = new PhutilRemarkupRuleLinebreaks();
         $block->setMarkupRules($literal_rules);
       } else if (

@@ -11,6 +11,7 @@ final class PhabricatorImageTransformer {
       $image,
       array(
         'name' => 'meme-'.$file->getName(),
+        'ttl' => time() + 60 * 60 * 24,
       ));
   }
 
@@ -61,23 +62,20 @@ final class PhabricatorImageTransformer {
     $top,
     $left,
     $width,
-    $height
-  ) {
+    $height) {
 
     $image = $this->crasslyCropTo(
       $file,
       $top,
       $left,
       $width,
-      $height
-    );
+      $height);
 
     return PhabricatorFile::newFromFileData(
       $image,
       array(
         'name' => 'conpherence-'.$file->getName(),
-      )
-    );
+      ));
   }
 
   private function crudelyCropTo(PhabricatorFile $file, $x, $min_y, $max_y) {
@@ -126,8 +124,7 @@ final class PhabricatorImageTransformer {
       0, 0,
       $orig_x, $orig_y,
       $w, $h,
-      $orig_w, $orig_h
-    );
+      $orig_w, $orig_h);
 
     return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
   }
@@ -184,11 +181,17 @@ final class PhabricatorImageTransformer {
   }
 
   public static function getPreviewDimensions(PhabricatorFile $file, $size) {
-    $data = $file->loadFileData();
-    $src = imagecreatefromstring($data);
+    $metadata = $file->getMetadata();
+    $x = idx($metadata, PhabricatorFile::METADATA_IMAGE_WIDTH);
+    $y = idx($metadata, PhabricatorFile::METADATA_IMAGE_HEIGHT);
 
-    $x = imagesx($src);
-    $y = imagesy($src);
+    if (!$x || !$y) {
+      $data = $file->loadFileData();
+      $src = imagecreatefromstring($data);
+
+      $x = imagesx($src);
+      $y = imagesy($src);
+    }
 
     $scale = min($size / $x, $size / $y, 1);
 
@@ -409,8 +412,7 @@ final class PhabricatorImageTransformer {
 
     list($err) = exec_manual(
                  'convert %s -coalesce -resize %sX%s\! %s'
-                  , $input, $sdx, $sdy, $resized
-                  );
+                  , $input, $sdx, $sdy, $resized);
 
     if (!$err) {
       $new_data = Filesystem::readFile($resized);

@@ -36,8 +36,7 @@ extends PhabricatorOAuthClientBaseController {
           array(
             'href' => $client->getViewURI(),
           ),
-          $client->getName()
-        ),
+          $client->getName()),
         $client->getPHID(),
         $client->getSecret(),
         phutil_tag(
@@ -45,16 +44,14 @@ extends PhabricatorOAuthClientBaseController {
           array(
             'href' => $client->getRedirectURI(),
           ),
-          $client->getRedirectURI()
-        ),
+          $client->getRedirectURI()),
         phutil_tag(
           'a',
           array(
             'class' => 'small button grey',
             'href'  => $client->getEditURI(),
           ),
-          'Edit'
-        ),
+          'Edit'),
       );
 
       $rows[] = $row;
@@ -72,8 +69,7 @@ extends PhabricatorOAuthClientBaseController {
         $this->getNoticeView(),
         $panel->appendChild($pager)
       ),
-      array('title' => $title)
-    );
+      array('title' => $title));
   }
 
   private function buildClientList($rows, $rowc, $title) {
@@ -97,8 +93,7 @@ extends PhabricatorOAuthClientBaseController {
       ));
     if (empty($rows)) {
       $table->setNoDataString(
-        'You have not created any clients for this OAuthServer.'
-      );
+        'You have not created any clients for this OAuthServer.');
     }
 
     $panel = new AphrontPanelView();
@@ -113,10 +108,8 @@ extends PhabricatorOAuthClientBaseController {
     $new     = $this->getRequest()->getStr('new');
     $deleted = $this->getRequest()->getBool('deleted');
     if ($edited) {
-      $edited = phutil_escape_html($edited);
       $title  = 'Successfully edited client with id '.$edited.'.';
     } else if ($new) {
-      $new   = phutil_escape_html($new);
       $title = 'Successfully created client with id '.$new.'.';
     } else if ($deleted) {
       $title = 'Successfully deleted client.';

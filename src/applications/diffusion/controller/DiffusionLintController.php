@@ -71,11 +71,10 @@ final class DiffusionLintController extends DiffusionController {
           '<a href="%s">%s</a>',
           $drequest->generateURI(array('action' => 'lint')),
           $drequest->getCallsign()),
-        phutil_escape_html(ArcanistLintSeverity::getStringForSeverity(
-          $code['maxSeverity'])),
-        phutil_escape_html($code['code']),
-        phutil_escape_html($code['maxName']),
-        phutil_escape_html($code['maxDescription']),
+        ArcanistLintSeverity::getStringForSeverity($code['maxSeverity']),
+        $code['code'],
+        $code['maxName'],
+        $code['maxDescription'],
       );
     }
 
@@ -161,11 +160,11 @@ final class DiffusionLintController extends DiffusionController {
       $where[] = qsprintf($conn, 'branchID = %d', $branch->getID());
 
       if ($drequest->getPath() != '') {
-        $is_dir = (substr($drequest->getPath(), -1) == '/');
-        $where[] = qsprintf(
-          $conn,
-          'path '.($is_dir ? 'LIKE %>' : '= %s'),
-          '/'.$drequest->getPath());
+        $path = '/'.$drequest->getPath();
+        $is_dir = (substr($path, -1) == '/');
+        $where[] = ($is_dir
+          ? qsprintf($conn, 'path LIKE %>', $path)
+          : qsprintf($conn, 'path = %s', $path));
       }
     }
 

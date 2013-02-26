@@ -25,8 +25,10 @@ final class PhabricatorRemarkupRuleImageMacro
       }
     }
 
-    if (array_key_exists($matches[1], $this->images)) {
-      $phid = $this->images[$matches[1]];
+    $name = (string)$matches[1];
+
+    if (array_key_exists($name, $this->images)) {
+      $phid = $this->images[$name];
 
       $file = id(new PhabricatorFile())->loadOneWhere('phid = %s', $phid);
       $style = null;
@@ -40,8 +42,7 @@ final class PhabricatorRemarkupRuleImageMacro
           $style = sprintf(
             'height: %dpx; width: %dpx;',
             $height,
-            $width
-          );
+            $width);
         }
       }
 

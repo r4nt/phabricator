@@ -3,10 +3,10 @@
 final class PhabricatorChatLogChannelLogController
   extends PhabricatorChatLogController {
 
-  private $channel;
+  private $channelID;
 
   public function willProcessRequest(array $data) {
-    $this->channel = $data['channel'];
+    $this->channelID = $data['channelID'];
   }
 
   public function processRequest() {
@@ -22,8 +22,16 @@ final class PhabricatorChatLogChannelLogController
 
     $query = id(new PhabricatorChatLogQuery())
       ->setViewer($user)
-      ->withChannels(array($this->channel));
+      ->withChannelIDs(array($this->channelID));
 
+    $channel = id(new PhabricatorChatLogChannelQuery())
+              ->setViewer($user)
+              ->withIDs(array($this->channelID))
+              ->executeOne();
+
+    if (!$channel) {
+      return new Aphront404Response();
+    }
 
     list($after, $before, $map) = $this->getPagingParameters($request, $query);
 
@@ -94,7 +102,6 @@ final class PhabricatorChatLogChannelLogController
     require_celerity_resource('phabricator-chatlog-css');
 
     $out = array();
-    $out[] = '<table class="phabricator-chat-log">';
     foreach ($blocks as $block) {
       $author = $block['author'];
       $author = phutil_utf8_shorten($author, 18);
@@ -122,7 +129,13 @@ final class PhabricatorChatLogChannelLogController
         ),
         array($author, $message, $timestamp));
     }
-    $out[] = '</table>';
+
+    $crumbs = $this
+      ->buildApplicationCrumbs()
+      ->addCrumb(
+        id(new PhabricatorCrumbView())
+          ->setName($channel->getChannelName())
+          ->setHref($uri));
 
     $form = id(new AphrontFormView())
       ->setUser($user)
@@ -130,25 +143,25 @@ final class PhabricatorChatLogChannelLogController
       ->setAction($uri)
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Date')
+          ->setLabel(pht('Date'))
           ->setName('date')
           ->setValue($request->getStr('date')))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue('Jump'));
+          ->setValue(pht('Jump')));
 
 
     return $this->buildStandardPageResponse(
       array(
-        '<div class="phabricator-chat-log-panel">',
-        $form,
-        '<br />',
-        implode("\n", $out),
-        $pager,
-        '</div>',
+        $crumbs,
+        hsprintf(
+          '<div class="phabricator-chat-log-panel">%s<br />%s%s</div>',
+          $form->render(),
+          phutil_tag('table', array('class' => 'phabricator-chat-log'), $out),
+          $pager->render()),
       ),
       array(
-        'title' => 'Channel Log',
+        'title' => pht('Channel Log'),
       ));
   }
 

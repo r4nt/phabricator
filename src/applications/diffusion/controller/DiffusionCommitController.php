@@ -40,8 +40,7 @@ final class DiffusionCommitController extends DiffusionController {
         ->setTitle('Error displaying commit.')
         ->appendChild('Failed to load the commit because the commit has not '.
                       'been parsed yet.'),
-          array('title' => 'Commit Still Parsing')
-        );
+          array('title' => 'Commit Still Parsing'));
     }
 
     $commit_data = $drequest->loadCommitData();
@@ -76,15 +75,14 @@ final class DiffusionCommitController extends DiffusionController {
         $drequest);
 
       $headsup_view = id(new PhabricatorHeaderView())
-        ->setHeader('Commit Detail');
+        ->setHeader(nonempty($commit->getSummary(), pht('Commit Detail')));
 
       $headsup_actions = $this->renderHeadsupActionList($commit, $repository);
 
       $commit_properties = $this->loadCommitProperties(
         $commit,
         $commit_data,
-        $parent_query->loadParents()
-      );
+        $parent_query->loadParents());
       $property_list = id(new PhabricatorPropertyListView())
         ->setHasKeyboardShortcuts(true);
       foreach ($commit_properties as $key => $value) {
@@ -97,8 +95,7 @@ final class DiffusionCommitController extends DiffusionController {
           array(
             'class' => 'diffusion-commit-message phabricator-remarkup',
           ),
-          phutil_safe_html(
-            $engine->markupText($commit_data->getCommitMessage()))));
+          $engine->markupText($commit_data->getCommitMessage())));
 
       $content[] = $top_anchor;
       $content[] = $headsup_view;
@@ -281,8 +278,7 @@ final class DiffusionCommitController extends DiffusionController {
 
       $change_list_title = DiffusionView::nameCommit(
         $repository,
-        $commit->getCommitIdentifier()
-      );
+        $commit->getCommitIdentifier());
       $change_list = new DifferentialChangesetListView();
       $change_list->setTitle($change_list_title);
       $change_list->setChangesets($changesets);
@@ -321,8 +317,7 @@ final class DiffusionCommitController extends DiffusionController {
     $commit_id = 'r'.$callsign.$commit->getCommitIdentifier();
     $short_name = DiffusionView::nameCommit(
       $repository,
-      $commit->getCommitIdentifier()
-    );
+      $commit->getCommitIdentifier());
 
     $crumbs = $this->buildCrumbs(array(
       'commit' => true,
@@ -352,8 +347,7 @@ final class DiffusionCommitController extends DiffusionController {
       $content,
       array(
         'title' => $commit_id
-      )
-    );
+      ));
   }
 
   private function loadCommitProperties(
@@ -374,11 +368,9 @@ final class DiffusionCommitController extends DiffusionController {
       ->execute();
 
     $task_phids = array_keys(
-      $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_TASK]
-    );
+      $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_TASK]);
     $proj_phids = array_keys(
-      $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_PROJECT]
-    );
+      $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_PROJECT]);
 
     $phids = array_merge($task_phids, $proj_phids);
     if ($data->getCommitDetail('authorPHID')) {
@@ -449,9 +441,7 @@ final class DiffusionCommitController extends DiffusionController {
       foreach ($parents as $parent) {
         $parent_links[] = $handles[$parent->getPHID()]->renderLink();
       }
-      $props['Parents'] = array_interleave(
-        " \xC2\xB7 ",
-        $parent_links);
+      $props['Parents'] = phutil_implode_html(" \xC2\xB7 ", $parent_links);
     }
 
     $request = $this->getDiffusionRequest();
@@ -488,7 +478,7 @@ final class DiffusionCommitController extends DiffusionController {
       foreach ($task_phids as $phid) {
         $task_list[] = $handles[$phid]->renderLink();
       }
-      $task_list = array_interleave(phutil_tag('br'), $task_list);
+      $task_list = phutil_implode_html(phutil_tag('br'), $task_list);
       $props['Tasks'] = $task_list;
     }
 
@@ -497,7 +487,7 @@ final class DiffusionCommitController extends DiffusionController {
       foreach ($proj_phids as $phid) {
         $proj_list[] = $handles[$phid]->renderLink();
       }
-      $proj_list = array_interleave(phutil_tag('br'), $proj_list);
+      $proj_list = phutil_implode_html(phutil_tag('br'), $proj_list);
       $props['Projects'] = $proj_list;
     }
 
@@ -514,7 +504,7 @@ final class DiffusionCommitController extends DiffusionController {
     $view->setAudits($audits);
     $view->setCommits(array($commit));
     $view->setUser($user);
-    $view->setShowDescriptions(false);
+    $view->setShowCommits(false);
 
     $phids = $view->getRequiredHandlePHIDs();
     $handles = $this->loadViewerHandles($phids);
@@ -689,7 +679,7 @@ final class DiffusionCommitController extends DiffusionController {
       'inlineuri'  => '/diffusion/inline/preview/'.$commit->getPHID().'/',
     ));
 
-    $preview_panel =
+    $preview_panel = hsprintf(
       '<div class="aphront-panel-preview aphront-panel-flush">
         <div id="audit-preview">
           <div class="aphront-panel-preview-loading-text">
@@ -698,27 +688,24 @@ final class DiffusionCommitController extends DiffusionController {
         </div>
         <div id="inline-comment-preview">
         </div>
-      </div>';
+      </div>');
 
     // TODO: This is pretty awkward, unify the CSS between Diffusion and
     // Differential better.
     require_celerity_resource('differential-core-view-css');
 
-    return phutil_render_tag(
+    return phutil_tag(
       'div',
       array(
         'id' => $pane_id,
       ),
-      phutil_render_tag(
-        'div',
-        array(
-          'class' => 'differential-add-comment-panel',
-        ),
+      hsprintf(
+        '<div class="differential-add-comment-panel">%s%s%s</div>',
         id(new PhabricatorAnchorView())
           ->setAnchorName('comment')
           ->setNavigationMarker(true)
-          ->render().
-        $panel->render().
+          ->render(),
+        $panel->render(),
         $preview_panel));
   }
 
@@ -938,7 +925,7 @@ final class DiffusionCommitController extends DiffusionController {
         $ref);
     }
 
-    return array_interleave(', ', $ref_links);
+    return phutil_implode_html(', ', $ref_links);
   }
 
   private function buildRawDiffResponse(DiffusionRequest $drequest) {

@@ -9,13 +9,14 @@ abstract class PhabricatorPasteController extends PhabricatorController {
     $nav->setBaseURI(new PhutilURI($this->getApplicationURI('filter/')));
 
     if ($for_app) {
-      $nav->addFilter('', 'Create Paste', $this->getApplicationURI('/create/'));
+      $nav->addFilter('', pht('Create Paste'),
+        $this->getApplicationURI('/create/'));
     }
 
-    $nav->addLabel('Filters');
-    $nav->addFilter('all', 'All Pastes');
+    $nav->addLabel(pht('Filters'));
+    $nav->addFilter('all', pht('All Pastes'));
     if ($user->isLoggedIn()) {
-      $nav->addFilter('my', 'My Pastes');
+      $nav->addFilter('my', pht('My Pastes'));
     }
 
     $nav->selectFilter($filter, 'all');
@@ -43,7 +44,7 @@ abstract class PhabricatorPasteController extends PhabricatorController {
     PhabricatorPaste $paste,
     $max_lines = null) {
 
-    $lines = explode("\n", rtrim($paste->getContent()));
+    $lines = phutil_split_lines($paste->getContent());
 
     return id(new PhabricatorSourceCodeView())
       ->setLimit($max_lines)

@@ -70,10 +70,9 @@ final class PhabricatorAuditCommitListView extends AphrontView {
       $rows[] = array(
         $commit_name,
         $author_name,
-        phutil_escape_html($commit->getCommitData()->getSummary()),
         PhabricatorAuditCommitStatusConstants::getStatusName(
           $commit->getAuditStatus()),
-        implode(', ', $auditors),
+        phutil_implode_html(', ', $auditors),
         phabricator_datetime($commit->getEpoch(), $this->user),
       );
     }
@@ -83,16 +82,14 @@ final class PhabricatorAuditCommitListView extends AphrontView {
       array(
         'Commit',
         'Author',
-        'Summary',
         'Audit Status',
         'Auditors',
         'Date',
       ));
     $table->setColumnClasses(
       array(
-        'n',
-        '',
         'wide',
+        '',
         '',
         '',
         '',
@@ -101,7 +98,6 @@ final class PhabricatorAuditCommitListView extends AphrontView {
     if ($this->commits && reset($this->commits)->getAudits() === null) {
       $table->setColumnVisibility(
         array(
-          true,
           true,
           true,
           true,

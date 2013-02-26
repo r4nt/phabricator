@@ -252,21 +252,19 @@ abstract class DifferentialChangesetRenderer {
     // TODO: Both these steps should happen earlier.
     $result = str_replace("\t", '  ', $result);
 
-    return $result;
+    return phutil_safe_html($result);
   }
 
   abstract public function isOneUpRenderer();
   abstract public function renderTextChange(
     $range_start,
     $range_len,
-    $rows
-  );
+    $rows);
   abstract public function renderFileChange(
     $old = null,
     $new = null,
     $id = 0,
-    $vs = 0
-  );
+    $vs = 0);
 
   abstract protected function renderChangeTypeHeader($force);
 

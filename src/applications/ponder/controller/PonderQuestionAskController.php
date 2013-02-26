@@ -74,14 +74,13 @@ final class PonderQuestionAskController extends PonderController {
         id(new AphrontFormSubmitControl())
         ->setValue('Ask Away!'));
 
-    $preview =
+    $preview = hsprintf(
       '<div class="aphront-panel-flush">'.
         '<div id="question-preview">'.
-          '<span class="aphront-panel-preview-loading-text">'.
-            pht('Loading question preview...').
-          '</span>'.
+          '<span class="aphront-panel-preview-loading-text">%s</span>'.
         '</div>'.
-      '</div>';
+      '</div>',
+      pht('Loading question preview...'));
 
     Javelin::initBehavior(
       'ponder-feedback-preview',
@@ -108,8 +107,7 @@ final class PonderQuestionAskController extends PonderController {
       array(
         'device' => true,
         'title'  => 'Ask a Question',
-      )
-    );
+      ));
   }
 
 }

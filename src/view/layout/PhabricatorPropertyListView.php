@@ -4,9 +4,16 @@ final class PhabricatorPropertyListView extends AphrontView {
 
   private $parts = array();
   private $hasKeyboardShortcuts;
+  private $object;
+  private $invokedWillRenderEvent;
 
   protected function canAppendChild() {
     return false;
+  }
+
+  public function setObject($object) {
+    $this->object = $object;
+    return $this;
   }
 
   public function setHasKeyboardShortcuts($has_keyboard_shortcuts) {
@@ -52,7 +59,25 @@ final class PhabricatorPropertyListView extends AphrontView {
     return $this;
   }
 
+  public function invokeWillRenderEvent() {
+    if ($this->object && $this->getUser() && !$this->invokedWillRenderEvent) {
+      $event = new PhabricatorEvent(
+        PhabricatorEventType::TYPE_UI_WILLRENDERPROPERTIES,
+        array(
+          'object'  => $this->object,
+          'view'    => $this,
+        ));
+      $event->setUser($this->getUser());
+      PhutilEventEngine::dispatchEvent($event);
+    }
+    $this->invokedWillRenderEvent = true;
+  }
+
+
+
   public function render() {
+    $this->invokeWillRenderEvent();
+
     require_celerity_resource('phabricator-property-list-view-css');
 
     $items = array();
@@ -78,7 +103,7 @@ final class PhabricatorPropertyListView extends AphrontView {
       array(
         'class' => 'phabricator-property-list-view',
       ),
-      $this->renderHTMLView($items));
+      $this->renderSingleView($items));
   }
 
   private function renderPropertyPart(array $part) {
@@ -99,7 +124,7 @@ final class PhabricatorPropertyListView extends AphrontView {
         array(
           'class' => 'phabricator-property-list-value',
         ),
-        $this->renderHTMLView($value));
+        $this->renderSingleView($value));
     }
 
     $list = phutil_tag(
@@ -107,7 +132,7 @@ final class PhabricatorPropertyListView extends AphrontView {
       array(
         'class' => 'phabricator-property-list-properties',
       ),
-      $this->renderHTMLView($items));
+      $this->renderSingleView($items));
 
     $shortcuts = null;
     if ($this->hasKeyboardShortcuts) {

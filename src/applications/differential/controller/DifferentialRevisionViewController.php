@@ -157,16 +157,14 @@ final class DifferentialRevisionViewController extends DifferentialController {
               'p',
               array(),
               pht('All specified reviewers are disabled and this revision '.
-                  'needs review. You may want to add some new reviewers.')
-            ));
+                  'needs review. You may want to add some new reviewers.')));
         } else {
           $reviewer_warning->appendChild(
             phutil_tag(
               'p',
               array(),
               pht('This revision has no specified reviewers and needs '.
-                  'review. You may want to add some reviewers.')
-            ));
+                  'review. You may want to add some reviewers.')));
         }
       }
     }
@@ -228,7 +226,7 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     $revision_detail = new DifferentialRevisionDetailView();
     $revision_detail->setRevision($revision);
-    $revision_detail->setDiff(reset($diffs));
+    $revision_detail->setDiff(end($diffs));
     $revision_detail->setAuxiliaryFields($aux_fields);
 
     $actions = $this->getRevisionActions($revision);
@@ -386,14 +384,15 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     $page_pane = id(new DifferentialPrimaryPaneView())
       ->setID($pane_id)
-      ->appendChild(
-        $comment_view->render().
-        $diff_history->render().
-        $warning.
-        $local_view->render().
-        $toc_view->render().
-        $other_view.
-        $changeset_view->render());
+      ->appendChild(array(
+        $comment_view->render(),
+        $diff_history->render(),
+        $warning,
+        $local_view->render(),
+        $toc_view->render(),
+        $other_view,
+        $changeset_view->render(),
+      ));
     if ($comment_form) {
       $page_pane->appendChild($comment_form->render());
     }
@@ -857,13 +856,12 @@ final class DifferentialRevisionViewController extends DifferentialController {
     $handles = $this->loadViewerHandles($phids);
     $view->setHandles($handles);
 
-    return
+    return hsprintf(
+      '%s<div class="differential-panel">%s</div>',
       id(new PhabricatorHeaderView())
         ->setHeader(pht('Open Revisions Affecting These Files'))
-        ->render().
-      '<div class="differential-panel">'.
-        $view->render().
-      '</div>';
+        ->render(),
+      $view->render());
   }
 
   /**

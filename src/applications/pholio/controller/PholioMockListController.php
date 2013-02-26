@@ -14,6 +14,7 @@ final class PholioMockListController extends PholioController {
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
+    $viewer_phid = $user->getPHID();
 
     $query = id(new PholioMockQuery())
       ->setViewer($user)
@@ -25,8 +26,12 @@ final class PholioMockListController extends PholioController {
     switch ($filter) {
       case 'view/all':
       default:
-        $title = 'All Mocks';
-        break;
+        $title = pht('All Mocks');
+      break;
+      case 'view/my':
+        $title = pht('My Mocks');
+        $query->withAuthorPHIDs(array($viewer_phid));
+      break;
     }
 
     $pager = new AphrontCursorPagerView();
@@ -38,26 +43,31 @@ final class PholioMockListController extends PholioController {
     foreach ($mocks as $mock) {
       $board->addItem(
         id(new PhabricatorPinboardItemView())
-          ->setHeader($mock->getName())
+          ->setHeader('M'.$mock->getID().' '.$mock->getName())
           ->setURI('/M'.$mock->getID())
-          ->setImageURI($mock->getCoverFile()->getThumb160x120URI()));
+          ->setImageURI($mock->getCoverFile()->getThumb220x165URI())
+          ->setImageSize(220, 165));
     }
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
-
     $content = array(
-      $header,
       $board,
       $pager,
     );
 
     $nav->appendChild($content);
 
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNav());
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($this->getApplicationURI()));
+    $nav->setCrumbs($crumbs);
+
     return $this->buildApplicationPage(
       $nav,
       array(
         'title' => $title,
+        'device' => true,
       ));
   }
 

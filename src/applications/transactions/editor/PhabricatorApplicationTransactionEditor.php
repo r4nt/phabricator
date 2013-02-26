@@ -16,6 +16,7 @@ abstract class PhabricatorApplicationTransactionEditor
   private $mentionedPHIDs;
   private $continueOnNoEffect;
   private $parentMessageID;
+  private $subscribers;
 
   private $isPreview;
 
@@ -95,13 +96,7 @@ abstract class PhabricatorApplicationTransactionEditor
     PhabricatorApplicationTransaction $xaction) {
     switch ($xaction->getTransactionType()) {
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
-        if ($object->getPHID()) {
-          $old_phids = PhabricatorSubscribersQuery::loadSubscribersForPHID(
-            $object->getPHID());
-        } else {
-          $old_phids = array();
-        }
-        return array_values($old_phids);
+        return array_values($this->subscribers);
       case PhabricatorTransactions::TYPE_VIEW_POLICY:
         return $object->getViewPolicy();
       case PhabricatorTransactions::TYPE_EDIT_POLICY:
@@ -170,9 +165,20 @@ abstract class PhabricatorApplicationTransactionEditor
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
         $subeditor = id(new PhabricatorSubscriptionsEditor())
           ->setObject($object)
-          ->setActor($this->requireActor())
-          ->subscribeExplicit($xaction->getNewValue())
-          ->save();
+          ->setActor($this->requireActor());
+
+        $old_map = array_fuse($xaction->getOldValue());
+        $new_map = array_fuse($xaction->getNewValue());
+
+        $subeditor->unsubscribe(
+          array_keys(
+            array_diff_key($old_map, $new_map)));
+
+        $subeditor->subscribeExplicit(
+          array_keys(
+            array_diff_key($new_map, $old_map)));
+
+        $subeditor->save();
         break;
     }
     return $this->applyCustomExternalTransaction($object, $xaction);
@@ -209,8 +215,18 @@ abstract class PhabricatorApplicationTransactionEditor
 
     $this->validateEditParameters($object, $xactions);
 
-
     $actor = $this->requireActor();
+
+    if ($object->getPHID() &&
+        ($object instanceof PhabricatorSubscribableInterface)) {
+      $subs = PhabricatorSubscribersQuery::loadSubscribersForPHID(
+        $object->getPHID());
+      $this->subscribers = array_fuse($subs);
+    } else {
+      $this->subscribers = array();
+    }
+
+    $xactions = $this->applyImplicitCC($object, $xactions);
 
     $mention_xaction = $this->buildMentionTransaction($object, $xactions);
     if ($mention_xaction) {
@@ -410,9 +426,7 @@ abstract class PhabricatorApplicationTransactionEditor
       // Don't try to subscribe already-subscribed mentions: we want to generate
       // a dialog about an action having no effect if the user explicitly adds
       // existing CCs, but not if they merely mention existing subscribers.
-      $current = PhabricatorSubscribersQuery::loadSubscribersForPHID(
-        $object->getPHID());
-      $phids = array_diff($phids, $current);
+      $phids = array_diff($phids, $this->subscribers);
     }
 
     if (!$phids) {
@@ -631,6 +645,78 @@ abstract class PhabricatorApplicationTransactionEditor
   }
 
 
+/* -(  Implicit CCs  )------------------------------------------------------- */
+
+
+  /**
+   * When a user interacts with an object, we might want to add them to CC.
+   */
+  final public function applyImplicitCC(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    if (!($object instanceof PhabricatorSubscribableInterface)) {
+      // If the object isn't subscribable, we can't CC them.
+      return $xactions;
+    }
+
+    $actor_phid = $this->requireActor()->getPHID();
+    if ($object->isAutomaticallySubscribed($actor_phid)) {
+      // If they're auto-subscribed, don't CC them.
+      return $xactions;
+    }
+
+    $should_cc = false;
+    foreach ($xactions as $xaction) {
+      if ($this->shouldImplyCC($object, $xaction)) {
+        $should_cc = true;
+        break;
+      }
+    }
+
+    if (!$should_cc) {
+      // Only some types of actions imply a CC (like adding a comment).
+      return $xactions;
+    }
+
+    if ($object->getPHID()) {
+      if (isset($this->subscribers[$actor_phid])) {
+        // If the user is already subscribed, don't implicitly CC them.
+        return $xactions;
+      }
+
+      $unsub = PhabricatorEdgeQuery::loadDestinationPHIDs(
+        $object->getPHID(),
+        PhabricatorEdgeConfig::TYPE_OBJECT_HAS_UNSUBSCRIBER);
+      $unsub = array_fuse($unsub);
+      if (isset($unsub[$actor_phid])) {
+        // If the user has previously unsubscribed from this object explicitly,
+        // don't implicitly CC them.
+        return $xactions;
+      }
+    }
+
+    $xaction = newv(get_class(head($xactions)), array());
+    $xaction->setTransactionType(PhabricatorTransactions::TYPE_SUBSCRIBERS);
+    $xaction->setNewValue(array('+' => array($actor_phid)));
+
+    array_unshift($xactions, $xaction);
+
+    return $xactions;
+  }
+
+  protected function shouldImplyCC(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    switch ($xaction->getTransactionType()) {
+      case PhabricatorTransactions::TYPE_COMMENT:
+        return true;
+      default:
+        return false;
+    }
+  }
+
 
 /* -(  Sending Mail  )------------------------------------------------------- */
 
@@ -761,8 +847,7 @@ abstract class PhabricatorApplicationTransactionEditor
    */
   protected function getMailCC(PhabricatorLiskDAO $object) {
     if ($object instanceof PhabricatorSubscribableInterface) {
-      $phid = $object->getPHID();
-      return PhabricatorSubscribersQuery::loadSubscribersForPHID($phid);
+      return $this->subscribers;
     }
     throw new Exception("Capability not supported.");
   }

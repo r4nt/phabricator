@@ -4,11 +4,16 @@
  * Defines the api for protocol adapters for @{class:PhabricatorBot}
  */
 abstract class PhabricatorBaseProtocolAdapter {
-  protected $config;
+
+  private $config;
 
   public function setConfig($config) {
     $this->config = $config;
     return $this;
+  }
+
+  public function getConfig($key, $default = null) {
+    return idx($this->config, $key, $default);
   }
 
   /**
@@ -33,4 +38,18 @@ abstract class PhabricatorBaseProtocolAdapter {
    * @param PhabricatorBotMessage $message The message to write
    */
   abstract public function writeMessage(PhabricatorBotMessage $message);
+
+  /**
+   * String identifying the service type the adapter provides access to, like
+   * "irc", "campfire", "flowdock", "hipchat", etc.
+   */
+  abstract public function getServiceType();
+
+  /**
+   * String identifying the service name the adapter is connecting to. This is
+   * used to distinguish between instances of a service. For example, for IRC,
+   * this should return the IRC network the client is connecting to.
+   */
+  abstract public function getServiceName();
+
 }

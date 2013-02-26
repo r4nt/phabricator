@@ -21,6 +21,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
   protected $storageFormat;
   protected $storageHandle;
 
+  protected $ttl;
+
   public function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
@@ -121,7 +123,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
     $file = id(new PhabricatorFile())->loadOneWhere(
       'name = %s AND contentHash = %s LIMIT 1',
       self::normalizeFileName(idx($params, 'name')),
-      PhabricatorHash::digest($data));
+      self::hashFileContent($data));
 
     if (!$file) {
       $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
@@ -148,6 +150,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
       $file_name = idx($params, 'name');
       $file_name = self::normalizeFileName($file_name);
+      $file_ttl = idx($params, 'ttl');
       $authorPHID = idx($params, 'authorPHID');
 
       $new_file = new  PhabricatorFile();
@@ -155,6 +158,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $new_file->setName($file_name);
       $new_file->setByteSize($copy_of_byteSize);
       $new_file->setAuthorPHID($authorPHID);
+      $new_file->setTtl($file_ttl);
 
       $new_file->setContentHash($hash);
       $new_file->setStorageEngine($copy_of_storage_engine);
@@ -223,6 +227,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
     $file_name = idx($params, 'name');
     $file_name = self::normalizeFileName($file_name);
+    $file_ttl = idx($params, 'ttl');
 
     // If for whatever reason, authorPHID isn't passed as a param
     // (always the case with newFromFileDownload()), store a ''
@@ -231,7 +236,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
     $file->setName($file_name);
     $file->setByteSize(strlen($data));
     $file->setAuthorPHID($authorPHID);
-    $file->setContentHash(PhabricatorHash::digest($data));
+    $file->setTtl($file_ttl);
+    $file->setContentHash(self::hashFileContent($data));
 
     $file->setStorageEngine($engine_identifier);
     $file->setStorageHandle($data_handle);
@@ -327,7 +333,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
 
-  public static function newFromFileDownload($uri, array $params) {
+  public static function newFromFileDownload($uri, array $params = array()) {
+    // Make sure we're allowed to make a request first
+    if (!PhabricatorEnv::getEnvConfig('security.allow-outbound-http')) {
+      throw new Exception("Outbound HTTP requests are disabled!");
+    }
+
     $uri = new PhutilURI($uri);
 
     $protocol = $uri->getProtocol();
@@ -346,6 +357,10 @@ final class PhabricatorFile extends PhabricatorFileDAO
         ->setTimeout($timeout)
         ->resolvex();
 
+    $params = $params + array(
+      'name' => basename($uri),
+    );
+
     return self::newFromFileData($file_data, $params);
   }
 
@@ -354,6 +369,17 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public function delete() {
+    // delete all records of this file in transformedfile
+    $trans_files = id(new PhabricatorTransformedFile())->loadAllWhere(
+      'TransformedPHID = %s', $this->getPHID());
+
+    $this->openTransaction();
+    foreach ($trans_files as $trans_file) {
+      $trans_file->delete();
+    }
+    $ret = parent::delete();
+    $this->saveTransaction();
+
     // Check to see if other files are using storage
     $other_file = id(new PhabricatorFile())->loadAllWhere(
       'storageEngine = %s AND storageHandle = %s AND
@@ -366,14 +392,11 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $engine = $this->instantiateStorageEngine();
       $engine->deleteFile($this->getStorageHandle());
     }
-
-    $ret = parent::delete();
-
     return $ret;
   }
 
   public static function hashFileContent($data) {
-    return PhabricatorHash::digest($data);
+    return sha1($data);
   }
 
   public function loadFileData() {
@@ -430,6 +453,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
   public function getThumb160x120URI() {
     $path = '/file/xform/thumb-160x120/'.$this->getPHID().'/'
+      .$this->getSecretKey().'/';
+    return PhabricatorEnv::getCDNURI($path);
+  }
+
+  public function getPreview140URI() {
+    $path = '/file/xform/preview-140/'.$this->getPHID().'/'
       .$this->getSecretKey().'/';
     return PhabricatorEnv::getCDNURI($path);
   }

@@ -60,8 +60,7 @@ class PhabricatorMailImplementationPHPMailerLiteAdapter
       $data,
       $filename,
       'base64',
-      $mimetype
-    );
+      $mimetype);
     return $this;
   }
 

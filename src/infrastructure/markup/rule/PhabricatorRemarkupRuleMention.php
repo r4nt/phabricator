@@ -27,7 +27,7 @@ final class PhabricatorRemarkupRuleMention
       $text);
   }
 
-  private function markupMention($matches) {
+  protected function markupMention($matches) {
     $engine = $this->getEngine();
     $token = $engine->storeText('');
 

@@ -18,12 +18,11 @@ final class DiffusionBrowseTableView extends DiffusionView {
   }
 
   public function renderLastModifiedColumns(
+    DiffusionRequest $drequest,
     array $handles,
     PhabricatorRepositoryCommit $commit = null,
     PhabricatorRepositoryCommitData $data = null) {
     assert_instances_of($handles, 'PhabricatorObjectHandle');
-
-    $drequest = $this->getDiffusionRequest();
 
     if ($commit) {
       $epoch = $commit->getEpoch();
@@ -55,7 +54,7 @@ final class DiffusionBrowseTableView extends DiffusionView {
           $committer = self::renderName($committer);
         }
         if ($author != $committer) {
-          $author .= '/'.$committer;
+          $author = hsprintf('%s/%s', $author, $committer);
         }
       }
 
@@ -132,24 +131,17 @@ final class DiffusionBrowseTableView extends DiffusionView {
         $browse_text = $path->getPath().'/';
         $dir_slash = '/';
 
-        $browse_link = '<strong>'.$this->linkBrowse(
+        $browse_link = phutil_tag('strong', array(), $this->linkBrowse(
           $base_path.$path->getPath().$dir_slash,
           array(
-            'text' => $this->renderPathIcon(
-              'dir',
-              $browse_text),
-          )).'</strong>';
+            'text' => $this->renderPathIcon('dir', $browse_text),
+          )));
       } else if ($file_type == DifferentialChangeType::FILE_SUBMODULE) {
         $browse_text = $path->getPath().'/';
-        $browse_link =
-          '<strong>'.
-            $this->linkExternal(
-              $path->getHash(),
-              $path->getExternalURI(),
-              $this->renderPathIcon(
-                'ext',
-                $browse_text)).
-          '</strong>';
+        $browse_link = phutil_tag('strong', array(), $this->linkExternal(
+          $path->getHash(),
+          $path->getExternalURI(),
+          $this->renderPathIcon('ext', $browse_text)));
       } else {
         if ($file_type == DifferentialChangeType::FILE_SYMLINK) {
           $type = 'link';
@@ -169,6 +161,7 @@ final class DiffusionBrowseTableView extends DiffusionView {
         $drequest = clone $request;
         $drequest->setPath($request->getPath().$path->getPath().$dir_slash);
         $dict = $this->renderLastModifiedColumns(
+          $drequest,
           $this->handles,
           $commit,
           $path->getLastCommitData());
@@ -190,7 +183,7 @@ final class DiffusionBrowseTableView extends DiffusionView {
 
         $need_pull[$uri] = $dict;
         foreach ($dict as $k => $uniq) {
-          $dict[$k] = '<span id="'.$uniq.'"></span>';
+          $dict[$k] = phutil_tag('span', array('id' => $uniq), '');
         }
       }
 

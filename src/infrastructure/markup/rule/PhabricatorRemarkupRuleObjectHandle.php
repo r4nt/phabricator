@@ -19,7 +19,7 @@ abstract class PhabricatorRemarkupRuleObjectHandle
       $text);
   }
 
-  private function markupObjectHandle($matches) {
+  protected function markupObjectHandle($matches) {
     // TODO: These are single gets but should be okay for now, they're behind
     // the cache.
     $phid = $this->loadObjectPHID($matches[1]);

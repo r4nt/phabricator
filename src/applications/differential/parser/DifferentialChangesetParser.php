@@ -63,7 +63,7 @@ final class DifferentialChangesetParser {
     return $this->disableCache;
   }
 
-  const CACHE_VERSION = 10;
+  const CACHE_VERSION = 11;
   const CACHE_MAX_SIZE = 8e6;
 
   const ATTR_GENERATED  = 'attr:generated';
@@ -159,8 +159,7 @@ final class DifferentialChangesetParser {
     return $parser->parseHunksForHighlightMasks(
       $changeset->getHunks(),
       $this->originalLeft->getHunks(),
-      $this->originalRight->getHunks()
-    );
+      $this->originalRight->getHunks());
   }
 
   /**
@@ -270,7 +269,13 @@ final class DifferentialChangesetParser {
       return false;
     }
 
-    $data = json_decode($data['cache'], true);
+    if ($data['cache'][0] == '{') {
+      // This is likely an old-style JSON cache which we will not be able to
+      // deserialize.
+      return false;
+    }
+
+    $data = unserialize($data['cache']);
     if (!is_array($data) || !$data) {
       return false;
     }
@@ -340,7 +345,7 @@ final class DifferentialChangesetParser {
           break;
       }
     }
-    $cache = json_encode($cache);
+    $cache = serialize($cache);
 
     // We don't want to waste too much space by a single changeset.
     if (strlen($cache) > self::CACHE_MAX_SIZE) {
@@ -884,8 +889,7 @@ final class DifferentialChangesetParser {
       $mask_force,
       $feedback_mask,
       $range_start,
-      $range_len
-    );
+      $range_len);
 
     $renderer
       ->setGaps($gaps)
@@ -895,8 +899,7 @@ final class DifferentialChangesetParser {
     $html = $renderer->renderTextChange(
       $range_start,
       $range_len,
-      $rows
-    );
+      $rows);
 
     return $renderer->renderChangesetTable($html);
   }
@@ -1092,7 +1095,7 @@ final class DifferentialChangesetParser {
    * indicator of how well tested a change is.
    */
   public function renderModifiedCoverage() {
-    $na = '<em>-</em>';
+    $na = phutil_tag('em', array(), '-');
 
     $coverage = $this->getCoverage();
     if (!$coverage) {

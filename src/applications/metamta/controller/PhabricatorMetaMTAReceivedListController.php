@@ -20,8 +20,7 @@ final class PhabricatorMetaMTAReceivedListController
 
     $phids = array_merge(
       mpull($mails, 'getAuthorPHID'),
-      mpull($mails, 'getRelatedPHID')
-    );
+      mpull($mails, 'getRelatedPHID'));
     $phids = array_unique(array_filter($phids));
 
     $handles = $this->loadViewerHandles($phids);
@@ -38,7 +37,7 @@ final class PhabricatorMetaMTAReceivedListController
         $mail->getRelatedPHID()
           ? $handles[$mail->getRelatedPHID()]->renderLink()
           : '-',
-        phutil_escape_html($mail->getMessage()),
+        $mail->getMessage(),
       );
     }
 

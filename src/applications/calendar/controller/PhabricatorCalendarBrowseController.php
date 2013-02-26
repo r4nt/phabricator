@@ -44,8 +44,7 @@ final class PhabricatorCalendarBrowseController
         $details = "\n\n".rtrim($status->getDescription());
       }
       $event->setDescription(
-        $status->getTerseSummary($user).$details
-      );
+        $status->getTerseSummary($user).$details);
       $event->setEventID($status->getID());
       $month_view->addEvent($event);
     }
@@ -55,15 +54,13 @@ final class PhabricatorCalendarBrowseController
     $nav->appendChild(
       array(
         $this->getNoticeView(),
-        '<div style="padding: 20px;">',
-          $month_view,
-        '</div>',
+        hsprintf('<div style="padding: 20px;">%s</div>', $month_view->render()),
       ));
 
     return $this->buildApplicationPage(
      $nav,
      array(
-        'title' => 'Calendar',
+        'title' => pht('Calendar'),
         'device' => true,
       ));
   }

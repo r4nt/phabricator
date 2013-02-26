@@ -78,14 +78,12 @@ abstract class ConpherenceController extends PhabricatorController {
       ->execute();
     $unread_conpherences = array_select_keys(
       $all_conpherences,
-      array_keys($unread)
-    );
+      array_keys($unread));
     $this->setUnreadConpherences($unread_conpherences);
 
     $read_conpherences = array_select_keys(
       $all_conpherences,
-      array_keys($read)
-    );
+      array_keys($read));
     $this->setReadConpherences($read_conpherences);
 
     if (!$this->getSelectedConpherencePHID()) {
@@ -101,7 +99,6 @@ abstract class ConpherenceController extends PhabricatorController {
     $read_conpherences = $this->getReadConpherences();
 
     $user = $this->getRequest()->getUser();
-
     $menu = new PhabricatorMenuView();
     $nav = AphrontSideNavFilterView::newFromMenu($menu);
     $nav->addClass('conpherence-menu');
@@ -110,16 +107,12 @@ abstract class ConpherenceController extends PhabricatorController {
     $nav->addButton(
       'new',
       pht('New Conversation'),
-      $this->getApplicationURI('new/')
-    );
+      $this->getApplicationURI('new/'));
     $nav->addLabel(pht('Unread'));
     $nav = $this->addConpherencesToNav($unread_conpherences, $nav);
-
     $nav->addLabel(pht('Read'));
     $nav = $this->addConpherencesToNav($read_conpherences, $nav, true);
-
     $nav->selectFilter($filter);
-
     return $nav;
   }
 
@@ -133,8 +126,7 @@ abstract class ConpherenceController extends PhabricatorController {
       $uri = $this->getApplicationURI('view/'.$conpherence->getID().'/');
       $data = $conpherence->getDisplayData(
         $user,
-        null
-      );
+        null);
       $title = $data['title'];
       $subtitle = $data['subtitle'];
       $unread_count = $data['unread_count'];
@@ -159,8 +151,7 @@ abstract class ConpherenceController extends PhabricatorController {
         $item->addClass('hide-unread-count');
       }
 
-      // TODO: [HTML] Clean this up when we clean up HTML stuff in Conpherence.
-      $nav->addCustomBlock(phutil_safe_html($item->render()));
+      $nav->addCustomBlock($item->render());
     }
     if (empty($conpherences) || $read) {
       $nav->addCustomBlock($this->getNoConpherencesBlock());
@@ -190,12 +181,10 @@ abstract class ConpherenceController extends PhabricatorController {
         id(new PhabricatorMenuItemView())
           ->setName(pht('New Conversation'))
           ->setHref($this->getApplicationURI('new/'))
-          ->setIcon('create')
-      )
+          ->setIcon('create'))
       ->addCrumb(
         id(new PhabricatorCrumbView())
-          ->setName(pht('Conpherence'))
-      );
+          ->setName(pht('Conpherence')));
 
     return $crumbs;
   }
@@ -211,8 +200,7 @@ abstract class ConpherenceController extends PhabricatorController {
         'form_pane' => 'conpherence-form',
         'menu_pane' => 'conpherence-menu',
         'fancy_ajax' => (bool) $this->getSelectedConpherencePHID()
-      )
-    );
+      ));
     Javelin::initBehavior('conpherence-init',
       array(
         'selected_conpherence_id' => $this->getSelectedConpherencePHID(),
@@ -221,16 +209,14 @@ abstract class ConpherenceController extends PhabricatorController {
         'messages' => 'conpherence-messages',
         'widgets_pane' => 'conpherence-widget-pane',
         'form_pane' => 'conpherence-form'
-      )
-    );
+      ));
     Javelin::initBehavior('conpherence-drag-and-drop-photo',
       array(
         'target' => 'conpherence-header-pane',
         'form_pane' => 'conpherence-form',
         'upload_uri' => '/file/dropupload/',
         'activated_class' => 'conpherence-header-upload-photo',
-      )
-    );
+      ));
   }
 
 }

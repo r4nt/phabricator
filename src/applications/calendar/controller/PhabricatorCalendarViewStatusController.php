@@ -32,16 +32,14 @@ final class PhabricatorCalendarViewStatusController
       array(
         id(new PhabricatorHeaderView())->setHeader($page_title),
         $status_list,
-      )
-    );
+      ));
 
     return $this->buildApplicationPage(
       $nav,
       array(
         'title' => $page_title,
         'device' => true
-      )
-    );
+      ));
   }
 
   private function buildStatusList(array $statuses) {
@@ -62,8 +60,7 @@ final class PhabricatorCalendarViewStatusController
           array(
             'month' => $month,
             'year'  => $year,
-          )
-        );
+          ));
         $href = (string) $uri;
       }
       $from = phabricator_datetime($status->getDateFrom(), $user);
@@ -94,7 +91,7 @@ final class PhabricatorCalendarViewStatusController
     } else {
       $no_data =
         pht('%s does not have any upcoming status events.',
-            phutil_escape_html($this->getHandle($this->phid)->getName()));
+            $this->getHandle($this->phid)->getName());
     }
     return $no_data;
   }
@@ -115,8 +112,7 @@ final class PhabricatorCalendarViewStatusController
     } else {
       $page_title = pht(
         'Upcoming Statuses for %s',
-        phutil_escape_html($this->getHandle($this->phid)->getName())
-      );
+        $this->getHandle($this->phid)->getName());
     }
     return $page_title;
   }
