@@ -98,6 +98,7 @@ final class PhabricatorSlowvotePollController
       ));
 
     $query = new PhabricatorObjectHandleData($phids);
+    $query->setViewer($user);
     $handles = $query->loadHandles();
     $objects = $query->loadObjects();
 
@@ -199,6 +200,7 @@ final class PhabricatorSlowvotePollController
     $viewer = $this->getRequest()->getUser();
 
     $engine = PhabricatorMarkupEngine::newSlowvoteMarkupEngine();
+    $engine->setConfig('viewer', $viewer);
 
     $comment_markup = array();
     foreach ($comments as $comment) {

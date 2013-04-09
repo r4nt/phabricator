@@ -104,24 +104,42 @@ final class PhabricatorMenuItemView extends AphrontTagView {
 
   protected function getTagContent() {
     $name = null;
+    $icon = null;
+
     if ($this->name) {
+
       $external = null;
       if ($this->isExternal) {
         $external = " \xE2\x86\x97";
       }
+
+      if ($this->icon) {
+        require_celerity_resource('sprite-icon-css');
+        $icon = phutil_tag(
+          'span',
+            array(
+              'class' => 'phabricator-menu-item-icon sprite-icon '.
+                       'action-'.$this->icon,
+        ),
+        '');
+      }
+
       $name = phutil_tag(
         'span',
         array(
           'class' => 'phabricator-menu-item-name',
         ),
-        $this->name.$external);
+        array(
+          $this->name,
+          $external,
+        ));
     }
 
-    return $this->renderSingleView(
-      array(
-        $this->renderChildren(),
-        $name,
-      ));
+    return array(
+      $icon,
+      $this->renderChildren(),
+      $name,
+    );
   }
 
 }

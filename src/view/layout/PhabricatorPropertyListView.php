@@ -59,6 +59,14 @@ final class PhabricatorPropertyListView extends AphrontView {
     return $this;
   }
 
+  public function addImageContent($content) {
+    $this->parts[] = array(
+      'type'    => 'image',
+      'content' => $content,
+    );
+    return $this;
+  }
+
   public function invokeWillRenderEvent() {
     if ($this->object && $this->getUser() && !$this->invokedWillRenderEvent) {
       $event = new PhabricatorEvent(
@@ -91,10 +99,11 @@ final class PhabricatorPropertyListView extends AphrontView {
           $items[] = $this->renderSectionPart($part);
           break;
         case 'text':
+        case 'image':
           $items[] = $this->renderTextPart($part);
           break;
         default:
-          throw new Exception("Unknown part type '{$type}'!");
+          throw new Exception(pht("Unknown part type '%s'!", $type));
       }
     }
 
@@ -103,7 +112,7 @@ final class PhabricatorPropertyListView extends AphrontView {
       array(
         'class' => 'phabricator-property-list-view',
       ),
-      $this->renderSingleView($items));
+      $items);
   }
 
   private function renderPropertyPart(array $part) {
@@ -124,7 +133,7 @@ final class PhabricatorPropertyListView extends AphrontView {
         array(
           'class' => 'phabricator-property-list-value',
         ),
-        $this->renderSingleView($value));
+        $value);
     }
 
     $list = phutil_tag(
@@ -132,12 +141,11 @@ final class PhabricatorPropertyListView extends AphrontView {
       array(
         'class' => 'phabricator-property-list-properties',
       ),
-      $this->renderSingleView($items));
+      $items);
 
     $shortcuts = null;
     if ($this->hasKeyboardShortcuts) {
-      $shortcuts =
-        id(new AphrontKeyboardShortcutsAvailableView())->render();
+      $shortcuts = new AphrontKeyboardShortcutsAvailableView();
     }
 
     return array(
@@ -166,10 +174,16 @@ final class PhabricatorPropertyListView extends AphrontView {
   }
 
   private function renderTextPart(array $part) {
+    $classes = array();
+    $classes[] = 'phabricator-property-list-text-content';
+    if ($part['type'] == 'image') {
+      $classes[] = 'phabricator-property-list-image-content';
+      $classes[] = 'phabricator-remarkup-dark';
+    }
     return phutil_tag(
       'div',
       array(
-        'class' => 'phabricator-property-list-text-content',
+        'class' => implode($classes, ' '),
       ),
       $part['content']);
   }

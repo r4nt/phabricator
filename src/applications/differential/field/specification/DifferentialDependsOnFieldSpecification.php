@@ -35,4 +35,23 @@ final class DifferentialDependsOnFieldSpecification
       PhabricatorEdgeConfig::TYPE_DREV_DEPENDS_ON_DREV);
   }
 
+  public function shouldAppearOnConduitView() {
+    return true;
+  }
+
+  public function getValueForConduit() {
+    return $this->getDependentRevisionPHIDs();
+  }
+
+  public function getKeyForConduit() {
+    return 'phabricator:depends-on';
+  }
+
+  public function getCommitMessageTips() {
+    return array(
+      'Use "Depends on D123" in your summary to mark '.
+      'a dependency between revisions.'
+      );
+  }
+
 }

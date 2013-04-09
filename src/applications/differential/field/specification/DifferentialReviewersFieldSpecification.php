@@ -91,7 +91,7 @@ final class DifferentialReviewersFieldSpecification
   }
 
   public function setValueFromParsedCommitMessage($value) {
-    $this->reviewers = nonempty($value, array());
+    $this->reviewers = array_unique(nonempty($value, array()));
     return $this;
   }
 
@@ -182,6 +182,7 @@ final class DifferentialReviewersFieldSpecification
     }
 
     $handles = id(new PhabricatorObjectHandleData($this->reviewers))
+      ->setViewer($this->getUser())
       ->loadHandles();
     $handles = array_select_keys(
       $handles,

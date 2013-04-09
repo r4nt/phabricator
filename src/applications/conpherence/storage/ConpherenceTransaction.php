@@ -21,6 +21,17 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
     return pht('conpherence');
   }
 
+  public function getNoEffectDescription() {
+    switch ($this->getTransactionType()) {
+      case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+        return pht(
+          'You can not add a participant who has already been added.');
+        break;
+    }
+
+    return parent::getNoEffectDescription();
+  }
+
   public function shouldHide() {
     $old = $this->getOldValue();
 
@@ -65,9 +76,28 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
         }
         return $title;
       case ConpherenceTransactionType::TYPE_FILES:
-        return pht(
-          '%s updated the conpherence files.',
-          $this->renderHandleLink($author_phid));
+        $add = array_diff($new, $old);
+        $rem = array_diff($old, $new);
+
+        if ($add && $rem) {
+          $title = pht(
+            '%s edited files(s), added %d and removed %d.',
+            $this->renderHandleLink($author_phid),
+            count($add),
+            count($rem));
+        } else if ($add) {
+          $title = pht(
+            '%s added %d files(s).',
+            $this->renderHandleLink($author_phid),
+            count($add));
+        } else {
+          $title = pht(
+            '%s removed %d file(s).',
+            $this->renderHandleLink($author_phid),
+            count($rem));
+        }
+        return $title;
+        break;
       case ConpherenceTransactionType::TYPE_PICTURE:
         return pht(
           '%s updated the conpherence image.',
@@ -92,7 +122,7 @@ final class ConpherenceTransaction extends PhabricatorApplicationTransaction {
             $this->renderHandleList($add));
         } else {
           $title = pht(
-            '%s removed %d partipant(s): %s.',
+            '%s removed %d participant(s): %s.',
             $this->renderHandleLink($author_phid),
             count($rem),
             $this->renderHandleList($rem));

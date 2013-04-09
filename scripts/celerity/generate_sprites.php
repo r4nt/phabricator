@@ -30,11 +30,12 @@ $sheets = array(
   'icon' => $generator->buildIconSheet(),
   'menu' => $generator->buildMenuSheet(),
   'apps' => $generator->buildAppsSheet(),
-  'conpher' => $generator->buildConpherenceSheet(),
+  'actions' => $generator->buildActionsSheet(),
+  'minicons' => $generator->buildMiniconsSheet(),
+  'conpherence' => $generator->buildConpherenceSheet(),
   'apps-large' => $generator->buildAppsLargeSheet(),
   'tokens' => $generator->buildTokenSheet(),
-// TODO: @chad: should we actually remove this?
-//  'apps-xlarge' => $generator->buildAppsXLargeSheet(),
+  'docs' => $generator->buildDocsSheet(),
   'gradient' => $generator->buildGradientSheet(),
 );
 

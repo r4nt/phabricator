@@ -18,10 +18,6 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
     return PhabricatorEnv::getDoclink('article/Phriction_User_Guide.html');
   }
 
-  public function isEnabled() {
-    return PhabricatorEnv::getEnvConfig('phriction.enabled');
-  }
-
   public function getTitleGlyph() {
     return "\xE2\x9A\xA1";
   }
@@ -43,6 +39,7 @@ final class PhabricatorApplicationPhriction extends PhabricatorApplication {
         'edit/(?:(?P<id>[1-9]\d*)/)?' => 'PhrictionEditController',
         'delete/(?P<id>[1-9]\d*)/'    => 'PhrictionDeleteController',
         'new/'                        => 'PhrictionNewController',
+        'move/(?:(?P<id>[1-9]\d*)/)?'      => 'PhrictionMoveController',
 
         'preview/' => 'PhrictionDocumentPreviewController',
         'diff/(?P<id>[1-9]\d*)/' => 'PhrictionDiffController',

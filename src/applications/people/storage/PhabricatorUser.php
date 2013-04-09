@@ -25,7 +25,11 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
   protected $isAdmin = 0;
   protected $isDisabled = 0;
 
+  private $profileImage = null;
+  private $profile = null;
+  private $status = null;
   private $preferences = null;
+  private $omnipotent = false;
 
   protected function readField($field) {
     switch ($field) {
@@ -408,6 +412,28 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
     return $uri->alter('email', $email->getAddress());
   }
 
+  public function attachUserProfile(PhabricatorUserProfile $profile) {
+    $this->profile = $profile;
+    return $this;
+  }
+
+  public function loadUserProfile() {
+    if ($this->profile) {
+      return $this->profile;
+    }
+
+    $profile_dao = new PhabricatorUserProfile();
+    $this->profile = $profile_dao->loadOneWhere('userPHID = %s',
+      $this->getPHID());
+
+    if (!$this->profile) {
+      $profile_dao->setUserPHID($this->getPHID());
+      $this->profile = $profile_dao;
+    }
+
+    return $this->profile;
+  }
+
   public function loadPrimaryEmailAddress() {
     $email = $this->loadPrimaryEmail();
     if (!$email) {
@@ -627,17 +653,30 @@ EOBODY;
     return celerity_get_resource_uri('/rsrc/image/avatar.png');
   }
 
+  public function attachProfileImageURI($uri) {
+    $this->profileImage = $uri;
+    return $this;
+  }
+
   public function loadProfileImageURI() {
+    if ($this->profileImage) {
+      return $this->profileImage;
+    }
+
     $src_phid = $this->getProfileImagePHID();
 
     if ($src_phid) {
       $file = id(new PhabricatorFile())->loadOneWhere('phid = %s', $src_phid);
       if ($file) {
-        return $file->getBestURI();
+        $this->profileImage = $file->getBestURI();
       }
     }
 
-    return self::getDefaultProfileImageURI();
+    if (!$this->profileImage) {
+      $this->profileImage = self::getDefaultProfileImageURI();
+    }
+
+    return $this->profileImage;
   }
 
   public function getFullName() {
@@ -658,6 +697,37 @@ EOBODY;
     return id(new PhabricatorUser())->loadOneWhere(
       'phid = %s',
       $email->getUserPHID());
+  }
+
+
+/* -(  Omnipotence  )-------------------------------------------------------- */
+
+
+  /**
+   * Returns true if this user is omnipotent. Omnipotent users bypass all policy
+   * checks.
+   *
+   * @return bool True if the user bypasses policy checks.
+   */
+  public function isOmnipotent() {
+    return $this->omnipotent;
+  }
+
+
+  /**
+   * Get an omnipotent user object for use in contexts where there is no acting
+   * user, notably daemons.
+   *
+   * @return PhabricatorUser An omnipotent user.
+   */
+  public static function getOmnipotentUser() {
+    static $user = null;
+    if (!$user) {
+      $user = new PhabricatorUser();
+      $user->omnipotent = true;
+      $user->makeEphemeral();
+    }
+    return $user;
   }
 
 }

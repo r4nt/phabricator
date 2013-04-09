@@ -53,6 +53,7 @@ final class PholioMockEditController extends PholioController {
     $v_view = $mock->getViewPolicy();
     $v_cc = PhabricatorSubscribersQuery::loadSubscribersForPHID(
       $mock->getPHID());
+    $files = array();
 
     if ($request->isFormPost()) {
       $xactions = array();
@@ -81,7 +82,6 @@ final class PholioMockEditController extends PholioController {
       if ($is_new) {
         // TODO: Make this transactional and allow edits?
 
-        $files = array();
 
         $file_phids = $request->getArr('file_phids');
         if ($file_phids) {
@@ -176,6 +176,17 @@ final class PholioMockEditController extends PholioController {
 
     $cc_tokens = mpull($handles, 'getFullName', 'getPHID');
 
+    $images_controller = '';
+    if ($is_new) {
+      $images_controller =
+          id(new AphrontFormDragAndDropUploadControl($request))
+            ->setValue($files)
+            ->setName('file_phids')
+            ->setLabel(pht('Images'))
+            ->setActivatedClass('aphront-textarea-drag-and-drop')
+            ->setError($e_images);
+    }
+
     $form = id(new AphrontFormView())
       ->setUser($user)
       ->setFlexible(true)
@@ -191,11 +202,7 @@ final class PholioMockEditController extends PholioController {
           ->setValue($v_desc)
           ->setLabel(pht('Description'))
           ->setUser($user))
-      ->appendChild(
-        id(new AphrontFormDragAndDropUploadControl($request))
-          ->setName('file_phids')
-          ->setLabel(pht('Images'))
-          ->setError($e_images))
+      ->appendChild($images_controller)
       ->appendChild(
         id(new AphrontFormTokenizerControl())
           ->setLabel(pht('CC'))
@@ -212,11 +219,14 @@ final class PholioMockEditController extends PholioController {
           ->setName('can_view'))
       ->appendChild($submit);
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
+    $crumbs = $this->buildApplicationCrumbs($this->buildSideNav());
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($this->getApplicationURI()));
 
     $content = array(
-      $header,
+      $crumbs,
       $error_view,
       $form,
     );

@@ -63,6 +63,9 @@ final class ManiphestTaskEditController extends ManiphestController {
       $parent_id = $request->getInt('parent');
       if ($parent_id) {
         $parent_task = id(new ManiphestTask())->load($parent_id);
+        if (!$template_id) {
+          $template_id = $parent_id;
+        }
       }
     }
 
@@ -70,10 +73,9 @@ final class ManiphestTaskEditController extends ManiphestController {
     $e_title = true;
 
     $extensions = ManiphestTaskExtensions::newExtensions();
-    $aux_fields = $extensions->getAuxiliaryFieldSpecifications();
+    $aux_fields = $extensions->loadFields($task, $user);
 
     if ($request->isFormPost()) {
-
       $changes = array();
 
       $new_title = $request->getStr('title');
@@ -112,18 +114,16 @@ final class ManiphestTaskEditController extends ManiphestController {
       foreach ($aux_fields as $aux_field) {
         $aux_field->setValueFromRequest($request);
 
-        if ($aux_field->isRequired() && !strlen($aux_field->getValue())) {
-          $errors[] = $aux_field->getLabel() . ' is required.';
-          $aux_field->setError('Required');
+        if ($aux_field->isRequired() && !$aux_field->getValue()) {
+          $errors[] = pht('%s is required.', $aux_field->getLabel());
+          $aux_field->setError(pht('Required'));
         }
 
-        if (strlen($aux_field->getValue())) {
-          try {
-            $aux_field->validate();
-          } catch (Exception $e) {
-            $errors[] = $e->getMessage();
-            $aux_field->setError('Invalid');
-          }
+        try {
+          $aux_field->validate();
+        } catch (Exception $e) {
+          $errors[] = $e->getMessage();
+          $aux_field->setError(pht('Invalid'));
         }
       }
 
@@ -185,7 +185,6 @@ final class ManiphestTaskEditController extends ManiphestController {
         }
 
         if ($aux_fields) {
-          $task->loadAndAttachAuxiliaryAttributes();
           foreach ($aux_fields as $aux_field) {
             $transaction = clone $template;
             $transaction->setTransactionType(
@@ -253,15 +252,6 @@ final class ManiphestTaskEditController extends ManiphestController {
           ->setURI($redirect_uri);
       }
     } else {
-      if ($aux_fields) {
-        $task->loadAndAttachAuxiliaryAttributes();
-        foreach ($aux_fields as $aux_field) {
-          $aux_key = $aux_field->getAuxiliaryKey();
-          $value = $task->getAuxiliaryAttribute($aux_key);
-          $aux_field->setValueFromStorage($value);
-        }
-      }
-
       if (!$task->getID()) {
         $task->setCCPHIDs(array(
           $user->getPHID(),
@@ -294,7 +284,8 @@ final class ManiphestTaskEditController extends ManiphestController {
     $phids = array_merge(
       array($task->getOwnerPHID()),
       $task->getCCPHIDs(),
-      $task->getProjectPHIDs());
+      $task->getProjectPHIDs(),
+      array_mergev(mpull($aux_fields, 'getRequiredHandlePHIDs')));
 
     if ($parent_task) {
       $phids[] = $parent_task->getPHID();
@@ -304,6 +295,10 @@ final class ManiphestTaskEditController extends ManiphestController {
     $phids = array_unique($phids);
 
     $handles = $this->loadViewerHandles($phids);
+
+    foreach ($aux_fields as $aux_field) {
+      $aux_field->setHandles($handles);
+    }
 
     $tvalues = mpull($handles, 'getFullName', 'getPHID');
 
@@ -435,17 +430,15 @@ final class ManiphestTaskEditController extends ManiphestController {
               pht('Create New Project')))
           ->setDatasource('/typeahead/common/projects/'));
 
-    if ($aux_fields) {
-      foreach ($aux_fields as $aux_field) {
-        if ($aux_field->isRequired() &&
-            !$aux_field->getError() &&
-            !$aux_field->getValue()) {
-          $aux_field->setError(true);
-        }
-
-        $aux_control = $aux_field->renderControl();
-        $form->appendChild($aux_control);
+    foreach ($aux_fields as $aux_field) {
+      if ($aux_field->isRequired() &&
+          !$aux_field->getError() &&
+          !$aux_field->getValue()) {
+        $aux_field->setError(true);
       }
+
+      $aux_control = $aux_field->renderControl();
+      $form->appendChild($aux_control);
     }
 
     require_celerity_resource('aphront-error-view-css');
@@ -511,18 +504,22 @@ final class ManiphestTaskEditController extends ManiphestController {
     $panel->setHeader($header_name);
     $panel->appendChild($form);
     $panel->setNoBackground();
+    $inst1 = pht('Description Preview');
+    $inst2 = pht('Loading preview...');
 
     $description_preview_panel = hsprintf(
       '<div class="aphront-panel-preview aphront-panel-preview-full">
         <div class="maniphest-description-preview-header">
-          Description Preview
+          %s
         </div>
         <div id="description-preview">
           <div class="aphront-panel-preview-loading-text">
-            Loading preview...
+            %s
           </div>
         </div>
-      </div>');
+      </div>',
+      $inst1,
+      $inst2);
 
     Javelin::initBehavior(
       'maniphest-description-preview',
@@ -538,8 +535,20 @@ final class ManiphestTaskEditController extends ManiphestController {
       $page_objects = array();
     }
 
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($header_name)
+        ->setHref($this->getApplicationURI('/task/create/')))
+      ->addAction(
+        id(new PhabricatorMenuItemView())
+          ->setHref($this->getApplicationURI('/task/create/'))
+          ->setName(pht('Create Task'))
+          ->setIcon('create'));
+
     return $this->buildApplicationPage(
       array(
+        $crumbs,
         $error_view,
         $panel,
         $description_preview_panel,
@@ -547,7 +556,7 @@ final class ManiphestTaskEditController extends ManiphestController {
       array(
         'title' => $header_name,
         'pageObjects' => $page_objects,
-        'device' => true
+        'device' => true,
       ));
   }
 }

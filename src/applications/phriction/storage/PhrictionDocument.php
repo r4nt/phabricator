@@ -4,7 +4,7 @@
  * @group phriction
  */
 final class PhrictionDocument extends PhrictionDAO
-  implements PhabricatorPolicyInterface {
+  implements PhabricatorPolicyInterface, PhabricatorSubscribableInterface {
 
   protected $id;
   protected $phid;
@@ -14,6 +14,7 @@ final class PhrictionDocument extends PhrictionDAO
   protected $status;
 
   private $contentObject;
+  private $project;
 
   public function getConfiguration() {
     return array(
@@ -42,6 +43,10 @@ final class PhrictionDocument extends PhrictionDAO
     if ($slug == '/') {
       return $prefix;
     } else {
+      // NOTE: The effect here is to escape non-latin characters, since modern
+      // browsers deal with escaped UTF8 characters in a reasonable way (showing
+      // the user a readable URI) but older programs may not.
+      $slug = phutil_escape_uri($slug);
       return $prefix.$slug;
     }
   }
@@ -64,6 +69,22 @@ final class PhrictionDocument extends PhrictionDAO
     return $this->contentObject;
   }
 
+  public function getProject() {
+    if ($this->project === null) {
+      throw new Exception("Call attachProject() before getProject().");
+    }
+    return $this->project;
+  }
+
+  public function attachProject(PhabricatorProject $project) {
+    $this->project = $project;
+    return $this;
+  }
+
+  public function hasProject() {
+    return (bool)$this->project;
+  }
+
   public static function isProjectSlug($slug) {
     $slug = PhabricatorSlug::normalize($slug);
     $prefix = 'projects/';
@@ -84,7 +105,6 @@ final class PhrictionDocument extends PhrictionDAO
     return $parts[1].'/';
   }
 
-  // TODO: Customize this? Copypasta from PhabricatorPaste.
   public function getCapabilities() {
     return array(
       PhabricatorPolicyCapability::CAN_VIEW,
@@ -93,10 +113,20 @@ final class PhrictionDocument extends PhrictionDAO
   }
 
   public function getPolicy($capability) {
+    if ($this->hasProject()) {
+      return $this->getProject()->getPolicy($capability);
+    }
     return PhabricatorPolicies::POLICY_USER;
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $user) {
+    if ($this->hasProject()) {
+      return $this->getProject()->hasAutomaticCapability($capability, $user);
+    }
+    return false;
+  }
+
+  public function isAutomaticallySubscribed($phid) {
     return false;
   }
 }

@@ -1,6 +1,6 @@
 <?php
 
-abstract class DifferentialMail {
+abstract class DifferentialMail extends PhabricatorMail {
 
   protected $to = array();
   protected $cc = array();
@@ -137,6 +137,7 @@ abstract class DifferentialMail {
 
         $reason_phids = ipull($raw, 'reasonPHID');
         $reason_handles = id(new PhabricatorObjectHandleData($reason_phids))
+          ->setViewer($this->getActor())
           ->loadHandles();
 
         $explicit_cc = array();
@@ -176,8 +177,12 @@ abstract class DifferentialMail {
     }
     $phids = array_keys($phids);
 
-    $handles = id(new PhabricatorObjectHandleData($phids))->loadHandles();
-    $objects = id(new PhabricatorObjectHandleData($phids))->loadObjects();
+    $handles = id(new PhabricatorObjectHandleData($phids))
+      ->setViewer($this->getActor())
+      ->loadHandles();
+    $objects = id(new PhabricatorObjectHandleData($phids))
+      ->setViewer($this->getActor())
+      ->loadObjects();
 
     $to_handles = array_select_keys($handles, $to_phids);
     $cc_handles = array_select_keys($handles, $cc_phids);
@@ -414,6 +419,7 @@ abstract class DifferentialMail {
 
     $body = array();
     foreach ($aux_fields as $field) {
+      $field->setUser($this->getActor());
       $field->setRevision($this->getRevision());
       // TODO: Introduce and use getRequiredHandlePHIDsForMail() and load all
       // handles in prepareBody().

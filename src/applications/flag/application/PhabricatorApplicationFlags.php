@@ -3,7 +3,7 @@
 final class PhabricatorApplicationFlags extends PhabricatorApplication {
 
   public function getShortDescription() {
-    return 'Reminders';
+    return pht('Reminders');
   }
 
   public function getBaseURI() {
@@ -28,6 +28,7 @@ final class PhabricatorApplicationFlags extends PhabricatorApplication {
     $status = array();
 
     $flags = id(new PhabricatorFlagQuery())
+      ->setViewer($user)
       ->withOwnerPHIDs(array($user->getPHID()))
       ->execute();
 

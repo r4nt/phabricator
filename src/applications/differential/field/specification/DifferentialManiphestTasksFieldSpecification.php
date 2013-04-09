@@ -7,7 +7,8 @@ final class DifferentialManiphestTasksFieldSpecification
   private $maniphestTasks = array();
 
   public function shouldAppearOnRevisionView() {
-    return PhabricatorEnv::getEnvConfig('maniphest.enabled');
+    return PhabricatorApplication::isClassInstalled(
+      'PhabricatorApplicationManiphest');
   }
 
   public function getRequiredHandlePHIDsForRevisionView() {
@@ -80,11 +81,11 @@ final class DifferentialManiphestTasksFieldSpecification
   }
 
   public function shouldAppearOnCommitMessageTemplate() {
-    return PhabricatorEnv::getEnvConfig('maniphest.enabled');
+    return false;
   }
 
   public function shouldAppearOnCommitMessage() {
-    return PhabricatorEnv::getEnvConfig('maniphest.enabled');
+    return $this->shouldAppearOnRevisionView();
   }
 
   public function getCommitMessageKey() {
@@ -92,7 +93,7 @@ final class DifferentialManiphestTasksFieldSpecification
   }
 
   public function setValueFromParsedCommitMessage($value) {
-    $this->maniphestTasks = nonempty($value, array());
+    $this->maniphestTasks = array_unique(nonempty($value, array()));
     return $this;
   }
 
@@ -115,7 +116,7 @@ final class DifferentialManiphestTasksFieldSpecification
     $names = array();
     foreach ($this->maniphestTasks as $phid) {
       $handle = $this->getHandle($phid);
-      $names[] = 'T'.$handle->getAlternateID();
+      $names[] = $handle->getName();
     }
     return implode(', ', $names);
   }
@@ -163,6 +164,7 @@ final class DifferentialManiphestTasksFieldSpecification
     }
 
     $handles = id(new PhabricatorObjectHandleData($this->maniphestTasks))
+      ->setViewer($this->getUser())
       ->loadHandles();
     $body = array();
     $body[] = 'MANIPHEST TASKS';
@@ -170,6 +172,13 @@ final class DifferentialManiphestTasksFieldSpecification
       $body[] = '  '.PhabricatorEnv::getProductionURI($handle->getURI());
     }
     return implode("\n", $body);
+  }
+
+  public function getCommitMessageTips() {
+    return array(
+      'Use "Fixes T123" in your summary to mark that the current '.
+      'revision completes a given task.'
+      );
   }
 
 }

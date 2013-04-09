@@ -34,9 +34,15 @@ final class PhabricatorApplicationPholio extends PhabricatorApplication {
     return true;
   }
 
+  public function getRemarkupRules() {
+    return array(
+      new PholioRemarkupRule(),
+    );
+  }
+
   public function getRoutes() {
     return array(
-      '/M(?P<id>[1-9]\d*)' => 'PholioMockViewController',
+      '/M(?P<id>[1-9]\d*)(?:/(?P<imageID>\d+)/)?' => 'PholioMockViewController',
       '/pholio/' => array(
         '' => 'PholioMockListController',
         'view/(?P<view>\w+)/'   => 'PholioMockListController',
@@ -48,7 +54,8 @@ final class PhabricatorApplicationPholio extends PhabricatorApplication {
           'save/' => 'PholioInlineSaveController',
           'delete/(?P<id>\d+)/' => 'PholioInlineDeleteController',
           'view/(?P<id>\d+)/' => 'PholioInlineViewController',
-          'edit/(?P<id>\d+)/' => 'PholioInlineEditController'
+          'edit/(?P<id>\d+)/' => 'PholioInlineEditController',
+          'thumb/(?P<imageid>\d+)/' => 'PholioInlineThumbController'
         ),
       ),
     );

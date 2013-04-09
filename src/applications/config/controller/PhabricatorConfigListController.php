@@ -38,6 +38,7 @@ final class PhabricatorConfigListController
       array(
         'title' => $title,
         'device' => true,
+        'dust' => true,
       ));
   }
 
@@ -45,7 +46,7 @@ final class PhabricatorConfigListController
     assert_instances_of($groups, 'PhabricatorApplicationConfigOptions');
 
     $list = new PhabricatorObjectItemListView();
-    $list->setStackable();
+    $list->setStackable(true);
     $groups = msort($groups, 'getName');
     foreach ($groups as $group) {
       $item = id(new PhabricatorObjectItemView())

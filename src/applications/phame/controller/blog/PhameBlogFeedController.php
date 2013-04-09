@@ -31,7 +31,6 @@ final class PhameBlogFeedController extends PhameController {
       ->setViewer($user)
       ->withBlogPHIDs(array($blog->getPHID()))
       ->withVisibility(PhamePost::VISIBILITY_PUBLISHED)
-      ->withPublishedAfter(strtotime('-1 month'))
       ->execute();
 
     $content = array();
@@ -70,7 +69,7 @@ final class PhameBlogFeedController extends PhameController {
         '/phame/post/view/'.$post->getID().'/'));
 
       $content[] = hsprintf(
-        '<author><name>%s</name>%s</author>',
+        '<author><name>%s</name></author>',
         $bloggers[$post->getBloggerPHID()]->getFullName());
 
       $content[] = phutil_tag(

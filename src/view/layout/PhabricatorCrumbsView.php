@@ -37,6 +37,13 @@ final class PhabricatorCrumbsView extends AphrontView {
             ),
             '');
         }
+        $name = phutil_tag(
+          'span',
+            array(
+              'class' => 'phabricator-crumbs-action-name'
+            ),
+          $action->getName()
+        );
         $actions[] = javelin_tag(
           'a',
           array(
@@ -46,7 +53,7 @@ final class PhabricatorCrumbsView extends AphrontView {
           ),
           array(
             $icon,
-            $action->getName(),
+            $name,
           ));
       }
 
@@ -55,7 +62,7 @@ final class PhabricatorCrumbsView extends AphrontView {
         array(
           'class' => 'phabricator-crumbs-actions',
         ),
-        $this->renderSingleView($actions));
+        $actions);
     }
 
     if ($this->crumbs) {
@@ -68,11 +75,10 @@ final class PhabricatorCrumbsView extends AphrontView {
         'class' => 'phabricator-crumbs-view '.
                    'sprite-gradient gradient-breadcrumbs',
       ),
-      $this->renderSingleView(
-        array(
-          $action_view,
-          $this->crumbs,
-        )));
+      array(
+        $action_view,
+        $this->crumbs,
+      ));
   }
 
 }

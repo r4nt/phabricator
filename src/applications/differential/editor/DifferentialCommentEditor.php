@@ -561,6 +561,7 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
 
     $phids = array($actor_phid);
     $handles = id(new PhabricatorObjectHandleData($phids))
+      ->setViewer($this->getActor())
       ->loadHandles();
     $actor_handle = $handles[$actor_phid];
 
@@ -575,6 +576,7 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
         $comment,
         $changesets,
         $inline_comments))
+        ->setActor($this->getActor())
         ->setExcludeMailRecipientPHIDs($this->getExcludeMailRecipientPHIDs())
         ->setToPHIDs(
           array_merge(

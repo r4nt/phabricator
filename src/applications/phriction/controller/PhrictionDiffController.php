@@ -48,9 +48,10 @@ final class PhrictionDiffController
     $text_l = $content_l->getContent();
     $text_r = $content_r->getContent();
 
-    $text_l = wordwrap($text_l, 80);
-    $text_r = wordwrap($text_r, 80);
-
+    $text_l = phutil_utf8_hard_wrap($text_l, 80);
+    $text_l = implode("\n", $text_l);
+    $text_r = phutil_utf8_hard_wrap($text_r, 80);
+    $text_r = implode("\n", $text_r);
 
     $engine = new PhabricatorDifferenceEngine();
     $changeset = $engine->generateChangesetFromFileContent($text_l, $text_r);
@@ -100,24 +101,28 @@ final class PhrictionDiffController
     $revert_l = $this->renderRevertButton($content_l, $current);
     $revert_r = $this->renderRevertButton($content_r, $current);
 
-    $crumbs = new AphrontCrumbsView();
-    $crumbs->setCrumbs(
-      array(
-        'Phriction',
-        phutil_tag(
-          'a',
-          array(
-            'href' => PhrictionDocument::getSlugURI($slug),
-          ),
-          $current->getTitle()),
-        phutil_tag(
-          'a',
-          array(
-            'href' => '/phriction/history/'.$document->getSlug().'/',
-          ),
-          'History'),
-        "Changes Between Version {$l} and Version {$r}",
-      ));
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumb_views = $this->renderBreadcrumbs($slug);
+    foreach ($crumb_views as $view) {
+      $crumbs->addCrumb($view);
+    }
+
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName(pht('History'))
+        ->setHref(PhrictionDocument::getSlugURI($slug, 'history')));
+
+
+    $title = "Version $l vs $r";
+
+    $header = id(new PhabricatorHeaderView())
+      ->setHeader($title);
+
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($request->getRequestURI()));
+
 
     $comparison_table = $this->renderComparisonTable(
       array(
@@ -167,9 +172,8 @@ final class PhrictionDiffController
     }
 
 
-
     $output = hsprintf(
-      '<div class="phriction-document-history-diff">'.
+      '<br><div class="phriction-document-history-diff">'.
         '%s<br /><br />%s'.
         '<table class="phriction-revert-table">'.
           '<tr><td>%s</td><td>%s</td>'.
@@ -182,14 +186,18 @@ final class PhrictionDiffController
       $revert_r,
       $output);
 
-    return $this->buildStandardPageResponse(
+
+    return $this->buildApplicationPage(
       array(
         $crumbs,
+        $header,
         $output,
       ),
       array(
         'title'     => pht('Document History'),
+        'device'    => true,
       ));
+
   }
 
   private function renderRevertButton(
@@ -199,9 +207,14 @@ final class PhrictionDiffController
     $document_id = $content->getDocumentID();
     $version = $content->getVersion();
 
-    if ($content->getChangeType() == PhrictionChangeType::CHANGE_DELETE) {
-      // Don't show an edit/revert button for changes which deleted the content
-      // since it's silly.
+    $hidden_statuses = array(
+      PhrictionChangeType::CHANGE_DELETE    => true, // Silly
+      PhrictionChangeType::CHANGE_MOVE_AWAY => true, // Plain silly
+      PhrictionChangeType::CHANGE_STUB      => true, // Utterly silly
+    );
+    if (isset($hidden_statuses[$content->getChangeType()])) {
+      // Don't show an edit/revert button for changes which deleted, moved or
+      // stubbed the content since it's silly.
       return null;
     }
 
@@ -233,37 +246,35 @@ final class PhrictionDiffController
     $phids = mpull($content, 'getAuthorPHID');
     $handles = $this->loadViewerHandles($phids);
 
-    $rows = array();
+    $list = new PhabricatorObjectItemListView();
+
+    $first = true;
     foreach ($content as $c) {
-      $rows[] = array(
-        phabricator_date($c->getDateCreated(), $user),
-        phabricator_time($c->getDateCreated(), $user),
-        'Version '.$c->getVersion(),
-        $handles[$c->getAuthorPHID()]->renderLink(),
-        $c->getDescription(),
-      );
+      $author = $handles[$c->getAuthorPHID()]->renderLink();
+      $item = id(new PhabricatorObjectItemView())
+        ->setHeader(pht('%s by %s, %s',
+          PhrictionChangeType::getChangeTypeLabel($c->getChangeType()),
+          $author,
+          pht('Version %s', $c->getVersion())))
+        ->addAttribute(pht('%s %s',
+          phabricator_date($c->getDateCreated(), $user),
+          phabricator_time($c->getDateCreated(), $user)));
+
+      if ($c->getDescription()) {
+        $item->addAttribute($c->getDescription());
+      }
+
+      if ($first == true) {
+        $item->setBarColor('green');
+        $first = false;
+      } else {
+        $item->setBarColor('red');
+      }
+
+      $list->addItem($item);
     }
 
-
-    $table = new AphrontTableView($rows);
-    $table->setHeaders(
-      array(
-        pht('Date'),
-        pht('Time'),
-        pht('Version'),
-        pht('Author'),
-        pht('Description'),
-      ));
-    $table->setColumnClasses(
-      array(
-        '',
-        'right',
-        'pri',
-        '',
-        'wide',
-      ));
-
-    return $table;
+    return $list;
   }
 
 }

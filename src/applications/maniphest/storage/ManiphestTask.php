@@ -7,7 +7,8 @@ final class ManiphestTask extends ManiphestDAO
   implements
     PhabricatorMarkupInterface,
     PhabricatorPolicyInterface,
-    PhabricatorTokenReceiverInterface {
+    PhabricatorTokenReceiverInterface,
+    PhrequentTrackableInterface {
 
   const MARKUP_FIELD_DESCRIPTION = 'markup:desc';
 
@@ -143,7 +144,6 @@ final class ManiphestTask extends ManiphestDAO
     return $this;
   }
 
-
   public function save() {
     if (!$this->mailKey) {
       $this->mailKey = Filesystem::readRandomCharacters(20);
@@ -202,15 +202,18 @@ final class ManiphestTask extends ManiphestDAO
       foreach ($update as $key => $val) {
         $sql[] = qsprintf(
           $conn_w,
-          '(%s, %s, %s)',
+          '(%s, %s, %s, %d, %d)',
           $this->getPHID(),
           $key,
-          $val);
+          $val,
+          time(),
+          time());
       }
       queryfx(
         $conn_w,
-        'INSERT INTO %T (taskPHID, name, value) VALUES %Q
-          ON DUPLICATE KEY UPDATE value = VALUES(value)',
+        'INSERT INTO %T (taskPHID, name, value, dateCreated, dateModified)
+          VALUES %Q ON DUPLICATE KEY
+          UPDATE value = VALUES(value), dateModified = VALUES(dateModified)',
         $table->getTableName(),
         implode(', ', $sql));
     }

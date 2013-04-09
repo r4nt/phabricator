@@ -17,6 +17,10 @@ final class PholioTransaction extends PhabricatorApplicationTransaction {
     return new PholioTransactionComment();
   }
 
+  public function getApplicationTransactionViewObject() {
+    return new PholioTransactionView();
+  }
+
   public function getApplicationObjectTypeName() {
     return pht('mock');
   }
@@ -33,13 +37,22 @@ final class PholioTransaction extends PhabricatorApplicationTransaction {
     return parent::shouldHide();
   }
 
+  public function getIcon() {
+    switch ($this->getTransactionType()) {
+      case PholioTransactionType::TYPE_INLINE:
+        return 'comment';
+    }
+    return parent::getIcon();
+  }
+
   public function getTitle() {
     $author_phid = $this->getAuthorPHID();
 
     $old = $this->getOldValue();
     $new = $this->getNewValue();
 
-    switch ($this->getTransactionType()) {
+    $type = $this->getTransactionType();
+    switch ($type) {
       case PholioTransactionType::TYPE_NAME:
         return pht(
           '%s renamed this mock from "%s" to "%s".',
@@ -49,18 +62,44 @@ final class PholioTransaction extends PhabricatorApplicationTransaction {
         break;
       case PholioTransactionType::TYPE_DESCRIPTION:
         return pht(
-          '%s updated the description of this mock. '.
-          'The old description was: %s',
-          $this->renderHandleLink($author_phid),
-          $old);
+          "%s updated the mock's description.",
+          $this->renderHandleLink($author_phid));
         break;
       case PholioTransactionType::TYPE_INLINE:
+        $count = 1;
+        foreach ($this->getTransactionGroup() as $xaction) {
+          if ($xaction->getTransactionType() == $type) {
+            $count++;
+          }
+        }
+
         return pht(
-          '%s added an inline comment.',
-          $this->renderHandleLink($author_phid));
+          '%s added %d inline comment(s).',
+          $this->renderHandleLink($author_phid),
+          $count);
     }
 
     return parent::getTitle();
+  }
+
+  public function hasChangeDetails() {
+    switch ($this->getTransactionType()) {
+      case PholioTransactionType::TYPE_DESCRIPTION:
+        return true;
+    }
+    return parent::hasChangeDetails();
+  }
+
+  public function renderChangeDetails(PhabricatorUser $viewer) {
+    $old = $this->getOldValue();
+    $new = $this->getNewValue();
+
+    $view = id(new PhabricatorApplicationTransactionTextDiffDetailView())
+      ->setUser($viewer)
+      ->setOldText($old)
+      ->setNewText($new);
+
+    return $view->render();
   }
 
 

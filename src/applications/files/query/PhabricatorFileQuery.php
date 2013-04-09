@@ -6,6 +6,7 @@ final class PhabricatorFileQuery
   private $ids;
   private $phids;
   private $authorPHIDs;
+  private $explicitUploads;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -22,7 +23,12 @@ final class PhabricatorFileQuery
     return $this;
   }
 
-  public function loadPage() {
+  public function showOnlyExplicitUploads($explicit_uploads) {
+    $this->explicitUploads = $explicit_uploads;
+    return $this;
+  }
+
+  protected function loadPage() {
     $table = new PhabricatorFile();
     $conn_r = $table->establishConnection('r');
 
@@ -61,6 +67,12 @@ final class PhabricatorFileQuery
         $conn_r,
         'authorPHID IN (%Ls)',
         $this->authorPHIDs);
+    }
+
+    if ($this->explicitUploads) {
+      $where[] = qsprintf(
+        $conn_r,
+        'isExplicitUpload = true');
     }
 
     return $this->formatWhereClause($where);

@@ -165,10 +165,10 @@ final class AphrontSideNavFilterView extends AphrontView {
   public function render() {
     if ($this->menu->getItems()) {
       if (!$this->baseURI) {
-        throw new Exception("Call setBaseURI() before render()!");
+        throw new Exception(pht("Call setBaseURI() before render()!"));
       }
       if ($this->selectedFilter === false) {
-        throw new Exception("Call selectFilter() before render()!");
+        throw new Exception(pht("Call selectFilter() before render()!"));
       }
     }
 
@@ -231,17 +231,16 @@ final class AphrontSideNavFilterView extends AphrontView {
         ),
         '');
 
-      $local_menu = $this->renderSingleView(
-        array(
-          $menu_background,
-          phutil_tag(
-            'div',
-            array(
-              'class' => 'phabricator-nav-local phabricator-side-menu',
-              'id'    => $local_id,
-            ),
-            self::renderSingleView($this->menu->setID($this->getMenuID()))),
-        ));
+      $local_menu = array(
+        $menu_background,
+        phutil_tag(
+          'div',
+          array(
+            'class' => 'phabricator-nav-local phabricator-side-menu',
+            'id'    => $local_id,
+          ),
+          $this->menu->setID($this->getMenuID())),
+      );
     }
 
     $crumbs = null;
@@ -294,7 +293,7 @@ final class AphrontSideNavFilterView extends AphrontView {
           ),
           array(
             $crumbs,
-            phutil_implode_html('', $this->renderChildren()),
+            $this->renderChildren(),
           ))
       ));
   }

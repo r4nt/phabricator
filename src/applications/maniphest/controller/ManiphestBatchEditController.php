@@ -60,13 +60,17 @@ final class ManiphestBatchEditController extends ManiphestController {
         'sources' => array(
           'project' => array(
             'src'           => '/typeahead/common/projects/',
-            'placeholder'   => 'Type a project name...',
+            'placeholder'   => pht('Type a project name...'),
           ),
           'owner' => array(
             'src'           => '/typeahead/common/searchowner/',
-            'placeholder'   => 'Type a user name...',
+            'placeholder'   => pht('Type a user name...'),
             'limit'         => 1,
           ),
+          'cc'    => array(
+            'src'           => '/typeahead/common/mailable/',
+            'placeholder'   => pht('Type a user name...'),
+          )
         ),
         'input' => 'batch-form-actions',
         'priorityMap' => ManiphestTaskPriority::getTaskPriorityMap(),
@@ -96,7 +100,8 @@ final class ManiphestBatchEditController extends ManiphestController {
           'name' => 'actions',
           'id'   => 'batch-form-actions',
         )));
-    $form->appendChild(phutil_tag('p', array(), 'These tasks will be edited:'));
+    $form->appendChild(
+      phutil_tag('p', array(), pht('These tasks will be edited:')));
     $form->appendChild($list);
     $form->appendChild(
       id(new AphrontFormInsetView())
@@ -109,7 +114,7 @@ final class ManiphestBatchEditController extends ManiphestController {
               'sigil' => 'add-action',
               'mustcapture' => true,
             ),
-            'Add Another Action'))
+            pht('Add Another Action')))
         ->setContent(javelin_tag(
           'table',
           array(
@@ -119,7 +124,7 @@ final class ManiphestBatchEditController extends ManiphestController {
           '')))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue('Update Tasks')
+          ->setValue(pht('Update Tasks'))
           ->addCancelButton('/maniphest/', 'Done'));
 
     $panel->appendChild($form);
@@ -128,7 +133,7 @@ final class ManiphestBatchEditController extends ManiphestController {
     return $this->buildStandardPageResponse(
       $panel,
       array(
-        'title' => 'Batch Editor',
+        'title' => pht('Batch Editor'),
       ));
   }
 
@@ -141,11 +146,15 @@ final class ManiphestBatchEditController extends ManiphestController {
       'priority'        => ManiphestTransactionType::TYPE_PRIORITY,
       'add_project'     => ManiphestTransactionType::TYPE_PROJECTS,
       'remove_project'  => ManiphestTransactionType::TYPE_PROJECTS,
+      'add_ccs'         => ManiphestTransactionType::TYPE_CCS,
+      'remove_ccs'      => ManiphestTransactionType::TYPE_CCS,
     );
 
     $edge_edit_types = array(
       'add_project'    => true,
       'remove_project' => true,
+      'add_ccs'        => true,
+      'remove_ccs'     => true,
     );
 
     $xactions = array();
@@ -181,6 +190,9 @@ final class ManiphestBatchEditController extends ManiphestController {
           case ManiphestTransactionType::TYPE_PROJECTS:
             $current = $task->getProjectPHIDs();
             break;
+          case ManiphestTransactionType::TYPE_CCS:
+            $current = $task->getCCPHIDs();
+            break;
         }
       }
 
@@ -209,6 +221,11 @@ final class ManiphestBatchEditController extends ManiphestController {
             continue 2;
           }
           break;
+        case ManiphestTransactionType::TYPE_CCS:
+          if (empty($value)) {
+            continue 2;
+          }
+          break;
       }
 
       // If the edit doesn't change anything, go to the next action. This
@@ -232,7 +249,12 @@ final class ManiphestBatchEditController extends ManiphestController {
           }
           break;
         case ManiphestTransactionType::TYPE_PROJECTS:
-          $is_remove = ($action['action'] == 'remove_project');
+        case ManiphestTransactionType::TYPE_CCS:
+          $remove_actions = array(
+            'remove_project' => true,
+            'remove_ccs'    => true,
+          );
+          $is_remove = isset($remove_actions[$action['action']]);
 
           $current = array_fill_keys($current, true);
           $value   = array_fill_keys($value, true);

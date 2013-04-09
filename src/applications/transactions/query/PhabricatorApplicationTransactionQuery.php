@@ -45,7 +45,7 @@ abstract class PhabricatorApplicationTransactionQuery
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = $this->getTemplateApplicationTransaction();
     $conn_r = $table->establishConnection('r');
 
@@ -136,6 +136,8 @@ abstract class PhabricatorApplicationTransactionQuery
     foreach ($this->buildMoreWhereClauses($conn_r) as $clause) {
       $where[] = $clause;
     }
+
+    $where[] = $this->buildPagingClause($conn_r);
 
     return $this->formatWhereClause($where);
   }

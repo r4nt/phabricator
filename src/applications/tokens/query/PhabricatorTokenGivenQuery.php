@@ -22,7 +22,7 @@ final class PhabricatorTokenGivenQuery
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = new PhabricatorTokenGiven();
     $conn_r = $table->establishConnection('r');
 
@@ -60,6 +60,8 @@ final class PhabricatorTokenGivenQuery
         'tokenPHID IN (%Ls)',
         $this->tokenPHIDs);
     }
+
+    $where[] = $this->buildPagingClause($conn_r);
 
     return $this->formatWhereClause($where);
   }

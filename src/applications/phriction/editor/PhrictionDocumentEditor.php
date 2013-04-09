@@ -14,6 +14,9 @@ final class PhrictionDocumentEditor extends PhabricatorEditor {
   private $newContent;
   private $description;
 
+  // For the Feed Story when moving documents
+  private $fromDocumentPHID;
+
   private function __construct() {
     // <restricted>
   }
@@ -66,21 +69,45 @@ final class PhrictionDocumentEditor extends PhabricatorEditor {
     return $this->document;
   }
 
-  public function delete() {
-    $actor = $this->requireActor();
+  public function moveAway($new_doc_id) {
+    return $this->execute(
+      PhrictionChangeType::CHANGE_MOVE_AWAY, true, $new_doc_id);
+  }
 
-    // TODO: Should we do anything about deleting an already-deleted document?
-    // We currently allow it.
+  public function moveHere($old_doc_id, $old_doc_phid) {
+    $this->fromDocumentPHID = $old_doc_phid;
+    return $this->execute(
+      PhrictionChangeType::CHANGE_MOVE_HERE, false, $old_doc_id);
+  }
+
+  private function execute(
+    $change_type, $del_new_content = true, $doc_ref = null) {
+
+    $actor = $this->requireActor();
 
     $document = $this->document;
     $content  = $this->content;
 
     $new_content = $this->buildContentTemplate($document, $content);
+    $new_content->setChangeType($change_type);
 
-    $new_content->setChangeType(PhrictionChangeType::CHANGE_DELETE);
-    $new_content->setContent('');
+    if ($del_new_content) {
+      $new_content->setContent('');
+    }
+
+    if ($doc_ref) {
+      $new_content->setChangeRef($doc_ref);
+    }
 
     return $this->updateDocument($document, $content, $new_content);
+  }
+
+  public function delete() {
+    return $this->execute(PhrictionChangeType::CHANGE_DELETE, true);
+  }
+
+  private function stub() {
+    return $this->execute(PhrictionChangeType::CHANGE_STUB, true);
   }
 
   public function save() {
@@ -152,6 +179,18 @@ final class PhrictionDocumentEditor extends PhabricatorEditor {
             "You can not delete a document which doesn't exist yet!");
         }
         break;
+      case PhrictionChangeType::CHANGE_STUB:
+        $doc_status = PhrictionDocumentStatus::STATUS_STUB;
+        $feed_action = null;
+        break;
+      case PhrictionChangeType::CHANGE_MOVE_AWAY:
+        $doc_status = PhrictionDocumentStatus::STATUS_MOVED;
+        $feed_action = null;
+        break;
+      case PhrictionChangeType::CHANGE_MOVE_HERE:
+        $doc_status = PhrictionDocumentStatus::STATUS_EXISTS;
+        $feed_action = PhrictionActionConstants::ACTION_MOVE_HERE;
+        break;
       default:
         throw new Exception(
           "Unsupported content change type '{$change_type}'!");
@@ -176,6 +215,28 @@ final class PhrictionDocumentEditor extends PhabricatorEditor {
     id(new PhabricatorSearchIndexer())
       ->indexDocumentByPHID($document->getPHID());
 
+    // Stub out empty parent documents if they don't exist
+    $ancestral_slugs = PhabricatorSlug::getAncestry($document->getSlug());
+    if ($ancestral_slugs) {
+      $ancestors = id(new PhrictionDocument())->loadAllWhere(
+        'slug IN (%Ls)',
+        $ancestral_slugs);
+      $ancestors = mpull($ancestors, null, 'getSlug');
+      foreach ($ancestral_slugs as $slug) {
+        // We check for change type to prevent near-infinite recursion
+        if (!isset($ancestors[$slug]) &&
+          $new_content->getChangeType() != PhrictionChangeType::CHANGE_STUB) {
+
+          id(PhrictionDocumentEditor::newForSlug($slug))
+            ->setActor($this->getActor())
+            ->setTitle(PhabricatorSlug::getDefaultTitle($slug))
+            ->setContent('')
+            ->setDescription(pht('Empty Parent Document'))
+            ->stub();
+        }
+      }
+    }
+
     $project_phid = null;
     $slug = $document->getSlug();
     if (PhrictionDocument::isProjectSlug($slug)) {
@@ -196,21 +257,106 @@ final class PhrictionDocumentEditor extends PhabricatorEditor {
       $related_phids[] = $project_phid;
     }
 
-    id(new PhabricatorFeedStoryPublisher())
-      ->setRelatedPHIDs($related_phids)
-      ->setStoryAuthorPHID($this->getActor()->getPHID())
-      ->setStoryTime(time())
-      ->setStoryType(PhabricatorFeedStoryTypeConstants::STORY_PHRICTION)
-      ->setStoryData(
-        array(
-          'phid'    => $document->getPHID(),
-          'action'  => $feed_action,
-          'content' => phutil_utf8_shorten($new_content->getContent(), 140),
-          'project' => $project_phid,
-        ))
-      ->publish();
+    if ($this->fromDocumentPHID) {
+      $related_phids[] = $this->fromDocumentPHID;
+    }
+
+    if ($feed_action) {
+      id(new PhabricatorFeedStoryPublisher())
+        ->setRelatedPHIDs($related_phids)
+        ->setStoryAuthorPHID($this->getActor()->getPHID())
+        ->setStoryTime(time())
+        ->setStoryType(PhabricatorFeedStoryTypeConstants::STORY_PHRICTION)
+        ->setStoryData(
+          array(
+            'phid'      => $document->getPHID(),
+            'action'    => $feed_action,
+            'content'   => phutil_utf8_shorten($new_content->getContent(), 140),
+            'project'   => $project_phid,
+            'movedFromPHID' => $this->fromDocumentPHID,
+          ))
+        ->publish();
+    }
+
+    // TODO: Migrate to ApplicationTransactions fast, so we get rid of this code
+    $subscribers = PhabricatorSubscribersQuery::loadSubscribersForPHID(
+      $document->getPHID());
+    $this->sendMailToSubscribers($subscribers, $content);
 
     return $this;
+  }
+
+  private function sendMailToSubscribers(array $subscribers, $old_content) {
+    if (!$subscribers) {
+      return;
+    }
+
+    $author_phid = $this->getActor()->getPHID();
+    $document = $this->document;
+    $content = $document->getContent();
+    $slug_uri = PhrictionDocument::getSlugURI($document->getSlug());
+    $diff_uri = new PhutilURI('/phriction/diff/'.$document->getID().'/');
+    $prod_uri = PhabricatorEnv::getProductionURI('');
+
+    $vs_head = $diff_uri
+      ->alter('l', $old_content->getVersion())
+      ->alter('r', $content->getVersion());
+
+    $old_title = $old_content->getTitle();
+    $title = $content->getTitle();
+
+    // TODO: Currently, this produces something like
+    // Phriction Document Xyz was Edit
+    // I'm too lazy to build my own action string everywhere
+    // Plus, it does not have pht() anyway
+    $action = PhrictionChangeType::getChangeTypeLabel(
+      $content->getChangeType());
+    $name = pht("Phriction Document %s was %s", $title, $action);
+
+    $body = array($name);
+    // Content may have changed, you never know
+    if ($content->getChangeType() == PhrictionChangeType::CHANGE_EDIT) {
+
+      if ($old_title != $title) {
+        $body[] = pht('Title was changed from "%s" to "%s"',
+          $old_title, $title);
+      }
+
+      $body[] = pht("Link to new version:\n%s",
+        $prod_uri.$slug_uri.'?v='.$content->getVersion());
+
+      $body[] = pht("Link to diff:\n%s", $prod_uri.$vs_head);
+    } else if ($content->getChangeType() ==
+      PhrictionChangeType::CHANGE_MOVE_AWAY) {
+
+      $target_document = id(new PhrictionDocument())
+        ->load($content->getChangeRef());
+      $slug_uri = PhrictionDocument::getSlugURI($target_document->getSlug());
+      $body[] = pht("Link to destination document:\n%s", $prod_uri.$slug_uri);
+    }
+
+    $body = implode("\n\n", $body);
+
+    $subject_prefix = $this->getMailSubjectPrefix();
+
+    $mail = new PhabricatorMetaMTAMail();
+    $mail->setSubject($name)
+      ->setSubjectPrefix($subject_prefix)
+      ->setVarySubjectPrefix('['.$action.']')
+      ->addHeader('Thread-Topic', $name)
+      ->setFrom($author_phid)
+      ->addTos($subscribers)
+      ->setBody($body)
+      ->setRelatedPHID($document->getPHID())
+      ->setIsBulk(true);
+
+    $mail->saveAndSend();
+  }
+
+  /* --( For less copy-pasting when switching to ApplicationTransactions )--- */
+
+  protected function getMailSubjectPrefix() {
+    return PhabricatorEnv::getEnvConfig('metamta.phriction.subject-prefix');
   }
 
 }

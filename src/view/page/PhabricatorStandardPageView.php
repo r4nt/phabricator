@@ -12,6 +12,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
   private $glyph;
   private $menuContent;
   private $showChrome = true;
+  private $layDownSomeDust = false;
   private $disableConsole;
   private $searchDefaultScope;
   private $pageObjects = array();
@@ -54,8 +55,17 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     return $this;
   }
 
+  public function setDust($is_dusty) {
+    $this->layDownSomeDust = $is_dusty;
+    return $this;
+  }
+
   public function getShowChrome() {
     return $this->showChrome;
+  }
+
+  public function getDust() {
+    return $this->layDownSomeDust;
   }
 
   public function setSearchDefaultScope($search_default_scope) {
@@ -95,7 +105,8 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
     if (!$this->getRequest()) {
       throw new Exception(
-        "You must set the Request to render a PhabricatorStandardPageView.");
+        pht(
+          "You must set the Request to render a PhabricatorStandardPageView."));
     }
 
     $console = $this->getConsole();
@@ -103,6 +114,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     require_celerity_resource('phabricator-core-css');
     require_celerity_resource('phabricator-zindex-css');
     require_celerity_resource('phabricator-core-buttons-css');
+    require_celerity_resource('spacing-css');
     require_celerity_resource('sprite-gradient-css');
     require_celerity_resource('phabricator-standard-page-view');
 
@@ -142,6 +154,8 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     Javelin::initBehavior('aphront-form-disable-on-submit');
     Javelin::initBehavior('toggle-class', array());
     Javelin::initBehavior('konami', array());
+    Javelin::initBehavior('history-install');
+    Javelin::initBehavior('phabricator-gesture');
 
     $current_token = null;
     if ($user) {
@@ -197,24 +211,29 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
   protected function getHead() {
     $monospaced = PhabricatorEnv::getEnvConfig('style.monospace');
+    $monospaced_win = PhabricatorEnv::getEnvConfig('style.monospace.windows');
 
     $request = $this->getRequest();
     if ($request) {
       $user = $request->getUser();
       if ($user) {
-        $monospaced = nonempty(
-          $user->loadPreferences()->getPreference(
-            PhabricatorUserPreferences::PREFERENCE_MONOSPACED),
-          $monospaced);
+        $pref = $user->loadPreferences()->getPreference(
+            PhabricatorUserPreferences::PREFERENCE_MONOSPACED);
+        $monospaced = nonempty($pref, $monospaced);
+        $monospaced_win = nonempty($pref, $monospaced_win);
       }
     }
 
     $response = CelerityAPI::getStaticResourceResponse();
 
     return hsprintf(
-      '%s<style type="text/css">.PhabricatorMonospaced { font: %s; }</style>%s',
+      '%s<style type="text/css">'.
+      '.PhabricatorMonospaced { font: %s; } '.
+      '.platform-windows .PhabricatorMonospaced { font: %s; }'.
+      '</style>%s',
       parent::getHead(),
       phutil_safe_html($monospaced),
+      phutil_safe_html($monospaced_win),
       $response->renderSingleResource('javelin-magical-init'));
   }
 
@@ -365,6 +384,10 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       $classes[] = 'phabricator-chromeless-page';
     }
 
+    if ($this->getDust()) {
+      $classes[] = 'make-me-sneeze';
+    }
+
     $agent = AphrontRequest::getHTTPHeader('User-Agent');
 
     // Try to guess the device resolution based on UA strings to avoid a flash
@@ -377,6 +400,14 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     }
 
     $classes[] = $device_guess;
+
+    if (preg_match('@Windows@', $agent)) {
+      $classes[] = 'platform-windows';
+    } else if (preg_match('@Macintosh@', $agent)) {
+      $classes[] = 'platform-mac';
+    } else if (preg_match('@X11@', $agent)) {
+      $classes[] = 'platform-linux';
+    }
 
     return implode(' ', $classes);
   }

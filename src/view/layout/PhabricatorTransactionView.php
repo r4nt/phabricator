@@ -49,7 +49,7 @@ final class PhabricatorTransactionView extends AphrontView {
 
   public function render() {
     if (!$this->user) {
-      throw new Exception("Call setUser() before render()!");
+      throw new Exception(pht("Call setUser() before render()!"));
     }
 
     require_celerity_resource('phabricator-transaction-view-css');
@@ -124,7 +124,7 @@ final class PhabricatorTransactionView extends AphrontView {
   }
 
   private function renderTransactionActions() {
-    return phutil_implode_html('', $this->actions);
+    return $this->actions;
   }
 
   private function renderTransactionStyle() {
@@ -143,7 +143,7 @@ final class PhabricatorTransactionView extends AphrontView {
     return phutil_tag(
       'div',
       array('class' => 'phabricator-transaction-content'),
-      $this->renderSingleView($content));
+      $content);
   }
 
 }

@@ -8,16 +8,17 @@
  */
 final class ManiphestTaskQuery extends PhabricatorQuery {
 
-  private $taskIDs          = array();
-  private $taskPHIDs        = array();
-  private $authorPHIDs      = array();
-  private $ownerPHIDs       = array();
-  private $includeUnowned   = null;
-  private $projectPHIDs     = array();
-  private $xprojectPHIDs    = array();
-  private $subscriberPHIDs  = array();
-  private $anyProjectPHIDs  = array();
-  private $includeNoProject = null;
+  private $taskIDs             = array();
+  private $taskPHIDs           = array();
+  private $authorPHIDs         = array();
+  private $ownerPHIDs          = array();
+  private $includeUnowned      = null;
+  private $projectPHIDs        = array();
+  private $xprojectPHIDs       = array();
+  private $subscriberPHIDs     = array();
+  private $anyProjectPHIDs     = array();
+  private $anyUserProjectPHIDs = array();
+  private $includeNoProject    = null;
 
   private $fullTextSearch   = '';
 
@@ -58,7 +59,16 @@ final class ManiphestTaskQuery extends PhabricatorQuery {
   private $rowCount         = null;
 
   private $groupByProjectResults = null; // See comment at bottom for details
+  private $viewer;
 
+  public function setViewer(PhabricatorUser $viewer) {
+    $this->viewer = $viewer;
+    return $this;
+  }
+
+  public function getViewer() {
+    return $this->viewer;
+  }
 
   public function withAuthors(array $authors) {
     $this->authorPHIDs = $authors;
@@ -174,6 +184,11 @@ final class ManiphestTaskQuery extends PhabricatorQuery {
     return $this;
   }
 
+  public function withAnyUserProjects(array $users) {
+    $this->anyUserProjectPHIDs = $users;
+    return $this;
+  }
+
   public function execute() {
 
     $task_dao = new ManiphestTask();
@@ -195,6 +210,7 @@ final class ManiphestTaskQuery extends PhabricatorQuery {
     $where[] = $this->buildSubscriberWhereClause($conn);
     $where[] = $this->buildProjectWhereClause($conn);
     $where[] = $this->buildAnyProjectWhereClause($conn);
+    $where[] = $this->buildAnyUserProjectWhereClause($conn);
     $where[] = $this->buildXProjectWhereClause($conn);
     $where[] = $this->buildFullTextWhereClause($conn);
 
@@ -466,8 +482,26 @@ final class ManiphestTaskQuery extends PhabricatorQuery {
       $this->anyProjectPHIDs);
   }
 
+  private function buildAnyUserProjectWhereClause(
+    AphrontDatabaseConnection $conn) {
+    if (!$this->anyUserProjectPHIDs) {
+      return null;
+    }
+
+    $projects = id(new PhabricatorProjectQuery())
+      ->setViewer($this->viewer)
+      ->withMemberPHIDs($this->anyUserProjectPHIDs)
+      ->execute();
+    $any_user_project_phids = mpull($projects, 'getPHID');
+
+    return qsprintf(
+      $conn,
+      'anyproject.projectPHID IN (%Ls)',
+      $any_user_project_phids);
+  }
+
   private function buildAnyProjectJoinClause(AphrontDatabaseConnection $conn) {
-    if (!$this->anyProjectPHIDs) {
+    if (!$this->anyProjectPHIDs && !$this->anyUserProjectPHIDs) {
       return null;
     }
 
@@ -602,7 +636,11 @@ final class ManiphestTaskQuery extends PhabricatorQuery {
       }
     }
 
+    // TODO: This should use the query's viewer once this class extends
+    // PhabricatorPolicyQuery (T603).
+
     $handles = id(new PhabricatorObjectHandleData(array_keys($project_phids)))
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
       ->loadHandles();
 
     $max = 1;

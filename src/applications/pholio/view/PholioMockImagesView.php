@@ -3,6 +3,25 @@
 final class PholioMockImagesView extends AphrontView {
 
   private $mock;
+  private $imageID;
+  private $requestURI;
+
+  public function setRequestURI(PhutilURI $request_uri) {
+    $this->requestURI = $request_uri;
+    return $this;
+  }
+  public function getRequestURI() {
+    return $this->requestURI;
+  }
+
+  public function setImageID($image_id) {
+    $this->imageID = $image_id;
+    return $this;
+  }
+
+  public function getImageID() {
+    return $this->imageID;
+  }
 
   public function setMock(PholioMock $mock) {
     $this->mock = $mock;
@@ -22,28 +41,51 @@ final class PholioMockImagesView extends AphrontView {
     $panel_id = celerity_generate_unique_node_id();
     $viewport_id = celerity_generate_unique_node_id();
 
+    $ids = mpull($mock->getImages(), 'getID');
+    if ($this->imageID && isset($ids[$this->imageID])) {
+      $selected_id = $this->imageID;
+    } else {
+      $selected_id = head_key($ids);
+    }
+
     foreach ($mock->getImages() as $image) {
+      $file = $image->getFile();
+      $metadata = $file->getMetadata();
+      $x = idx($metadata, PhabricatorFile::METADATA_IMAGE_WIDTH);
+      $y = idx($metadata, PhabricatorFile::METADATA_IMAGE_HEIGHT);
+
       $images[] = array(
         'id'      => $image->getID(),
         'fullURI' => $image->getFile()->getBestURI(),
+        'pageURI' => '/M'.$mock->getID().'/'.$image->getID().'/',
+        'width'   => $x,
+        'height'  => $y,
+        'title'   => $file->getName(),
+        'desc'    => 'Lorem ipsum dolor sit amet: there is no way to set any '.
+                     'descriptive text yet; were there, it would appear here.',
       );
     }
 
+    $login_uri = id(new PhutilURI('/login/'))
+      ->setQueryParam('next', (string) $this->getRequestURI());
     $config = array(
       'mockID' => $mock->getID(),
       'panelID' => $panel_id,
       'viewportID' => $viewport_id,
       'images' => $images,
-
+      'selectedID' => $selected_id,
+      'loggedIn' => $this->getUser()->isLoggedIn(),
+      'logInLink' => (string) $login_uri
     );
     Javelin::initBehavior('pholio-mock-view', $config);
 
     $mockview = '';
 
-    $mock_wrapper = phutil_tag(
+    $mock_wrapper = javelin_tag(
       'div',
       array(
         'id' => $viewport_id,
+        'sigil' => 'mock-viewport',
         'class' => 'pholio-mock-image-viewport'
       ),
       '');
@@ -52,7 +94,7 @@ final class PholioMockImagesView extends AphrontView {
       'div',
       array(
         'id' => $panel_id,
-        'sigil' => 'mock-panel',
+        'sigil' => 'mock-panel touchable',
         'class' => 'pholio-mock-image-panel',
       ),
       $mock_wrapper);
@@ -66,15 +108,8 @@ final class PholioMockImagesView extends AphrontView {
       ),
       '');
 
-    $mockview[] = phutil_tag(
-      'div',
-        array(
-          'class' => 'pholio-mock-image-container',
-          'id' => 'pholio-mock-image-container'
-        ),
-      array($mock_wrapper, $inline_comments_holder));
-
-    if (count($mock->getImages()) > 1) {
+    $carousel_holder = '';
+    if (count($mock->getImages()) > 0) {
       $thumbnails = array();
       foreach ($mock->getImages() as $image) {
         $thumbfile = $image->getFile();
@@ -94,10 +129,11 @@ final class PholioMockImagesView extends AphrontView {
         ));
 
         $thumbnails[] = javelin_tag(
-          'div',
+          'a',
           array(
             'sigil' => 'mock-thumbnail',
             'class' => 'pholio-mock-carousel-thumb-item',
+            'href' => '/M'.$mock->getID().'/'.$image->getID().'/',
             'meta' => array(
               'imageID' => $image->getID(),
             ),
@@ -105,14 +141,23 @@ final class PholioMockImagesView extends AphrontView {
           $tag);
       }
 
-      $mockview[] = phutil_tag(
+      $carousel_holder = phutil_tag(
         'div',
         array(
+          'id' => 'pholio-mock-carousel',
           'class' => 'pholio-mock-carousel',
         ),
         $thumbnails);
     }
 
-    return $this->renderSingleView($mockview);
+    $mockview[] = phutil_tag(
+      'div',
+        array(
+          'class' => 'pholio-mock-image-container',
+          'id' => 'pholio-mock-image-container'
+        ),
+      array($mock_wrapper, $carousel_holder, $inline_comments_holder));
+
+    return $mockview;
   }
 }

@@ -30,7 +30,8 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
 
   public function getEventListeners() {
     return array(
-      new DifferentialPeopleMenuEventListener()
+      new DifferentialPeopleMenuEventListener(),
+      new DifferentialHovercardEventListener(),
     );
   }
 
@@ -71,6 +72,12 @@ final class PhabricatorApplicationDifferential extends PhabricatorApplication {
 
   public function getApplicationOrder() {
     return 0.100;
+  }
+
+  public function getRemarkupRules() {
+    return array(
+      new DifferentialRemarkupRule(),
+    );
   }
 
   public function loadStatus(PhabricatorUser $user) {

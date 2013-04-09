@@ -29,6 +29,14 @@ p, blockquote, th, td, button {
   border: 0;
 }
 
+body.make-me-sneeze {
+  background: url('/rsrc/image/texture/dust_background.jpg');
+}
+
+.make-me-sneeze .phabricator-standard-page {
+  background: transparent;
+}
+
 table {
   border-collapse: collapse;
   border-spacing: 0;
@@ -91,15 +99,8 @@ h2 {
 a {
   -moz-outline-style: none;
   text-decoration: none;
+  color: #18559D;
   cursor: pointer;
-}
-
-a:visited {
-  color: #18559D;
-}
-
-a:link {
-  color: #18559D;
 }
 
 a:hover {
@@ -122,4 +123,16 @@ img {
 
   border: 1px solid #444444;
   border-radius: 8px;
+}
+
+.grouped:after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+hr {
+  height: 1px;
+  background: #bbbbbb;
+  border: none;
 }

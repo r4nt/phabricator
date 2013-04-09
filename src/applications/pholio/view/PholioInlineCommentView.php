@@ -2,10 +2,19 @@
 
 final class PholioInlineCommentView extends AphrontView {
 
+  private $engine;
+  private $handle;
   private $inlineComment;
 
-  private $handle;
-  private $editable;
+  public function setEngine(PhabricatorMarkupEngine $engine) {
+    $this->engine = $engine;
+    return $this;
+  }
+
+  public function setHandle(PhabricatorObjectHandle $handle) {
+     $this->handle = $handle;
+     return $this;
+  }
 
   public function setInlineComment(PholioTransactionComment $inline_comment) {
     if ($inline_comment->getImageID() === null) {
@@ -16,32 +25,48 @@ final class PholioInlineCommentView extends AphrontView {
     return $this;
   }
 
-  public function setHandle(PhabricatorObjectHandle $handle) {
-    $this->handle = $handle;
-    return $this;
-  }
-
-  public function setEditable($editable) {
-    $this->editable = $editable;
-    return $this;
-  }
-
   public function render() {
     if (!$this->inlineComment) {
       throw new Exception("Call setInlineComment() before render()!");
     }
+    if ($this->user === null) {
+      throw new Exception("Call setUser() before render()!");
+    }
+    if ($this->engine === null) {
+      throw new Exception("Call setEngine() before render()!");
+    }
+    if ($this->handle === null) {
+      throw new Exception("Call setHandle() before render()!");
+    }
 
     $actions = null;
+    $inline = $this->inlineComment;
+    $phid = $inline->getPHID();
+    $id = $inline->getID();
+    $user = $this->user;
 
-    if ($this->editable) {
+    $is_draft = ($inline->getTransactionPHID() === null);
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $user,
+      $inline,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    if ($is_draft && $can_edit) {
+      $draft = phutil_tag(
+        'span',
+        array(
+          'class' => 'pholio-inline-status',
+        ),
+        pht('Not Submitted Yet'));
+
       $edit_action = javelin_tag(
         'a',
         array(
-          'href' => '/pholio/inline/edit/'.$this->inlineComment->getID(),
+          'href' => '/pholio/inline/edit/'.$id.'/',
           'sigil' => 'inline-edit',
           'meta' => array(
-            'phid' => $this->inlineComment->getPHID(),
-            'id' => $this->inlineComment->getID()
+            'phid' => $phid,
+            'id' => $id,
           )
         ),
         pht('Edit'));
@@ -49,22 +74,23 @@ final class PholioInlineCommentView extends AphrontView {
       $delete_action = javelin_tag(
         'a',
         array(
-          'href' => '/pholio/inline/delete/'.$this->inlineComment->getID(),
+          'href' => '/pholio/inline/delete/'.$id.'/',
           'sigil' => 'inline-delete',
           'meta' => array(
-              'phid' => $this->inlineComment->getPHID(),
-              'id' => $this->inlineComment->getID()
+            'phid' => $phid,
+            'id' => $id,
           )
         ),
         pht('Delete'));
-
 
       $actions = phutil_tag(
         'span',
         array(
           'class' => 'pholio-inline-head-links'
         ),
-        array($edit_action, $delete_action));
+        phutil_implode_html(
+          " \xC2\xB7 ",
+          array($draft, $edit_action, $delete_action)));
     }
 
     $comment_header = phutil_tag(
@@ -74,22 +100,34 @@ final class PholioInlineCommentView extends AphrontView {
       ),
       array($this->handle->getName(), $actions));
 
+
+    $comment = $this->engine->renderOneObject(
+      $inline,
+      PholioTransactionComment::MARKUP_FIELD_COMMENT,
+      $this->user);
+
     $comment_body = phutil_tag(
       'div',
-      array(
+      array(),
+      $comment);
 
-      ),
-      $this->inlineComment->getContent());
+    $classes = array();
+    $classes[] = 'pholio-inline-comment';
 
-    $comment_block = javelin_tag(
+    if ($is_draft) {
+      $classes[] = 'pholio-inline-comment-draft';
+    }
+
+    return javelin_tag(
       'div',
       array(
-        'id' => $this->inlineComment->getPHID()."_comment",
-        'class' => 'pholio-inline-comment'
+        'id' => "{$phid}_comment",
+        'class' => implode(' ', $classes),
+        'sigil' => 'inline_comment',
+        'meta' => array(
+          'phid' => $phid,
+        )
       ),
       array($comment_header, $comment_body));
-
-
-    return $this->renderSingleView($comment_block);
   }
 }

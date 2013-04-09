@@ -58,21 +58,24 @@ abstract class PhabricatorApplication {
     return $this->getName().' Application';
   }
 
-  public function isEnabled() {
-    return true;
+  public function isInstalled() {
+    if (!$this->canUninstall()) {
+      return true;
+    }
+
+    $beta = PhabricatorEnv::getEnvConfig('phabricator.show-beta-applications');
+    if (!$beta && $this->isBeta()) {
+      return false;
+    }
+
+    $uninstalled = PhabricatorEnv::getEnvConfig(
+      'phabricator.uninstalled-applications');
+
+    return empty($uninstalled[get_class($this)]);
   }
 
-  public function isInstalled() {
-    $uninstalled =
-      PhabricatorEnv::getEnvConfig('phabricator.uninstalled-applications');
-
-      if (!$this->canUninstall()) {
-        return true;
-      } else if (isset($uninstalled[get_class($this)])) {
-        return false;
-      } else {
-        return true;
-      }
+  public static function isClassInstalled($class) {
+    return self::getByClass($class)->isInstalled();
   }
 
   public function isBeta() {
@@ -150,6 +153,10 @@ abstract class PhabricatorApplication {
       default:
         return self::TILE_SHOW;
     }
+  }
+
+  public function getRemarkupRules() {
+    return array();
   }
 
 
@@ -230,7 +237,6 @@ abstract class PhabricatorApplication {
 /* -(  Application Management  )--------------------------------------------- */
 
   public static function getByClass($class_name) {
-
     $selected = null;
     $applications = PhabricatorApplication::getAllApplications();
 
@@ -269,27 +275,11 @@ abstract class PhabricatorApplication {
   public static function getAllInstalledApplications() {
     static $applications;
 
-    $show_beta =
-      PhabricatorEnv::getEnvConfig('phabricator.show-beta-applications');
-
-    $uninstalled =
-      PhabricatorEnv::getEnvConfig('phabricator.uninstalled-applications');
-
-
     if (empty($applications)) {
       $all_applications = self::getAllApplications();
       $apps = array();
       foreach ($all_applications as $app) {
-        $class = get_class($app);
-        if (isset($uninstalled[$class])) {
-          continue;
-        }
-
-        if (!$app->isEnabled()) {
-          continue;
-        }
-
-        if (!$show_beta && $app->isBeta()) {
+        if (!$app->isInstalled()) {
           continue;
         }
 

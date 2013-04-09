@@ -6,9 +6,15 @@
 final class PholioMockViewController extends PholioController {
 
   private $id;
+  private $imageID;
+
+  public function shouldAllowPublic() {
+    return true;
+  }
 
   public function willProcessRequest(array $data) {
     $this->id = $data['id'];
+    $this->imageID = idx($data, 'imageID');
   }
 
   public function processRequest() {
@@ -65,10 +71,13 @@ final class PholioMockViewController extends PholioController {
     require_celerity_resource('pholio-css');
     require_celerity_resource('pholio-inline-comments-css');
 
-    $output = new PholioMockImagesView();
-    $output->setMock($mock);
+    $output = id(new PholioMockImagesView())
+      ->setRequestURI($request->getRequestURI())
+      ->setUser($user)
+      ->setMock($mock)
+      ->setImageID($this->imageID);
 
-    $xaction_view = id(new PhabricatorApplicationTransactionView())
+    $xaction_view = id(new PholioTransactionView())
       ->setUser($this->getRequest()->getUser())
       ->setTransactions($xactions)
       ->setMarkupEngine($engine);
@@ -120,7 +129,7 @@ final class PholioMockViewController extends PholioController {
       id(new PhabricatorActionView())
         ->setIcon('edit')
         ->setName(pht('Edit Mock'))
-        ->setHref($this->getApplicationURI('/edit/'.$mock->getID()))
+        ->setHref($this->getApplicationURI('/edit/'.$mock->getID().'/'))
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
@@ -170,7 +179,7 @@ final class PholioMockViewController extends PholioController {
 
     $properties->invokeWillRenderEvent();
 
-    $properties->addTextContent(
+    $properties->addImageContent(
       $engine->getOutput($mock, PholioMock::MARKUP_FIELD_DESCRIPTION));
 
     return $properties;
@@ -198,7 +207,8 @@ final class PholioMockViewController extends PholioController {
       ->setUser($user)
       ->setDraft($draft)
       ->setSubmitButtonName($button_name)
-      ->setAction($this->getApplicationURI('/comment/'.$mock->getID().'/'));
+      ->setAction($this->getApplicationURI('/comment/'.$mock->getID().'/'))
+      ->setRequestURI($this->getRequest()->getRequestURI());
 
     return array(
       $header,

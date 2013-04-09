@@ -1,6 +1,7 @@
 <?php
 
-abstract class AphrontView extends Phobject {
+abstract class AphrontView extends Phobject
+  implements PhutilSafeHTMLProducerInterface {
 
   protected $user;
   protected $children = array();
@@ -22,32 +23,25 @@ abstract class AphrontView extends Phobject {
     if (!$this->canAppendChild()) {
       $class = get_class($this);
       throw new Exception(
-        "View '{$class}' does not support children.");
+        pht("View '%s' does not support children.", $class));
     }
     $this->children[] = $child;
     return $this;
   }
 
   final protected function renderChildren() {
-    $out = array();
-    foreach ($this->children as $child) {
-      $out[] = $this->renderSingleView($child);
-    }
-    return $out;
+    return $this->children;
   }
 
+  /**
+   * @deprecated
+   */
   final protected function renderSingleView($child) {
-    if ($child instanceof AphrontView) {
-      return $child->render();
-    } else if (is_array($child)) {
-      $out = array();
-      foreach ($child as $element) {
-        $out[] = $this->renderSingleView($element);
-      }
-      return phutil_implode_html('', $out);
-    } else {
-      return $child;
-    }
+    phutil_deprecated(
+      'AphrontView->renderSingleView()',
+      "This method no longer does anything; it can be removed and replaced ".
+      "with its arguments.");
+    return $child;
   }
 
   final protected function isEmptyContent($content) {
@@ -64,5 +58,9 @@ abstract class AphrontView extends Phobject {
   }
 
   abstract public function render();
+
+  public function producePhutilSafeHTML() {
+    return $this->render();
+  }
 
 }

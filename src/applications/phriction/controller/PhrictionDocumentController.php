@@ -13,7 +13,6 @@ final class PhrictionDocumentController
   }
 
   public function processRequest() {
-
     $request = $this->getRequest();
     $user = $request->getUser();
 
@@ -45,14 +44,23 @@ final class PhrictionDocumentController
         }
       }
       $create_uri = '/phriction/edit/?slug='.$slug;
-      $page_content = hsprintf(
-        '<div class="phriction-content">'.
-          '<em>No content here!</em><br />'.
-          'No document found at <tt>%s</tt>. '.
-          'You can <strong><a href="%s">create a new document</a></strong>.'.
-        '</div>',
-        $slug,
+
+      $no_content_head = pht('No content here!');
+      $no_content_body = pht(
+        'No document found at %s. You can <strong>'.
+        '<a href="%s">create a new document here</a></strong>.',
+        phutil_tag('tt', array(), $slug),
         $create_uri);
+
+      $no_content_text = hsprintf(
+        '<em>%s</em><br />%s',
+        $no_content_head,
+        $no_content_body);
+
+      $page_content = phutil_tag(
+        'div',
+        array('class' => 'phriction-content'),
+        $no_content_text);
       $page_title = pht('Page Not Found');
     } else {
       $version = $request->getInt('v');
@@ -89,65 +97,124 @@ final class PhrictionDocumentController
         }
       }
 
+      $subscribers = PhabricatorSubscribersQuery::loadSubscribersForPHID(
+        $document->getPHID());
+
       $phids = array_filter(
         array(
           $content->getAuthorPHID(),
           $project_phid,
         ));
+
+      if ($subscribers) {
+        $phids = array_merge($phids, $subscribers);
+      }
+
       $handles = $this->loadViewerHandles($phids);
 
       $age = time() - $content->getDateCreated();
       $age = floor($age / (60 * 60 * 24));
 
       if ($age < 1) {
-        $when = 'today';
+        $when = pht('today');
       } else if ($age == 1) {
-        $when = 'yesterday';
+        $when = pht('yesterday');
       } else {
-        $when = "{$age} days ago";
+        $when = pht("%d days ago", $age);
       }
 
 
       $project_info = null;
       if ($project_phid) {
         $project_info = hsprintf(
-          '<br />This document is about the project %s.',
-          $handles[$project_phid]->renderLink());
+          '<br />%s',
+          pht('This document is about the project %s.',
+            $handles[$project_phid]->renderLink()));
       }
 
-      $index_link = phutil_tag(
-        'a',
-        array(
-          'href' => '/phriction/',
-        ),
-        pht('Document Index'));
+      $subscriber_view = null;
+      if ($subscribers) {
+        $subcriber_list = array();
+        foreach ($subscribers as $subscriber) {
+          $subcriber_list[] = $handles[$subscriber];
+        }
+
+        $subcriber_list = phutil_implode_html(', ',
+          mpull($subcriber_list, 'renderLink'));
+
+        $subscriber_view = array(
+          hsprintf('<br />Subscribers: '),
+          $subcriber_list,
+        );
+      }
 
       $byline = hsprintf(
-        '<div class="phriction-byline">Last updated %s by %s.%s</div>',
-        $when,
-        $handles[$content->getAuthorPHID()]->renderLink(),
-        $project_info);
+        '<div class="phriction-byline">%s%s%s</div>',
+        pht('Last updated %s by %s.',
+          $when,
+          $handles[$content->getAuthorPHID()]->renderLink()),
+        $project_info,
+        $subscriber_view);
 
 
       $doc_status = $document->getStatus();
-      if ($doc_status == PhrictionDocumentStatus::STATUS_EXISTS) {
+      $current_status = $content->getChangeType();
+      if ($current_status == PhrictionChangeType::CHANGE_EDIT ||
+        $current_status == PhrictionChangeType::CHANGE_MOVE_HERE) {
+
         $core_content = $content->renderContent($user);
-      } else if ($doc_status == PhrictionDocumentStatus::STATUS_DELETED) {
+      } else if ($current_status == PhrictionChangeType::CHANGE_DELETE) {
         $notice = new AphrontErrorView();
         $notice->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
-        $notice->setTitle('Document Deleted');
+        $notice->setTitle(pht('Document Deleted'));
         $notice->appendChild(
           pht('This document has been deleted. You can edit it to put new '.
           'content here, or use history to revert to an earlier version.'));
+        $core_content = $notice->render();
+      } else if ($current_status == PhrictionChangeType::CHANGE_STUB) {
+        $notice = new AphrontErrorView();
+        $notice->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+        $notice->setTitle(pht('Empty Document'));
+        $notice->appendChild(
+          pht('This document is empty. You can edit it to put some proper '.
+          'content here.'));
+        $core_content = $notice->render();
+      } else if ($current_status == PhrictionChangeType::CHANGE_MOVE_AWAY) {
+        $new_doc_id = $content->getChangeRef();
+        $new_doc = new PhrictionDocument();
+        $new_doc->load($new_doc_id);
+
+        $slug_uri = PhrictionDocument::getSlugURI($new_doc->getSlug());
+
+        $notice = new AphrontErrorView();
+        $notice->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+        $notice->setTitle(pht('Document Moved'));
+        $notice->appendChild(phutil_tag('p', array(),
+          pht('This document has been moved to %s. You can edit it to put new '.
+          'content here, or use history to revert to an earlier version.',
+            phutil_tag('a', array('href' => $slug_uri), $slug_uri))));
         $core_content = $notice->render();
       } else {
         throw new Exception("Unknown document status '{$doc_status}'!");
       }
 
+      $move_notice = null;
+      if ($current_status == PhrictionChangeType::CHANGE_MOVE_HERE) {
+        $from_doc_id = $content->getChangeRef();
+        $from_doc = id(new PhrictionDocument())->load($from_doc_id);
+        $slug_uri = PhrictionDocument::getSlugURI($from_doc->getSlug());
+
+        $move_notice = id(new AphrontErrorView())
+          ->setSeverity(AphrontErrorView::SEVERITY_NOTICE)
+          ->appendChild(pht('This document was moved from %s',
+            phutil_tag('a', array('href' => $slug_uri), $slug_uri)))
+          ->render();
+      }
+
       $page_content = hsprintf(
         '<div class="phriction-content">%s%s%s</div>',
-        $index_link,
         $byline,
+        $move_notice,
         $core_content);
     }
 
@@ -196,14 +263,30 @@ final class PhrictionDocumentController
 
     $action_view = id(new PhabricatorActionListView())
       ->setUser($user)
-      ->setObject($document)
-      ->addAction(
+      ->setObject($document);
+
+    if (!$document->getID()) {
+      return $action_view->addAction(
         id(new PhabricatorActionView())
-          ->setName(pht('Edit Document'))
-          ->setIcon('edit')
-          ->setHref('/phriction/edit/'.$document->getID().'/'));
+          ->setName(pht('Create This Document'))
+          ->setIcon('create')
+          ->setHref('/phriction/edit/?slug='.$slug));
+    }
+
+    $action_view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Edit Document'))
+        ->setIcon('edit')
+        ->setHref('/phriction/edit/'.$document->getID().'/'));
 
     if ($document->getStatus() == PhrictionDocumentStatus::STATUS_EXISTS) {
+      $action_view->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('Move Document'))
+          ->setIcon('move')
+          ->setHref('/phriction/move/'.$document->getID().'/')
+          ->setWorkflow(true));
+
       $action_view->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('Delete Document'))
@@ -235,14 +318,17 @@ final class PhrictionDocumentController
       'SELECT d.slug, d.depth, c.title FROM %T d JOIN %T c
         ON d.contentID = c.id
         WHERE d.slug LIKE %> AND d.depth IN (%d, %d)
-          AND d.status = %d
+          AND d.status IN (%Ld)
         ORDER BY d.depth, c.title LIMIT %d',
       $document_dao->getTableName(),
       $content_dao->getTableName(),
       ($slug == '/' ? '' : $slug),
       $d_child,
       $d_grandchild,
-      PhrictionDocumentStatus::STATUS_EXISTS,
+      array(
+        PhrictionDocumentStatus::STATUS_EXISTS,
+        PhrictionDocumentStatus::STATUS_STUB,
+      ),
       $limit);
 
     if (!$children) {
@@ -346,6 +432,10 @@ final class PhrictionDocumentController
     }
 
     return $item;
+  }
+
+  protected function getDocumentSlug() {
+    return $this->slug;
   }
 
 }
