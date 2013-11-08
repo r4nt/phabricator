@@ -48,12 +48,6 @@ final class DifferentialCommentMail extends DifferentialMail {
       case DifferentialAction::ACTION_ADDREVIEWERS:
         $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_REVIEWERS;
         break;
-      case DifferentialAction::ACTION_UPDATE:
-        $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_UPDATED;
-        break;
-      case DifferentialAction::ACTION_REQUEST:
-        $tags[] = MetaMTANotificationType::TYPE_DIFFERENTIAL_REVIEW_REQUEST;
-        break;
       case DifferentialAction::ACTION_COMMENT:
         // this is a comment which we will check separately below for content
         break;
@@ -104,9 +98,10 @@ final class DifferentialCommentMail extends DifferentialMail {
       array());
     $load = array_merge($m_reviewers, $m_cc);
     if ($load) {
-      $handles = id(new PhabricatorObjectHandleData($load))
+      $handles = id(new PhabricatorHandleQuery())
         ->setViewer($this->getActor())
-        ->loadHandles();
+        ->withPHIDs($load)
+        ->execute();
       if ($m_reviewers) {
         $this->addedReviewers = $this->renderHandleList($handles, $m_reviewers);
       }

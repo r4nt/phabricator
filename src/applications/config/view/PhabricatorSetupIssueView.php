@@ -34,6 +34,12 @@ final class PhabricatorSetupIssueView extends AphrontView {
       $description[] = $this->renderPhabricatorConfig($configs);
     }
 
+    $related_configs = $issue->getRelatedPhabricatorConfig();
+    if ($related_configs) {
+      $description[] = $this->renderPhabricatorConfig($related_configs,
+        $related = true);
+    }
+
     $commands = $issue->getCommands();
     if ($commands) {
       $run_these = pht("Run these %d command(s):", count($commands));
@@ -110,7 +116,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
       ),
       $issue->getName());
 
-    return phutil_tag(
+    $issue = phutil_tag(
       'div',
       array(
         'class' => 'setup-issue',
@@ -120,9 +126,26 @@ final class PhabricatorSetupIssueView extends AphrontView {
         $description,
         $next,
       ));
+
+    $debug_info = phutil_tag(
+      'div',
+      array(
+        'class' => 'setup-issue-debug',
+      ),
+      pht('Host: %s', php_uname('n')));
+
+    return phutil_tag(
+      'div',
+      array(
+        'class' => 'setup-issue-shell',
+      ),
+      array(
+        $issue,
+        $debug_info,
+      ));
   }
 
-  private function renderPhabricatorConfig(array $configs) {
+  private function renderPhabricatorConfig(array $configs, $related = false) {
     $issue = $this->getIssue();
 
     $table_info = phutil_tag(
@@ -171,7 +194,7 @@ final class PhabricatorSetupIssueView extends AphrontView {
     } else {
       $update = array();
       foreach ($configs as $config) {
-        if (!idx($options, $config) || $options[$config]->getLocked()) {
+        if (idx($options, $config) && $options[$config]->getLocked()) {
           continue;
         }
         $link = phutil_tag(
@@ -184,10 +207,18 @@ final class PhabricatorSetupIssueView extends AphrontView {
       }
       if ($update) {
         $update = phutil_tag('ul', array(), $update);
-        $update_info = phutil_tag(
+        if (!$related) {
+
+          $update_info = phutil_tag(
           'p',
           array(),
           pht("You can update these %d value(s) here:", count($configs)));
+        } else {
+          $update_info = phutil_tag(
+          'p',
+          array(),
+          pht("These %d configuration value(s) are related:", count($configs)));
+        }
       } else {
         $update = null;
         $update_info = null;

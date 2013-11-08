@@ -4,6 +4,7 @@ final class PhabricatorFeedBuilder {
 
   private $stories;
   private $framed;
+  private $hovercards = false;
 
   public function __construct(array $stories) {
     assert_instances_of($stories, 'PhabricatorFeedStory');
@@ -17,6 +18,11 @@ final class PhabricatorFeedBuilder {
 
   public function setUser(PhabricatorUser $user) {
     $this->user = $user;
+    return $this;
+  }
+
+  public function setShowHovercards($hover) {
+    $this->hovercards = $hover;
     return $this;
   }
 
@@ -35,6 +41,7 @@ final class PhabricatorFeedBuilder {
     $last_date = null;
     foreach ($stories as $story) {
       $story->setFramed($this->framed);
+      $story->setHovercard($this->hovercards);
 
       $date = ucfirst(phabricator_relative_date($story->getEpoch(), $user));
 
@@ -44,13 +51,10 @@ final class PhabricatorFeedBuilder {
             '<div class="phabricator-feed-story-date-separator"></div>'));
         }
         $last_date = $date;
-        $null_view->appendChild(
-          phutil_tag(
-            'div',
-            array(
-              'class' => 'phabricator-feed-story-date',
-            ),
-            $date));
+        $header = new PhabricatorActionHeaderView();
+        $header->setHeaderTitle($date);
+
+        $null_view->appendChild($header);
       }
 
       $view = $story->renderView();
@@ -59,9 +63,8 @@ final class PhabricatorFeedBuilder {
       $null_view->appendChild($view);
     }
 
-    return id(new AphrontNullView())->appendChild(hsprintf(
-      '<div class="phabricator-feed-frame">%s</div>',
-      $null_view->render()));
+    return id(new AphrontNullView())
+      ->appendChild($null_view->render());
   }
 
 }

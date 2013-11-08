@@ -3,7 +3,6 @@
 final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
   implements PhabricatorPolicyInterface {
 
-  protected $phid;
   protected $name;
   protected $originalName;
   protected $auditingEnabled;
@@ -28,6 +27,10 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
 
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return null;
   }
 
   public function getConfiguration() {
@@ -182,6 +185,19 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
     return $packages;
   }
 
+  public static function loadPackagesForRepository($repository) {
+    $package = new PhabricatorOwnersPackage();
+    $ids = ipull(
+      queryfx_all(
+        $package->establishConnection('r'),
+        'SELECT DISTINCT packageID FROM %T WHERE repositoryPHID = %s',
+        id(new PhabricatorOwnersPath())->getTableName(),
+        $repository->getPHID()),
+      'packageID');
+
+    return $package->loadAllWhere('id in (%Ld)', $ids);
+  }
+
   public static function findLongestPathsPerPackage(array $rows, array $paths) {
     $ids = array();
 
@@ -284,6 +300,8 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
 
       $cur_paths = mgroup($cur_paths, 'getRepositoryPHID', 'getPath');
       foreach ($new_paths as $repository_phid => $paths) {
+        // TODO: (T603) Thread policy stuff in here.
+
         // get repository object for path validation
         $repository = id(new PhabricatorRepository())->loadOneWhere(
           'phid = %s',
@@ -296,21 +314,28 @@ final class PhabricatorOwnersPackage extends PhabricatorOwnersDAO
           // build query to validate path
           $drequest = DiffusionRequest::newFromDictionary(
             array(
+              'user' => $this->getActor(),
               'repository'  => $repository,
               'path'        => $path,
             ));
-          $query = DiffusionBrowseQuery::newFromDiffusionRequest($drequest);
-          $query->setViewer($this->getActor());
-          $query->needValidityOnly(true);
-          $valid = $query->loadPaths();
+          $results = DiffusionBrowseResultSet::newFromConduit(
+            DiffusionQuery::callConduitWithDiffusionRequest(
+              $this->getActor(),
+              $drequest,
+              'diffusion.browsequery',
+              array(
+                'commit' => $drequest->getCommit(),
+                'path' => $path,
+                'needValidityOnly' => true)));
+          $valid = $results->isValidResults();
           $is_directory = true;
           if (!$valid) {
-            switch ($query->getReasonForEmptyResultSet()) {
-              case DiffusionBrowseQuery::REASON_IS_FILE:
+            switch ($results->getReasonForEmptyResultSet()) {
+              case DiffusionBrowseResultSet::REASON_IS_FILE:
                 $valid = true;
                 $is_directory = false;
                 break;
-              case DiffusionBrowseQuery::REASON_IS_EMPTY:
+              case DiffusionBrowseResultSet::REASON_IS_EMPTY:
                 $valid = true;
                 break;
             }

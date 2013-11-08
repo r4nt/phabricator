@@ -25,10 +25,7 @@ final class DiffusionBranchTableView extends DiffusionView {
     foreach ($this->branches as $branch) {
       $commit = idx($this->commits, $branch->getHeadCommitIdentifier());
       if ($commit) {
-        $details = $commit->getCommitData()->getCommitMessage();
-        $details = idx(explode("\n", $details), 0);
-        $details = substr($details, 0, 80);
-
+        $details = $commit->getSummary();
         $datetime = phabricator_datetime($commit->getEpoch(), $this->user);
       } else {
         $datetime = null;
@@ -45,7 +42,7 @@ final class DiffusionBranchTableView extends DiffusionView {
                 'branch' => $branch->getName(),
               ))
           ),
-          'History'),
+          pht('History')),
         phutil_tag(
           'a',
           array(
@@ -61,7 +58,6 @@ final class DiffusionBranchTableView extends DiffusionView {
           $branch->getHeadCommitIdentifier()),
         $datetime,
         AphrontTableView::renderSingleDisplayLine($details),
-        // TODO: etc etc
       );
       if ($branch->getName() == $current_branch) {
         $rowc[] = 'highlighted';
@@ -73,11 +69,11 @@ final class DiffusionBranchTableView extends DiffusionView {
     $view = new AphrontTableView($rows);
     $view->setHeaders(
       array(
-        'History',
-        'Branch',
-        'Head',
-        'Modified',
-        'Details',
+        pht('History'),
+        pht('Branch'),
+        pht('Head'),
+        pht('Modified'),
+        pht('Details'),
       ));
     $view->setColumnClasses(
       array(

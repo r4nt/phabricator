@@ -8,8 +8,13 @@ final class DifferentialCommentSaveController extends DifferentialController {
       return new Aphront400Response();
     }
 
+    $viewer = $request->getUser();
+
     $revision_id = $request->getInt('revision_id');
-    $revision = id(new DifferentialRevision())->load($revision_id);
+    $revision = id(new DifferentialRevisionQuery())
+      ->setViewer($viewer)
+      ->withIDs(array($revision_id))
+      ->executeOne();
     if (!$revision) {
       return new Aphront400Response();
     }
@@ -39,10 +44,9 @@ final class DifferentialCommentSaveController extends DifferentialController {
         ->setAddedCCs($ccs)
         ->save();
     } catch (DifferentialActionHasNoEffectException $no_effect) {
-      $has_inlines = id(new DifferentialInlineComment())->loadAllWhere(
-        'authorPHID = %s AND revisionID = %d AND commentID IS NULL',
-        $request->getUser()->getPHID(),
-        $revision->getID());
+      $has_inlines = id(new DifferentialInlineCommentQuery())
+        ->withDraftComments($request->getUser()->getPHID(), $revision->getID())
+        ->execute();
 
       $dialog = new AphrontDialogView();
       $dialog->setUser($request->getUser());

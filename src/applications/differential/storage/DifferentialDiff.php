@@ -1,6 +1,8 @@
 <?php
 
-final class DifferentialDiff extends DifferentialDAO {
+final class DifferentialDiff
+  extends DifferentialDAO
+  implements PhabricatorPolicyInterface {
 
   protected $revisionID;
   protected $authorPHID;
@@ -28,7 +30,20 @@ final class DifferentialDiff extends DifferentialDAO {
   protected $description;
 
   private $unsavedChangesets = array();
-  private $changesets;
+  private $changesets = self::ATTACHABLE;
+  private $arcanistProject = self::ATTACHABLE;
+  private $revision = self::ATTACHABLE;
+
+  public function getConfiguration() {
+    return array(
+      self::CONFIG_AUX_PHID => true,
+    ) + parent::getConfiguration();
+  }
+
+  public function generatePHID() {
+    return PhabricatorPHID::generateNewPHID(
+      DifferentialPHIDTypeDiff::TYPECONST);
+  }
 
   public function addUnsavedChangeset(DifferentialChangeset $changeset) {
     if ($this->changesets === null) {
@@ -46,10 +61,7 @@ final class DifferentialDiff extends DifferentialDAO {
   }
 
   public function getChangesets() {
-    if ($this->changesets === null) {
-      throw new Exception("Must load and attach changesets first!");
-    }
-    return $this->changesets;
+    return $this->assertAttached($this->changesets);
   }
 
   public function loadChangesets() {
@@ -59,6 +71,25 @@ final class DifferentialDiff extends DifferentialDAO {
     return id(new DifferentialChangeset())->loadAllWhere(
       'diffID = %d',
       $this->getID());
+  }
+
+  public function attachArcanistProject(
+    PhabricatorRepositoryArcanistProject $project = null) {
+    $this->arcanistProject = $project;
+    return $this;
+  }
+
+  public function getArcanistProject() {
+    return $this->assertAttached($this->arcanistProject);
+  }
+
+  public function getArcanistProjectName() {
+    $name = '';
+    if ($this->arcanistProject) {
+      $project = $this->getArcanistProject();
+      $name = $project->getName();
+    }
+    return $name;
   }
 
   public function loadArcanistProject() {
@@ -114,6 +145,10 @@ final class DifferentialDiff extends DifferentialDAO {
   public static function newFromRawChanges(array $changes) {
     assert_instances_of($changes, 'ArcanistDiffChange');
     $diff = new DifferentialDiff();
+
+    // There may not be any changes; initialize the changesets list so that
+    // we don't throw later when accessing it.
+    $diff->attachChangesets(array());
 
     $lines = 0;
     foreach ($changes as $change) {
@@ -201,8 +236,31 @@ final class DifferentialDiff extends DifferentialDAO {
       'lintStatus' => $this->getLintStatus(),
       'changes' => array(),
       'properties' => array(),
+      'projectName' => $this->getArcanistProjectName()
     );
 
+    $dict['changes'] = $this->buildChangesList();
+
+    $properties = id(new DifferentialDiffProperty())->loadAllWhere(
+      'diffID = %d',
+      $this->getID());
+    foreach ($properties as $property) {
+      $dict['properties'][$property->getName()] = $property->getData();
+
+      if ($property->getName() == 'local:commits') {
+        foreach ($property->getData() as $commit) {
+          $dict['authorName'] = $commit['author'];
+          $dict['authorEmail'] = idx($commit, 'authorEmail');
+          break;
+        }
+      }
+    }
+
+    return $dict;
+  }
+
+  public function buildChangesList() {
+    $changes = array();
     foreach ($this->getChangesets() as $changeset) {
       $hunks = array();
       foreach ($changeset->getHunks() as $hunk) {
@@ -219,6 +277,7 @@ final class DifferentialDiff extends DifferentialDAO {
         );
       }
       $change = array(
+        'id'            => $changeset->getID(),
         'metadata'      => $changeset->getMetadata(),
         'oldPath'       => $changeset->getOldFile(),
         'currentPath'   => $changeset->getFilename(),
@@ -232,25 +291,52 @@ final class DifferentialDiff extends DifferentialDAO {
         'delLines'      => $changeset->getDelLines(),
         'hunks'         => $hunks,
       );
-      $dict['changes'][] = $change;
+      $changes[] = $change;
+    }
+    return $changes;
+  }
+
+  public function getRevision() {
+    return $this->assertAttached($this->revision);
+  }
+
+  public function attachRevision(DifferentialRevision $revision = null) {
+    $this->revision = $revision;
+    return $this;
+  }
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+    );
+  }
+
+  public function getPolicy($capability) {
+    if ($this->getRevision()) {
+      return $this->getRevision()->getPolicy($capability);
     }
 
-    $properties = id(new DifferentialDiffProperty())->loadAllWhere(
-      'diffID = %d',
-      $this->getID());
-    foreach ($properties as $property) {
-      $dict['properties'][$property->getName()] = $property->getData();
+    return PhabricatorPolicies::POLICY_USER;
+  }
 
-      if ($property->getName() == 'local:commits') {
-        foreach ($property->getData() as $commit) {
-          $dict['authorName'] = $commit['author'];
-          $dict['authorEmail'] = $commit['authorEmail'];
-          break;
-        }
-      }
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    if ($this->getRevision()) {
+      return $this->getRevision()->hasAutomaticCapability($capability, $viewer);
     }
 
-    return $dict;
+    return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    if ($this->getRevision()) {
+      return pht(
+        'This diff is attached to a revision, and inherits its policies.');
+    }
+    return null;
   }
 
 }

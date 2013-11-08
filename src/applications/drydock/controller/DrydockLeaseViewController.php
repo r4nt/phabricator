@@ -21,11 +21,11 @@ final class DrydockLeaseViewController extends DrydockController {
 
     $title = pht('Lease %d', $lease->getID());
 
-    $header = id(new PhabricatorHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setHeader($title);
 
     $actions = $this->buildActionListView($lease);
-    $properties = $this->buildPropertyListView($lease);
+    $properties = $this->buildPropertyListView($lease, $actions);
 
     $pager = new AphrontPagerView();
     $pager->setURI(new PhutilURI($lease_uri), 'offset');
@@ -39,17 +39,20 @@ final class DrydockLeaseViewController extends DrydockController {
     $log_table->appendChild($pager);
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setActionList($actions);
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setName($title)
         ->setHref($lease_uri));
 
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addPropertyList($properties);
+
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
-        $actions,
-        $properties,
+        $object_box,
         $log_table,
       ),
       array(
@@ -62,6 +65,7 @@ final class DrydockLeaseViewController extends DrydockController {
   private function buildActionListView(DrydockLease $lease) {
     $view = id(new PhabricatorActionListView())
       ->setUser($this->getRequest()->getUser())
+      ->setObjectURI($this->getRequest()->getRequestURI())
       ->setObject($lease);
 
     $id = $lease->getID();
@@ -79,8 +83,12 @@ final class DrydockLeaseViewController extends DrydockController {
     return $view;
   }
 
-  private function buildPropertyListView(DrydockLease $lease) {
-    $view = new PhabricatorPropertyListView();
+  private function buildPropertyListView(
+    DrydockLease $lease,
+    PhabricatorActionListView $actions) {
+
+    $view = new PHUIPropertyListView();
+    $view->setActionList($actions);
 
     switch ($lease->getStatus()) {
       case DrydockLeaseStatus::STATUS_ACTIVE:

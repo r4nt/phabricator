@@ -14,41 +14,22 @@ JX.behavior('conpherence-pontificate', function(config) {
     var form = e.getNode('tag:form');
 
     var root = e.getNode('conpherence-layout');
-    var messages = JX.DOM.find(root, 'div', 'conpherence-messages');
-    var header = JX.DOM.find(root, 'div', 'conpherence-header');
+    var messages_root = JX.DOM.find(root, 'div', 'conpherence-message-pane');
+    var header_root = JX.DOM.find(root, 'div', 'conpherence-header-pane');
+    var form_root = JX.DOM.find(root, 'div', 'conpherence-form');
+    var messages = JX.DOM.find(messages_root, 'div', 'conpherence-messages');
     var fileWidget = null;
     try {
       fileWidget = JX.DOM.find(root, 'div', 'widgets-files');
     } catch (ex) {
       // Ignore; maybe no files widget
     }
-    var peopleWidget = null;
-    try {
-      peopleWidget = JX.DOM.find(root, 'div', 'widgets-people');
-    } catch (ex) {
-      // Ignore; maybe no peoples widget
-    }
+    JX.DOM.alterClass(form_root, 'loading', true);
 
     JX.Workflow.newFromForm(form)
       .setHandler(JX.bind(this, function(r) {
-        // add the new transactions, probably just our post but who knows
         JX.DOM.appendContent(messages, JX.$H(r.transactions));
         messages.scrollTop = messages.scrollHeight;
-        JX.DOM.setContent(header, JX.$H(r.header));
-
-        try {
-          var node = JX.$(r.conpherence_phid + '-nav-item');
-          JX.DOM.replace(
-            node,
-            JX.$H(r.nav_item));
-          JX.Stratcom.invoke(
-            'conpherence-selectthread',
-            null,
-            { id : r.conpherence_phid + '-nav-item' }
-          );
-        } catch (ex) {
-          // Ignore; this view may not have a menu.
-        }
 
         if (fileWidget) {
           JX.DOM.setContent(
@@ -57,23 +38,22 @@ JX.behavior('conpherence-pontificate', function(config) {
           );
         }
 
-        if (peopleWidget) {
-          JX.DOM.setContent(
-            peopleWidget,
-            JX.$H(r.people_widget)
-          );
-        }
-
-        var inputs = JX.DOM.scry(form, 'input');
-        for (var ii = 0; ii < inputs.length; ii++) {
-          if (inputs[ii].name == 'latest_transaction_id') {
-            inputs[ii].value = r.latest_transaction_id;
-            break;
-          }
-        }
+        var latest_transaction_dom = JX.DOM.find(
+          root,
+          'input',
+          'latest-transaction-id');
+        latest_transaction_dom.value = r.latest_transaction_id;
 
         var textarea = JX.DOM.find(form, 'textarea');
         textarea.value = '';
+
+        JX.Stratcom.invoke(
+          'conpherence-selectthread',
+          null,
+          { id : r.conpherence_phid + '-nav-item' }
+          );
+
+        JX.DOM.alterClass(form_root, 'loading', false);
       }))
     .start();
   };

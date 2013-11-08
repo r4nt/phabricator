@@ -11,7 +11,7 @@ final class PhabricatorApplicationHerald extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'Create Notification Rules';
+    return pht('Create Notification Rules');
   }
 
   public function getTitleGlyph() {
@@ -33,14 +33,14 @@ final class PhabricatorApplicationHerald extends PhabricatorApplication {
   public function getRoutes() {
     return array(
       '/herald/' => array(
-        '' => 'HeraldHomeController',
-        'view/(?P<content_type>[^/]+)/(?:(?P<rule_type>[^/]+)/)?'
-          => 'HeraldHomeController',
+        '(?:query/(?P<queryKey>[^/]+)/)?' => 'HeraldRuleListController',
         'new/(?:(?P<type>[^/]+)/(?:(?P<rule_type>[^/]+)/)?)?'
           => 'HeraldNewController',
-        'rule/(?:(?P<id>[1-9]\d*)/)?' => 'HeraldRuleController',
+        'rule/(?P<id>[1-9]\d*)/' => 'HeraldRuleViewController',
+        'edit/(?:(?P<id>[1-9]\d*)/)?' => 'HeraldRuleController',
+        'disable/(?P<id>[1-9]\d*)/(?P<action>\w+)/' =>
+          'HeraldDisableController',
         'history/(?:(?P<id>[1-9]\d*)/)?' => 'HeraldRuleEditHistoryController',
-        'delete/(?P<id>[1-9]\d*)/' => 'HeraldDeleteController',
         'test/' => 'HeraldTestConsoleController',
         'transcript/' => 'HeraldTranscriptListController',
         'transcript/(?P<id>[1-9]\d*)/(?:(?P<filter>\w+)/)?'
@@ -48,5 +48,15 @@ final class PhabricatorApplicationHerald extends PhabricatorApplication {
       ),
     );
   }
+
+  protected function getCustomCapabilities() {
+    return array(
+      HeraldCapabilityManageGlobalRules::CAPABILITY => array(
+        'caption' => pht('Global rules can bypass access controls.'),
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
+      ),
+    );
+  }
+
 
 }

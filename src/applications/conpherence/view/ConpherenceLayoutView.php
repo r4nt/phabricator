@@ -51,33 +51,71 @@ final class ConpherenceLayoutView extends AphrontView {
 
   public function render() {
     require_celerity_resource('conpherence-menu-css');
+    require_celerity_resource('conpherence-message-pane-css');
+    require_celerity_resource('conpherence-widget-pane-css');
 
     $layout_id = celerity_generate_unique_node_id();
 
+    $selected_id = null;
+    $selected_thread_id = null;
+    if ($this->thread) {
+      $selected_id = $this->thread->getPHID() . '-nav-item';
+      $selected_thread_id = $this->thread->getID();
+    }
     Javelin::initBehavior('conpherence-menu',
       array(
-        'base_uri' => $this->baseURI,
-        'header' => 'conpherence-header-pane',
-        'messages' => 'conpherence-messages',
-        'messages_pane' => 'conpherence-message-pane',
-        'widgets_pane' => 'conpherence-widget-pane',
-        'form_pane' => 'conpherence-form',
-        'menu_pane' => 'conpherence-menu',
+        'baseURI' => $this->baseURI,
         'layoutID' => $layout_id,
-        'selectedID' => ($this->thread ? $this->thread->getID() : null),
+        'selectedID' => $selected_id,
+        'selectedThreadID' => $selected_thread_id,
         'role' => $this->role,
         'hasThreadList' => (bool)$this->threadView,
         'hasThread' => (bool)$this->messages,
         'hasWidgets' => false,
       ));
 
-    Javelin::initBehavior('conpherence-drag-and-drop-photo',
+    Javelin::initBehavior(
+      'conpherence-widget-pane',
       array(
-        'target' => 'conpherence-header-pane',
-        'form_pane' => 'conpherence-form',
-        'upload_uri' => '/file/dropupload/',
-        'activated_class' => 'conpherence-header-upload-photo',
-      ));
+        'widgetBaseUpdateURI' => $this->baseURI . 'update/',
+        'widgetRegistry' => array(
+          'conpherence-message-pane' => array(
+            'name' => pht('Thread'),
+            'deviceOnly' => true,
+            'hasCreate' => false
+          ),
+          'widgets-people' => array(
+            'name' => pht('Participants'),
+            'deviceOnly' => false,
+            'hasCreate' => true,
+            'createData' => array(
+              'refreshFromResponse' => true,
+              'action' => ConpherenceUpdateActions::ADD_PERSON,
+              'customHref' => null
+            )
+          ),
+          'widgets-files' => array(
+            'name' => pht('Files'),
+            'deviceOnly' => false,
+            'hasCreate' => false
+          ),
+          'widgets-calendar' => array(
+            'name' => pht('Calendar'),
+            'deviceOnly' => false,
+            'hasCreate' => true,
+            'createData' => array(
+              'refreshFromResponse' => false,
+              'action' => ConpherenceUpdateActions::ADD_STATUS,
+              'customHref' => '/calendar/status/create/'
+            )
+          ),
+          'widgets-settings' => array(
+            'name' => pht('Settings'),
+            'deviceOnly' => false,
+            'hasCreate' => false
+          ),
+        )));
+
 
     return javelin_tag(
       'div',
@@ -91,15 +129,17 @@ final class ConpherenceLayoutView extends AphrontView {
           'div',
           array(
             'class' => 'phabricator-nav-column-background',
+            'sigil' => 'phabricator-nav-column-background',
           ),
           ''),
         javelin_tag(
           'div',
           array(
+            'id' => 'conpherence-menu-pane',
             'class' => 'conpherence-menu-pane phabricator-side-menu',
             'sigil' => 'conpherence-menu-pane',
           ),
-          nonempty($this->threadView, '')),
+          $this->threadView),
         javelin_tag(
           'div',
           array(
@@ -111,21 +151,58 @@ final class ConpherenceLayoutView extends AphrontView {
               array(
                 'class' => 'conpherence-header-pane',
                 'id' => 'conpherence-header-pane',
-                'sigil' => 'conpherence-header',
+                'sigil' => 'conpherence-header-pane',
               ),
               nonempty($this->header, '')),
-            phutil_tag(
+            javelin_tag(
+              'div',
+              array(
+                'class' => 'conpherence-no-threads',
+                'sigil' => 'conpherence-no-threads',
+                'style' => 'display: none;',
+              ),
+              array(
+                phutil_tag(
+                  'div',
+                  array(
+                    'class' => 'text'
+                  ),
+                  pht('You do not have any messages yet.')),
+                javelin_tag(
+                  'a',
+                  array(
+                    'href' => '/conpherence/new/',
+                    'class' => 'button grey',
+                    'sigil' => 'workflow',
+                  ),
+                  pht('Send a Message'))
+            )),
+            javelin_tag(
               'div',
               array(
                 'class' => 'conpherence-widget-pane',
-                'id' => 'conpherence-widget-pane'
+                'id' => 'conpherence-widget-pane',
+                'sigil' => 'conpherence-widget-pane',
               ),
-              ''),
+              array(
+                phutil_tag(
+                  'div',
+                  array(
+                    'class' => 'widgets-loading-mask'
+                  ),
+                  ''),
+                javelin_tag(
+                  'div',
+                  array(
+                    'sigil' => 'conpherence-widgets-holder'
+                  ),
+                  ''))),
             javelin_tag(
               'div',
               array(
                 'class' => 'conpherence-message-pane',
-                'id' => 'conpherence-message-pane'
+                'id' => 'conpherence-message-pane',
+                'sigil' => 'conpherence-message-pane'
               ),
               array(
                 javelin_tag(
@@ -139,7 +216,14 @@ final class ConpherenceLayoutView extends AphrontView {
                 phutil_tag(
                   'div',
                   array(
-                    'id' => 'conpherence-form'
+                    'class' => 'messages-loading-mask',
+                  ),
+                  ''),
+                javelin_tag(
+                  'div',
+                  array(
+                    'id' => 'conpherence-form',
+                    'sigil' => 'conpherence-form'
                   ),
                   nonempty($this->replyForm, ''))
               )),

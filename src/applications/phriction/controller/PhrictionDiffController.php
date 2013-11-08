@@ -113,9 +113,9 @@ final class PhrictionDiffController
         ->setHref(PhrictionDocument::getSlugURI($slug, 'history')));
 
 
-    $title = "Version $l vs $r";
+    $title = pht("Version %s vs %s", $l, $r);
 
-    $header = id(new PhabricatorHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setHeader($title);
 
     $crumbs->addCrumb(
@@ -142,10 +142,17 @@ final class PhrictionDiffController
           'a',
           array(
             'href' => $uri->alter('l', $l - 1)->alter('r', $r - 1),
+            'class' => 'button',
           ),
           pht("\xC2\xAB Previous Change"));
       } else {
-        $link_l = pht('Original Change');
+        $link_l = phutil_tag(
+          'a',
+          array(
+            'href' => '#',
+            'class' => 'button grey disabled',
+          ),
+          pht('Original Change'));
       }
 
       $link_r = null;
@@ -154,10 +161,17 @@ final class PhrictionDiffController
           'a',
           array(
             'href' => $uri->alter('l', $l + 1)->alter('r', $r + 1),
+            'class' => 'button',
           ),
           pht("Next Change \xC2\xBB"));
       } else {
-        $link_r = pht('Most Recent Change');
+        $link_r = phutil_tag(
+          'a',
+          array(
+            'href' => '#',
+            'class' => 'button grey disabled',
+          ),
+          pht('Most Recent Change'));
       }
 
       $navigation_table = hsprintf(
@@ -174,7 +188,7 @@ final class PhrictionDiffController
 
     $output = hsprintf(
       '<br><div class="phriction-document-history-diff">'.
-        '%s<br /><br />%s'.
+        '%s%s'.
         '<table class="phriction-revert-table">'.
           '<tr><td>%s</td><td>%s</td>'.
         '</table>'.
@@ -187,11 +201,14 @@ final class PhrictionDiffController
       $output);
 
 
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->appendChild($output);
+
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
-        $output,
+        $object_box,
       ),
       array(
         'title'     => pht('Document History'),
@@ -223,7 +240,7 @@ final class PhrictionDiffController
         'a',
         array(
           'href'  => '/phriction/edit/'.$document_id.'/',
-          'class' => 'button',
+          'class' => 'button grey',
         ),
         pht('Edit Current Version'));
     }
@@ -233,7 +250,7 @@ final class PhrictionDiffController
       'a',
       array(
         'href'  => '/phriction/edit/'.$document_id.'/?revert='.$version,
-        'class' => 'button',
+        'class' => 'button grey',
       ),
       pht('Revert to Version %s...', $version));
   }
@@ -246,12 +263,13 @@ final class PhrictionDiffController
     $phids = mpull($content, 'getAuthorPHID');
     $handles = $this->loadViewerHandles($phids);
 
-    $list = new PhabricatorObjectItemListView();
+    $list = new PHUIObjectItemListView();
+    $list->setFlush(true);
 
     $first = true;
     foreach ($content as $c) {
       $author = $handles[$c->getAuthorPHID()]->renderLink();
-      $item = id(new PhabricatorObjectItemView())
+      $item = id(new PHUIObjectItemView())
         ->setHeader(pht('%s by %s, %s',
           PhrictionChangeType::getChangeTypeLabel($c->getChangeType()),
           $author,

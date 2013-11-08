@@ -30,7 +30,7 @@ final class PhabricatorCalendarViewStatusController
 
     $nav->appendChild(
       array(
-        id(new PhabricatorHeaderView())->setHeader($page_title),
+        id(new PHUIHeaderView())->setHeader($page_title),
         $status_list,
       ));
 
@@ -47,7 +47,7 @@ final class PhabricatorCalendarViewStatusController
 
     $user = $this->getRequest()->getUser();
 
-    $list = new PhabricatorObjectItemListView();
+    $list = new PHUIObjectItemListView();
     foreach ($statuses as $status) {
       if ($status->getUserPHID() == $user->getPHID()) {
         $href = $this->getApplicationURI('/status/edit/'.$status->getID().'/');
@@ -70,7 +70,7 @@ final class PhabricatorCalendarViewStatusController
         ? 'red'
         : 'yellow';
 
-      $item = id(new PhabricatorObjectItemView())
+      $item = id(new PHUIObjectItemView())
         ->setHeader($status->getTerseSummary($user))
         ->setHref($href)
         ->setBarColor($color)

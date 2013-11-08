@@ -10,17 +10,12 @@ final class PhabricatorConfigTransaction
   }
 
   public function getApplicationTransactionType() {
-    return PhabricatorPHIDConstants::PHID_TYPE_CONF;
+    return PhabricatorConfigPHIDTypeConfig::TYPECONST;
   }
 
   public function getApplicationTransactionCommentObject() {
     return null;
   }
-
-  public function getApplicationObjectTypeName() {
-    return pht('config');
-  }
-
 
   public function getTitle() {
     $author_phid = $this->getAuthorPHID();

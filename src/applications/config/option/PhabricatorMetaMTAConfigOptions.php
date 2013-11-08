@@ -72,9 +72,9 @@ EODOC
 
     $herald_hints_description = $this->deformat(pht(<<<EODOC
 You can disable the Herald hints in email if users prefer smaller messages.
-These are the links under the headers "MANAGE HERALD RULES" and "WHY DID I GET
-THIS EMAIL?". If you set this to true, they will not appear in any mail. Users
-can still navigate to the links via the web interface.
+These are the links under the header "WHY DID I GET THIS EMAIL?". If you set
+this to true, they will not appear in any mail. Users can still navigate to
+the links via the web interface.
 EODOC
 ));
 
@@ -248,16 +248,16 @@ EODOC
             pht("Show Reply Handler Hints"),
             pht("No Reply Handler Hints"),
           ))
-        ->setSummary(pht('Show hints about Herald rules in email.'))
-        ->setDescription($herald_hints_description),
+        ->setSummary(pht('Show hints about reply handler actions in email.'))
+        ->setDescription($reply_hints_description),
       $this->newOption('metamta.herald.show-hints', 'bool', true)
         ->setBoolOptions(
           array(
             pht("Show Herald Hints"),
             pht("No Herald Hints"),
           ))
-        ->setSummary(pht('Show hints about reply handler actions in email.'))
-        ->setDescription($reply_hints_description),
+        ->setSummary(pht('Show hints about Herald rules in email.'))
+        ->setDescription($herald_hints_description),
       $this->newOption('metamta.recipients.show-hints', 'bool', true)
         ->setBoolOptions(
           array(
@@ -338,6 +338,17 @@ EODOC
         ->addExample(
           'gwashington (George Washington) <gwashington@example.com>',
           'full'),
+      $this->newOption('metamta.email-body-limit', 'int', 524288)
+        ->setDescription(
+          pht(
+            'You can set a limit for the maximum byte size of outbound mail. '.
+            'Mail which is larger than this limit will be truncated before '.
+            'being sent. This can be useful if your MTA rejects mail which '.
+            'exceeds some limit (this is reasonably common). Specify a value '.
+            'in bytes.'))
+        ->setSummary(pht('Global cap for size of generated emails (bytes).'))
+        ->addExample(524288, pht('Truncate at 512KB'))
+        ->addExample(1048576, pht('Truncate at 1MB'))
     );
   }
 

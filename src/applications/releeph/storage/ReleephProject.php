@@ -10,7 +10,6 @@ final class ReleephProject extends ReleephDAO
   const COMMIT_AUTHOR_FROM_DIFF = 'commit-author-is-from-diff';
   const COMMIT_AUTHOR_REQUESTOR = 'commit-author-is-requestor';
 
-  protected $phid;
   protected $name;
 
   // Specifying the place to pick from is a requirement for svn, though not
@@ -18,14 +17,14 @@ final class ReleephProject extends ReleephDAO
   // been picked and which haven't.
   protected $trunkBranch;
 
-  protected $repositoryID;
   protected $repositoryPHID;
   protected $isActive;
   protected $createdByUserPHID;
   protected $arcanistProjectID;
-  protected $projectID;
 
   protected $details = array();
+
+  private $repository = self::ATTACHABLE;
 
   public function getConfiguration() {
     return array(
@@ -37,8 +36,7 @@ final class ReleephProject extends ReleephDAO
   }
 
   public function generatePHID() {
-    return PhabricatorPHID::generateNewPHID(
-      ReleephPHIDConstants::PHID_TYPE_REPR);
+    return PhabricatorPHID::generateNewPHID(ReleephPHIDTypeProject::TYPECONST);
   }
 
   public function getDetail($key, $default = null) {
@@ -51,7 +49,7 @@ final class ReleephProject extends ReleephDAO
       $this->getID(),
       $path
     );
-    return PhabricatorEnv::getProductionURI(implode('/', $components));
+    return implode('/', $components);
   }
 
   public function setDetail($key, $value) {
@@ -76,13 +74,6 @@ final class ReleephProject extends ReleephDAO
     }
   }
 
-  public function loadPhabricatorProject() {
-    if ($id = $this->getProjectID()) {
-      return id(new PhabricatorProject())->load($id);
-    }
-    return id(new PhabricatorProject())->makeEphemeral(); // dummy
-  }
-
   public function loadArcanistProject() {
     return $this->loadOneRelative(
       new PhabricatorRepositoryArcanistProject(),
@@ -94,20 +85,39 @@ final class ReleephProject extends ReleephDAO
     return $this->getDetail('pushers', array());
   }
 
-  public function isPusherPHID($phid) {
-    $pusher_phids = $this->getDetail('pushers', array());
-    return in_array($phid, $pusher_phids);
-  }
-
   public function isPusher(PhabricatorUser $user) {
-    return $this->isPusherPHID($user->getPHID());
+    // TODO Deprecate this once `isPusher` is out of the Facebook codebase.
+    return $this->isAuthoritative($user);
   }
 
+  public function isAuthoritative(PhabricatorUser $user) {
+    return $this->isAuthoritativePHID($user->getPHID());
+  }
+
+  public function isAuthoritativePHID($phid) {
+    $pushers = $this->getPushers();
+    if (!$pushers) {
+      return true;
+    } else {
+      return in_array($phid, $pushers);
+    }
+  }
+
+  public function attachRepository(PhabricatorRepository $repository) {
+    $this->repository = $repository;
+    return $this;
+  }
+
+  public function getRepository() {
+    return $this->assertAttached($this->repository);
+  }
+
+  // TODO: Remove once everything uses ProjectQuery. Also, T603.
   public function loadPhabricatorRepository() {
     return $this->loadOneRelative(
       new PhabricatorRepository(),
-      'id',
-      'getRepositoryID');
+      'phid',
+      'getRepositoryPHID');
   }
 
   public function getCurrentReleaseNumber() {
@@ -130,17 +140,7 @@ final class ReleephProject extends ReleephDAO
   }
 
   public function getReleephFieldSelector() {
-    $class = $this->getDetail('field_selector');
-    if (!$class) {
-      $key = 'releeph.field-selector';
-      $class = PhabricatorEnv::getEnvConfig($key);
-    }
-
-    if ($class) {
-      return newv($class, array());
-    } else {
-      return new ReleephDefaultFieldSelector();
-    }
+    return new ReleephDefaultFieldSelector();
   }
 
   /**
@@ -180,6 +180,7 @@ final class ReleephProject extends ReleephDAO
   public function getCapabilities() {
     return array(
       PhabricatorPolicyCapability::CAN_VIEW,
+      PhabricatorPolicyCapability::CAN_EDIT,
     );
   }
 
@@ -190,5 +191,10 @@ final class ReleephProject extends ReleephDAO
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return false;
   }
+
+  public function describeAutomaticCapability($capability) {
+    return null;
+  }
+
 
 }

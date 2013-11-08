@@ -1,11 +1,16 @@
 <?php
 
-final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
+final class PhabricatorUser
+  extends PhabricatorUserDAO
+  implements
+    PhutilPerson,
+    PhabricatorPolicyInterface,
+    PhabricatorCustomFieldInterface {
 
   const SESSION_TABLE = 'phabricator_session';
   const NAMETOKEN_TABLE = 'user_nametoken';
+  const MAXIMUM_USERNAME_LENGTH = 64;
 
-  protected $phid;
   protected $userName;
   protected $realName;
   protected $sex;
@@ -27,9 +32,10 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
 
   private $profileImage = null;
   private $profile = null;
-  private $status = null;
+  private $status = self::ATTACHABLE;
   private $preferences = null;
   private $omnipotent = false;
+  private $customFields = self::ATTACHABLE;
 
   protected function readField($field) {
     switch ($field) {
@@ -59,7 +65,7 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_USER);
+      PhabricatorPeoplePHIDTypeUser::TYPECONST);
   }
 
   public function setPassword(PhutilOpaqueEnvelope $envelope) {
@@ -107,6 +113,10 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
     }
     $result = parent::save();
 
+    if ($this->profile) {
+      $this->profile->save();
+    }
+
     $this->updateNameTokens();
 
     id(new PhabricatorSearchIndexer())
@@ -142,12 +152,14 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
   }
 
   const CSRF_CYCLE_FREQUENCY  = 3600;
+  const CSRF_SALT_LENGTH      = 8;
   const CSRF_TOKEN_LENGTH     = 16;
+  const CSRF_BREACH_PREFIX    = 'B@';
 
   const EMAIL_CYCLE_FREQUENCY = 86400;
   const EMAIL_TOKEN_LENGTH    = 24;
 
-  public function getCSRFToken($offset = 0) {
+  private function getRawCSRFToken($offset = 0) {
     return $this->generateToken(
       time() + (self::CSRF_CYCLE_FREQUENCY * $offset),
       self::CSRF_CYCLE_FREQUENCY,
@@ -155,10 +167,40 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
       self::CSRF_TOKEN_LENGTH);
   }
 
-  public function validateCSRFToken($token) {
+  /**
+   * @phutil-external-symbol class PhabricatorStartup
+   */
+  public function getCSRFToken() {
+    $salt = PhabricatorStartup::getGlobal('csrf.salt');
+    if (!$salt) {
+      $salt = Filesystem::readRandomCharacters(self::CSRF_SALT_LENGTH);
+      PhabricatorStartup::setGlobal('csrf.salt', $salt);
+    }
 
+    // Generate a token hash to mitigate BREACH attacks against SSL. See
+    // discussion in T3684.
+    $token = $this->getRawCSRFToken();
+    $hash = PhabricatorHash::digest($token, $salt);
+    return 'B@'.$salt.substr($hash, 0, self::CSRF_TOKEN_LENGTH);
+  }
+
+  public function validateCSRFToken($token) {
     if (!$this->getPHID()) {
       return true;
+    }
+
+    $salt = null;
+
+    $version = 'plain';
+
+    // This is a BREACH-mitigating token. See T3684.
+    $breach_prefix = self::CSRF_BREACH_PREFIX;
+    $breach_prelen = strlen($breach_prefix);
+
+    if (!strncmp($token, $breach_prefix, $breach_prelen)) {
+      $version = 'breach';
+      $salt = substr($token, $breach_prelen, self::CSRF_SALT_LENGTH);
+      $token = substr($token, $breach_prelen + self::CSRF_SALT_LENGTH);
     }
 
     // When the user posts a form, we check that it contains a valid CSRF token.
@@ -189,9 +231,23 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
     $csrf_window = 6;
 
     for ($ii = -$csrf_window; $ii <= 1; $ii++) {
-      $valid = $this->getCSRFToken($ii);
-      if ($token == $valid) {
-        return true;
+      $valid = $this->getRawCSRFToken($ii);
+      switch ($version) {
+        // TODO: We can remove this after the BREACH version has been in the
+        // wild for a while.
+        case 'plain':
+          if ($token == $valid) {
+            return true;
+          }
+          break;
+        case 'breach':
+          $digest = PhabricatorHash::digest($valid, $salt);
+          if (substr($digest, 0, self::CSRF_TOKEN_LENGTH) == $token) {
+            return true;
+          }
+          break;
+        default:
+          throw new Exception("Unknown CSRF token format!");
       }
     }
 
@@ -290,7 +346,7 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
         $try_type = $session_type.'-'.$ii;
         if (!in_array($try_type, $existing_sessions)) {
           $establish_type = $try_type;
-          $expect_key = $session_key;
+          $expect_key = PhabricatorHash::digest($session_key);
           $existing_sessions[] = $try_type;
 
           // Ensure the row exists so we can issue an update below. We don't
@@ -302,7 +358,7 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
             self::SESSION_TABLE,
             $this->getPHID(),
             $establish_type,
-            $session_key);
+            PhabricatorHash::digest($session_key));
           break;
         }
       }
@@ -325,7 +381,7 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
         'UPDATE %T SET sessionKey = %s, sessionStart = UNIX_TIMESTAMP()
           WHERE userPHID = %s AND type = %s AND sessionKey = %s',
         self::SESSION_TABLE,
-        $session_key,
+        PhabricatorHash::digest($session_key),
         $this->getPHID(),
         $establish_type,
         $expect_key);
@@ -365,7 +421,7 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
       'DELETE FROM %T WHERE userPHID = %s AND sessionKey = %s',
       self::SESSION_TABLE,
       $this->getPHID(),
-      $session_key);
+      PhabricatorHash::digest($session_key));
   }
 
   private function generateEmailToken(
@@ -455,9 +511,12 @@ final class PhabricatorUser extends PhabricatorUserDAO implements PhutilPerson {
       return $this->preferences;
     }
 
-    $preferences = id(new PhabricatorUserPreferences())->loadOneWhere(
-      'userPHID = %s',
-      $this->getPHID());
+    $preferences = null;
+    if ($this->getPHID()) {
+      $preferences = id(new PhabricatorUserPreferences())->loadOneWhere(
+        'userPHID = %s',
+        $this->getPHID());
+    }
 
     if (!$preferences) {
       $preferences = new PhabricatorUserPreferences();
@@ -602,7 +661,7 @@ EOBODY;
     $new_username = $this->getUserName();
 
     $password_instructions = null;
-    if (PhabricatorEnv::getEnvConfig('auth.password-auth-enabled')) {
+    if (PhabricatorAuthProviderPassword::getPasswordProvider()) {
       $uri = $this->getEmailLoginURI();
       $password_instructions = <<<EOTXT
 If you use a password to login, you'll need to reset it before you can login
@@ -629,13 +688,15 @@ EOBODY;
       ->addTos(array($this->getPHID()))
       ->setSubject('[Phabricator] Username Changed')
       ->setBody($body)
-      ->setFrom($admin->getPHID())
       ->saveAndSend();
   }
 
   public static function describeValidUsername() {
-    return 'Usernames must contain only numbers, letters, period, underscore '.
-           'and hyphen, and can not end with a period.';
+    return pht(
+      'Usernames must contain only numbers, letters, period, underscore and '.
+      'hyphen, and can not end with a period. They must have no more than %d '.
+      'characters.',
+      new PhutilNumber(self::MAXIMUM_USERNAME_LENGTH));
   }
 
   public static function validateUsername($username) {
@@ -646,11 +707,29 @@ EOBODY;
     //  - Unit tests, obviously.
     //  - describeValidUsername() method, above.
 
+    if (strlen($username) > self::MAXIMUM_USERNAME_LENGTH) {
+      return false;
+    }
+
     return (bool)preg_match('/^[a-zA-Z0-9._-]*[a-zA-Z0-9_-]$/', $username);
   }
 
   public static function getDefaultProfileImageURI() {
     return celerity_get_resource_uri('/rsrc/image/avatar.png');
+  }
+
+  public function attachStatus(PhabricatorUserStatus $status) {
+    $this->status = $status;
+    return $this;
+  }
+
+  public function getStatus() {
+    $this->assertAttached($this->status);
+    return $this->status;
+  }
+
+  public function hasStatus() {
+    return $this->status !== self::ATTACHABLE;
   }
 
   public function attachProfileImageURI($uri) {
@@ -666,6 +745,8 @@ EOBODY;
     $src_phid = $this->getProfileImagePHID();
 
     if ($src_phid) {
+      // TODO: (T603) Can we get rid of this entirely and move it to
+      // PeopleQuery with attach/attachable?
       $file = id(new PhabricatorFile())->loadOneWhere('phid = %s', $src_phid);
       if ($file) {
         $this->profileImage = $file->getBestURI();
@@ -728,6 +809,60 @@ EOBODY;
       $user->makeEphemeral();
     }
     return $user;
+  }
+
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+      PhabricatorPolicyCapability::CAN_EDIT,
+    );
+  }
+
+  public function getPolicy($capability) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        return PhabricatorPolicies::POLICY_PUBLIC;
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return PhabricatorPolicies::POLICY_NOONE;
+    }
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    return $this->getPHID() && ($viewer->getPHID() === $this->getPHID());
+  }
+
+  public function describeAutomaticCapability($capability) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return pht('Only you can edit your information.');
+      default:
+        return null;
+    }
+  }
+
+
+/* -(  PhabricatorCustomFieldInterface  )------------------------------------ */
+
+
+  public function getCustomFieldSpecificationForRole($role) {
+    return PhabricatorEnv::getEnvConfig('user.fields');
+  }
+
+  public function getCustomFieldBaseClass() {
+    return 'PhabricatorUserCustomField';
+  }
+
+  public function getCustomFields() {
+    return $this->assertAttached($this->customFields);
+  }
+
+  public function attachCustomFields(PhabricatorCustomFieldAttachment $fields) {
+    $this->customFields = $fields;
+    return $this;
   }
 
 }

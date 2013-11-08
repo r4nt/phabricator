@@ -168,6 +168,10 @@ final class AphrontRequest {
            (idx($_FILES[$name], 'error') !== UPLOAD_ERR_NO_FILE);
   }
 
+  final public function isHTTPGet() {
+    return ($_SERVER['REQUEST_METHOD'] == 'GET');
+  }
+
   final public function isHTTPPost() {
     return ($_SERVER['REQUEST_METHOD'] == 'POST');
   }
@@ -275,6 +279,7 @@ final class AphrontRequest {
 
   final public function clearCookie($name) {
     $this->setCookie($name, '', time() - (60 * 60 * 24 * 30));
+    unset($_COOKIE[$name]);
   }
 
   final public function setCookie($name, $value, $expire = null) {
@@ -285,21 +290,49 @@ final class AphrontRequest {
     // domain. Also, use the URI protocol to control SSL-only cookies.
     $base_uri = PhabricatorEnv::getEnvConfig('phabricator.base-uri');
     if ($base_uri) {
-      $base_uri = new PhutilURI($base_uri);
-
-      $base_domain = $base_uri->getDomain();
-      $base_protocol = $base_uri->getProtocol();
+      $alternates = PhabricatorEnv::getEnvConfig('phabricator.allowed-uris');
+      $allowed_uris = array_merge(
+        array($base_uri),
+        $alternates);
 
       $host = $this->getHost();
 
-      if ($base_domain != $host) {
-        throw new Exception(
-          "This install of Phabricator is configured as '{$base_domain}' but ".
-          "you are accessing it via '{$host}'. Access Phabricator via ".
-          "the primary configured domain.");
+      $match = null;
+      foreach ($allowed_uris as $allowed_uri) {
+        $uri = new PhutilURI($allowed_uri);
+        $domain = $uri->getDomain();
+        if ($host == $domain) {
+          $match = $uri;
+          break;
+        }
       }
 
-      $is_secure = ($base_protocol == 'https');
+      if ($match === null) {
+        if (count($allowed_uris) > 1) {
+          throw new Exception(
+            pht(
+              'This Phabricator install is configured as "%s", but you are '.
+              'accessing it via "%s". Access Phabricator via the primary '.
+              'configured domain, or one of the permitted alternate '.
+              'domains: %s. Phabricator will not set cookies on other domains '.
+              'for security reasons.',
+              $base_uri,
+              $host,
+              implode(', ', $alternates)));
+        } else {
+          throw new Exception(
+            pht(
+              'This Phabricator install is configured as "%s", but you are '.
+              'accessing it via "%s". Acccess Phabricator via the primary '.
+              'configured domain. Phabricator will not set cookies on other '.
+              'domains for security reasons.',
+              $base_uri,
+              $host));
+        }
+      }
+
+      $base_domain = $match->getDomain();
+      $is_secure = ($match->getProtocol() == 'https');
     } else {
       $base_uri = new PhutilURI(PhabricatorEnv::getRequestBaseURI());
       $base_domain = $base_uri->getDomain();
@@ -309,14 +342,25 @@ final class AphrontRequest {
       $expire = time() + (60 * 60 * 24 * 365 * 5);
     }
 
-    setcookie(
-      $name,
-      $value,
-      $expire,
-      $path = '/',
-      $base_domain,
-      $is_secure,
-      $http_only = true);
+
+    if (php_sapi_name() == 'cli') {
+      // Do nothing, to avoid triggering "Cannot modify header information"
+      // warnings.
+
+      // TODO: This is effectively a test for whether we're running in a unit
+      // test or not. Move this actual call to HTTPSink?
+    } else {
+      setcookie(
+        $name,
+        $value,
+        $expire,
+        $path = '/',
+        $base_domain,
+        $is_secure,
+        $http_only = true);
+    }
+
+    $_COOKIE[$name] = $value;
 
     return $this;
   }
@@ -385,7 +429,7 @@ final class AphrontRequest {
 
     // Remove magic parameters like __dialog__ and __ajax__.
     foreach ($data as $key => $value) {
-      if (strncmp($key, '__', 2)) {
+      if (!strncmp($key, '__', 2)) {
         unset($data[$key]);
       }
     }

@@ -17,9 +17,7 @@ final class PhabricatorSearchSelectController
     $user = $request->getUser();
 
     $query = new PhabricatorSearchQuery();
-
     $query_str = $request->getStr('query');
-    $matches = array();
 
     $query->setQuery($query_str);
     $query->setParameter('type', $this->type);
@@ -31,7 +29,11 @@ final class PhabricatorSearchSelectController
         break;
       case 'created';
         $query->setParameter('author', array($user->getPHID()));
-        $query->setParameter('open', 1);
+        // TODO - if / when we allow pholio mocks to be archived, etc
+        // update this
+        if ($this->type != PholioPHIDTypeMock::TYPECONST) {
+          $query->setParameter('open', 1);
+        }
         break;
       case 'open':
         $query->setParameter('open', 1);
@@ -60,46 +62,15 @@ final class PhabricatorSearchSelectController
   }
 
   private function queryObjectNames($query) {
+    $viewer = $this->getRequest()->getUser();
 
-    $pattern = null;
-    switch ($this->type) {
-      case PhabricatorPHIDConstants::PHID_TYPE_TASK:
-        $pattern = '/\bT(\d+)\b/i';
-        break;
-      case PhabricatorPHIDConstants::PHID_TYPE_DREV:
-        $pattern = '/\bD(\d+)\b/i';
-        break;
-    }
+    $objects = id(new PhabricatorObjectQuery())
+      ->setViewer($viewer)
+      ->withTypes(array($this->type))
+      ->withNames(array($query))
+      ->execute();
 
-    if (!$pattern) {
-      return array();
-    }
-
-    $matches = array();
-    preg_match_all($pattern, $query, $matches);
-    if (!$matches) {
-      return array();
-    }
-
-    $object_ids = $matches[1];
-    if (!$object_ids) {
-      return array();
-    }
-
-    switch ($this->type) {
-      case PhabricatorPHIDConstants::PHID_TYPE_DREV:
-        $objects = id(new DifferentialRevision())->loadAllWhere(
-          'id IN (%Ld)',
-          $object_ids);
-        break;
-      case PhabricatorPHIDConstants::PHID_TYPE_TASK:
-        $objects = id(new ManiphestTask())->loadAllWhere(
-          'id IN (%Ld)',
-          $object_ids);
-        break;
-    }
-
-    return array_fill_keys(mpull($objects, 'getPHID'), true);
+    return mpull($objects, 'getPHID');
   }
 
 }

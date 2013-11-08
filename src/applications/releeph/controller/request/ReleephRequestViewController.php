@@ -1,6 +1,6 @@
 <?php
 
-final class ReleephRequestViewController extends ReleephController {
+final class ReleephRequestViewController extends ReleephProjectController {
 
   public function processRequest() {
     $request = $this->getRequest();
@@ -29,41 +29,45 @@ final class ReleephRequestViewController extends ReleephController {
         ->setReloadOnStateChange(true)
         ->setOriginType('request');
 
-    $events = $releeph_request->loadEvents();
-    $phids = array_mergev(mpull($events, 'extractPHIDs'));
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->setViewer($request->getUser())
-      ->loadHandles();
+    $user = $request->getUser();
 
-    $rq_event_list_view =
-      id(new ReleephRequestEventListView())
-        ->setUser($request->getUser())
-        ->setEvents($events)
-        ->setHandles($handles);
+    $engine = id(new PhabricatorMarkupEngine())
+      ->setViewer($user);
 
-    // Handle comment submit
-    $origin_uri = '/RQ'.$releeph_request->getID();
-    if ($request->isFormPost()) {
-      id(new ReleephRequestEditor($releeph_request))
-        ->setActor($request->getUser())
-        ->addComment($request->getStr('comment'));
-      return id(new AphrontRedirectResponse())->setURI($origin_uri);
+    $xactions = id(new ReleephRequestTransactionQuery())
+      ->setViewer($user)
+      ->withObjectPHIDs(array($releeph_request->getPHID()))
+      ->execute();
+
+    foreach ($xactions as $xaction) {
+      if ($xaction->getComment()) {
+        $engine->addObject(
+          $xaction->getComment(),
+          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
+      }
     }
+    $engine->process();
 
-    $form = id(new AphrontFormView())
+    $timeline = id(new PhabricatorApplicationTransactionView())
       ->setUser($request->getUser())
-      ->appendChild(
-        id(new AphrontFormTextAreaControl())
-          ->setName('comment'))
-      ->appendChild(
-        id(new AphrontFormSubmitControl())
-          ->addCancelButton($origin_uri, 'Cancel')
-          ->setValue("Submit"));
+      ->setObjectPHID($releeph_request->getPHID())
+      ->setTransactions($xactions)
+      ->setMarkupEngine($engine);
 
-    $rq_comment_form = id(new AphrontPanelView())
-      ->setHeader('Add a comment')
-      ->setWidth(AphrontPanelView::WIDTH_FULL)
-      ->appendChild($form);
+    $add_comment_header = id(new PHUIHeaderView())
+      ->setHeader('Plea or yield');
+
+    $draft = PhabricatorDraft::newFromUserAndKey(
+      $user,
+      $releeph_request->getPHID());
+
+    $add_comment_form = id(new PhabricatorApplicationTransactionCommentView())
+      ->setUser($user)
+      ->setObjectPHID($releeph_request->getPHID())
+      ->setDraft($draft)
+      ->setAction($this->getApplicationURI(
+        '/request/comment/'.$releeph_request->getID().'/'))
+      ->setSubmitButtonName('Comment');
 
     $title = hsprintf("RQ%d: %s",
       $releeph_request->getID(),
@@ -88,8 +92,9 @@ final class ReleephRequestViewController extends ReleephController {
         $crumbs,
         array(
           $rq_view,
-          $rq_event_list_view,
-          $rq_comment_form
+          $timeline,
+          $add_comment_header,
+          $add_comment_form,
         )
       ),
       array(

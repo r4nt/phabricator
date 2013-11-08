@@ -8,7 +8,9 @@ final class PhabricatorRepositoryCommitOwnersWorker
     PhabricatorRepositoryCommit $commit) {
 
     $affected_paths = PhabricatorOwnerPathQuery::loadAffectedPaths(
-      $repository, $commit);
+      $repository,
+      $commit,
+      PhabricatorUser::getOmnipotentUser());
     $affected_packages = PhabricatorOwnersPackage::loadAffectedPackages(
       $repository,
       $affected_paths);
@@ -56,6 +58,9 @@ final class PhabricatorRepositoryCommitOwnersWorker
       $commit->save();
     }
 
+    $commit->writeImportStatusFlag(
+      PhabricatorRepositoryCommit::IMPORTED_OWNERS);
+
     if ($this->shouldQueueFollowupTasks()) {
       PhabricatorWorker::scheduleTask(
         'PhabricatorRepositoryCommitHeraldWorker',
@@ -90,9 +95,10 @@ final class PhabricatorRepositoryCommitOwnersWorker
     $commit_reviewedby_phid = null;
 
     if ($revision_id) {
+      // TODO: (T603) This is probably safe to use an omnipotent user on,
+      // but check things more closely.
       $revision = id(new DifferentialRevision())->load($revision_id);
       if ($revision) {
-        $revision->loadRelationships();
         $revision_author_phid = $revision->getAuthorPHID();
         $revision_reviewedby_phid = $revision->loadReviewedBy();
         $commit_reviewedby_phid = $data->getCommitDetail('reviewerPHID');

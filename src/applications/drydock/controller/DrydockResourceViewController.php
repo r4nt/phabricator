@@ -19,11 +19,11 @@ final class DrydockResourceViewController extends DrydockController {
 
     $title = 'Resource '.$resource->getID().' '.$resource->getName();
 
-    $header = id(new PhabricatorHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setHeader($title);
 
     $actions = $this->buildActionListView($resource);
-    $properties = $this->buildPropertyListView($resource);
+    $properties = $this->buildPropertyListView($resource, $actions);
 
     $resource_uri = 'resource/'.$resource->getID().'/';
     $resource_uri = $this->getApplicationURI($resource_uri);
@@ -33,7 +33,7 @@ final class DrydockResourceViewController extends DrydockController {
       ->needResources(true)
       ->execute();
 
-    $lease_header = id(new PhabricatorHeaderView())
+    $lease_header = id(new PHUIHeaderView())
       ->setHeader(pht('Leases'));
 
     $lease_list = $this->buildLeaseListView($leases);
@@ -51,16 +51,19 @@ final class DrydockResourceViewController extends DrydockController {
     $log_table->appendChild($pager);
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setActionList($actions);
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setName(pht('Resource %d', $resource->getID())));
 
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addPropertyList($properties);
+
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
-        $actions,
-        $properties,
+        $object_box,
         $lease_header,
         $lease_list,
         $log_table,
@@ -75,6 +78,7 @@ final class DrydockResourceViewController extends DrydockController {
   private function buildActionListView(DrydockResource $resource) {
     $view = id(new PhabricatorActionListView())
       ->setUser($this->getRequest()->getUser())
+      ->setObjectURI($this->getRequest()->getRequestURI())
       ->setObject($resource);
 
     $can_close = ($resource->getStatus() == DrydockResourceStatus::STATUS_OPEN);
@@ -92,8 +96,12 @@ final class DrydockResourceViewController extends DrydockController {
     return $view;
   }
 
-  private function buildPropertyListView(DrydockResource $resource) {
-    $view = new PhabricatorPropertyListView();
+  private function buildPropertyListView(
+    DrydockResource $resource,
+    PhabricatorActionListView $actions) {
+
+    $view = new PHUIPropertyListView();
+    $view->setActionList($actions);
 
     $status = $resource->getStatus();
     $status = DrydockResourceStatus::getNameForStatus($status);

@@ -1,6 +1,17 @@
 <?php
 
-abstract class ReleephFieldSpecification {
+abstract class ReleephFieldSpecification
+  extends PhabricatorCustomField
+  implements PhabricatorMarkupInterface {
+
+  // TODO: This is temporary, until ReleephFieldSpecification is more conformant
+  // to PhabricatorCustomField.
+  private $requestValue;
+
+  public function readValueFromRequest(AphrontRequest $request) {
+    $this->requestValue = $request->getStr($this->getRequiredStorageKey());
+    return $this;
+  }
 
   abstract public function getName();
 
@@ -10,16 +21,35 @@ abstract class ReleephFieldSpecification {
     return null;
   }
 
+  public function getRequiredStorageKey() {
+    $key = $this->getStorageKey();
+    if ($key === null) {
+      throw new PhabricatorCustomFieldImplementationIncompleteException($this);
+    }
+    if (strpos($key, '.') !== false) {
+      /**
+       * Storage keys are reused for form controls, and periods in form control
+       * names break HTML forms.
+       */
+      throw new Exception(
+        "You can't use '.' in storage keys!");
+    }
+    return $key;
+  }
+
+  public function shouldAppearInEditView() {
+    return $this->isEditable();
+  }
+
   final public function isEditable() {
     return $this->getStorageKey() !== null;
   }
 
-  /**
-   * This will be called many times if you are using **Selecting**.  In
-   * particular, for N selecting fields, selectReleephRequests() is called
-   * N-squared times, each time for R ReleephRequests.
-   */
   final public function getValue() {
+    if ($this->requestValue !== null) {
+      return $this->requestValue;
+    }
+
     $key = $this->getRequiredStorageKey();
     return $this->getReleephRequest()->getDetail($key);
   }
@@ -36,6 +66,17 @@ abstract class ReleephFieldSpecification {
     return;
   }
 
+  /**
+   * Turn values as they are stored in a ReleephRequest into a text that can be
+   * rendered as a transactions old/new values.
+   */
+  public function normalizeForTransactionView(
+    PhabricatorApplicationTransaction $xaction,
+    $value) {
+
+    return $value;
+  }
+
 
 /* -(  Header View  )-------------------------------------------------------- */
 
@@ -50,20 +91,6 @@ abstract class ReleephFieldSpecification {
   public function renderValueForHeaderView() {
     $key = $this->getRequiredStorageKey();
     return $this->getReleephRequest()->getDetail($key);
-  }
-
-
-/* -(  Edit View  )---------------------------------------------------------- */
-
-  public function renderEditControl(AphrontRequest $request) {
-    throw new ReleephFieldSpecificationIncompleteException($this);
-  }
-
-  public function setValueFromAphrontRequest(AphrontRequest $request) {
-    $data = $request->getRequestData();
-    $value = idx($data, $this->getRequiredStorageKey());
-    $this->validate($value);
-    $this->setValue($value);
   }
 
 
@@ -142,76 +169,6 @@ abstract class ReleephFieldSpecification {
   public function bulkLoad(array $releeph_requests) {
   }
 
-
-/* -(  Selecting  )---------------------------------------------------------- */
-
-  /**
-   * Append select controls to the given form.
-   *
-   * You are given:
-   *
-   *  - the AphrontFormView to append to;
-   *
-   *  - the AphrontRequest, so you can make use of the value currently selected
-   *    in the form;
-   *
-   *  - $all_releeph_requests: an array of all the ReleephRequests without any
-   *    selection based filtering; and
-   *
-   *  - $all_releeph_requests_without_this_field: an array of ReleephRequests
-   *    that have been selected by all the other select controls on this page.
-   *
-   * The example in ReleephLevelFieldSpecification shows how to use these.
-   * $all_releeph_requests lets you find out all the values of a field in all
-   * ReleephRequests, so you can render controls for every known value.
-   *
-   * $all_releeph_requests_without_this_field lets you count how many
-   * ReleephRequests could be affected by this field's select control, after
-   * all the other fields have made their selections.
-   * ReleephLevelFieldSpecification uses this to render a preview count for
-   * each select button, and disables the button completely (but still renders
-   * it) if it couldn't possibly select anything.
-   */
-  protected function appendSelectControls(
-    AphrontFormView $form,
-    AphrontRequest $request,
-    array $all_releeph_requests,
-    array $all_releeph_requests_without_this_field) {
-
-    return null;
-  }
-
-  /**
-   * Filter the $releeph_requests using the data you set with your form
-   * controls, and which is now available in the provided AphrontRequest.
-   */
-  protected function selectReleephRequests(AphrontRequest $request,
-                                           array &$releeph_requests) {
-    return null;
-  }
-
-  /**
-   * If you have PHIDs that can be used in an AphrontFormTokenizerControl,
-   * return true here, return the PHIDs in getSelectablePHIDs(), and return the
-   * URL the Tokenizer should use for the form control in
-   * getSelectTokenizerDatasource().
-   *
-   * This is a cheap alternative to implementing appendSelectControls() and
-   * selectReleephRequests() in full.
-   */
-  protected function hasSelectablePHIDs() {
-    return false;
-  }
-
-  protected function getSelectablePHIDs() {
-    throw new ReleephFieldSpecificationIncompleteException($this);
-  }
-
-  protected function getSelectTokenizerDatasource() {
-    throw new ReleephFieldSpecificationIncompleteException($this);
-  }
-
-
 /* -(  Commit Messages  )---------------------------------------------------- */
 
   public function shouldAppearOnCommitMessage() {
@@ -219,11 +176,11 @@ abstract class ReleephFieldSpecification {
   }
 
   public function renderLabelForCommitMessage() {
-    throw new ReleephFieldSpecificationIncompleteException($this);
+    throw new PhabricatorCustomFieldImplementationIncompleteException($this);
   }
 
   public function renderValueForCommitMessage() {
-    throw new ReleephFieldSpecificationIncompleteException($this);
+    throw new PhabricatorCustomFieldImplementationIncompleteException($this);
   }
 
   public function shouldAppearOnRevertMessage() {
@@ -239,121 +196,61 @@ abstract class ReleephFieldSpecification {
   }
 
 
-/* -(  Implementation  )----------------------------------------------------- */
+/* -(  Markup Interface  )--------------------------------------------------- */
 
-  protected function getRequiredStorageKey() {
-    $key = $this->getStorageKey();
-    if ($key === null) {
-      throw new ReleephFieldSpecificationIncompleteException($this);
-    }
-    if (strpos($key, '.') !== false) {
-      /**
-       * Storage keys are reused for form controls, and periods in form control
-       * names break HTML forms.
-       */
-      throw new Exception(
-        "You can't use '.' in storage keys!");
-    }
-    return $key;
-  }
+  const MARKUP_FIELD_GENERIC = 'releeph:generic-markup-field';
+
+  private $engine;
 
   /**
-   * The "hook" functions ##appendSelectControlsHook()## and
-   * ##selectReleephRequestsHook()## are used with ##hasSelectablePHIDs()##, to
-   * use the tokenizing helpers if ##hasSelectablePHIDs()## returns true.
+   * ReleephFieldSpecification implements much of PhabricatorMarkupInterface
+   * for you.  If you return true from `shouldMarkup()`, and implement
+   * `getMarkupText()` then your text will be rendered through the Phabricator
+   * markup pipeline.
+   *
+   * Output is retrievable with `getMarkupEngineOutput()`.
    */
-  public function appendSelectControlsHook(
-    AphrontFormView $form,
-    AphrontRequest $request,
-    array $all_releeph_requests,
-    array $all_releeph_requests_without_this_field) {
-
-    if ($this->hasSelectablePHIDs()) {
-      $this->appendTokenizingSelectControl(
-        $form,
-        $request,
-        $all_releeph_requests,
-        $all_releeph_requests_without_this_field);
-    } else {
-      $this->appendSelectControls(
-        $form,
-        $request,
-        $all_releeph_requests,
-        $all_releeph_requests_without_this_field);
-    }
+  public function shouldMarkup() {
+    return false;
   }
 
-  // See above
-  public function selectReleephRequestsHook(AphrontRequest $request,
-                                            array &$releeph_requests) {
-
-    if ($this->hasSelectablePHIDs()) {
-      $this->selectReleephRequestsFromTokens(
-        $request,
-        $releeph_requests);
-    } else {
-      $this->selectReleephRequests(
-        $request,
-        $releeph_requests);
-    }
+  public function getMarkupText($field) {
+    throw new PhabricatorCustomFieldImplementationIncompleteException($this);
   }
 
-  private function appendTokenizingSelectControl(
-    AphrontFormView $form,
-    AphrontRequest $request,
-    array $all_releeph_requests,
-    array $all_releeph_requests_without_this_field) {
-
-    $key = urlencode(strtolower($this->getName()));
-    $selected_phids = $request->getArr($key);
-    $handles = id(new PhabricatorObjectHandleData($selected_phids))
-      ->setViewer($request->getUser())
-      ->loadHandles();
-
-    $tokens = array();
-    foreach ($selected_phids as $phid) {
-      $tokens[$phid] = $handles[$phid]->getFullName();
-    }
-
-    $datasource = $this->getSelectTokenizerDatasource();
-    $control =
-      id(new AphrontFormTokenizerControl())
-        ->setDatasource($datasource)
-        ->setName($key)
-        ->setLabel($this->getName())
-        ->setValue($tokens);
-
-    $form->appendChild($control);
+  final public function getMarkupEngineOutput() {
+    return $this->engine->getOutput($this, self::MARKUP_FIELD_GENERIC);
   }
 
-  private function selectReleephRequestsFromTokens(AphrontRequest $request,
-                                                   array &$releeph_requests) {
+  final public function setMarkupEngine(PhabricatorMarkupEngine $engine) {
+    $this->engine = $engine;
+    $engine->addObject($this, self::MARKUP_FIELD_GENERIC);
+    return $this;
+  }
 
-    $key = urlencode(strtolower($this->getName()));
-    $selected_phids = $request->getArr($key);
-    if (!$selected_phids) {
-      return;
-    }
+  final public function getMarkupFieldKey($field) {
+    return sprintf(
+      '%s:%s:%s:%s',
+      $this->getReleephRequest()->getPHID(),
+      $this->getStorageKey(),
+      $field,
+      PhabricatorHash::digest($this->getMarkupText($field)));
+  }
 
-    $selected_phid_lookup = array();
-    foreach ($selected_phids as $phid) {
-      $selected_phid_lookup[$phid] = $phid;
-    }
+  final public function newMarkupEngine($field) {
+    return PhabricatorMarkupEngine::newDifferentialMarkupEngine();
+  }
 
-    $filtered = array();
-    foreach ($releeph_requests as $releeph_request) {
-      $rq_phids = $this
-        ->setReleephRequest($releeph_request)
-        ->getSelectablePHIDs();
-      foreach ($rq_phids as $rq_phid) {
-        if (idx($selected_phid_lookup, $rq_phid)) {
-          $filtered[] = $releeph_request;
-          break;
-        }
-      }
-    }
+  final public function didMarkupText(
+    $field,
+    $output,
+    PhutilMarkupEngine $engine) {
 
-    $releeph_requests = $filtered;
+    return $output;
+  }
+
+  final public function shouldUseMarkupCache($field) {
+    return true;
   }
 
 }

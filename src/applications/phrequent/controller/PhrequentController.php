@@ -2,13 +2,17 @@
 
 abstract class PhrequentController extends PhabricatorController {
 
-  protected function buildNav($view) {
+  protected function buildSideNavView() {
+    $user = $this->getRequest()->getUser();
+
     $nav = new AphrontSideNavFilterView();
-    $nav->setBaseURI(new PhutilURI('/phrequent/'));
+    $nav->setBaseURI(new PhutilURI($this->getApplicationURI()));
 
-    $nav->addFilter('usertime', 'Time Tracked');
+    id(new PhrequentSearchEngine())
+      ->setViewer($user)
+      ->addNavigationItems($nav->getMenu());
 
-    $nav->selectFilter($view);
+    $nav->selectFilter(null);
 
     return $nav;
   }

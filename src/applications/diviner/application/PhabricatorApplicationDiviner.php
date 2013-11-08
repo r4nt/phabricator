@@ -11,7 +11,7 @@ final class PhabricatorApplicationDiviner extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'Documentation';
+    return pht('Documentation');
   }
 
   public function getTitleGlyph() {
@@ -20,12 +20,30 @@ final class PhabricatorApplicationDiviner extends PhabricatorApplication {
 
   public function getRoutes() {
     return array(
-      '/diviner/' => 'DivinerListController',
+      '/diviner/' => array(
+        '' => 'DivinerLegacyController',
+        'query/((?<key>[^/]+)/)?' => 'DivinerAtomListController',
+        'find/' => 'DivinerFindController',
+      ),
+      '/docs/(?P<keyword>[^/]+)/' => 'DivinerJumpController',
+      '/book/(?P<book>[^/]+)/' => 'DivinerBookController',
+      '/book/'.
+        '(?P<book>[^/]+)/'.
+        '(?P<type>[^/]+)/'.
+        '(?:(?P<context>[^/]+)/)?'.
+        '(?P<name>[^/]+)/'.
+        '(?:(?P<index>\d+)/)?' => 'DivinerAtomController',
     );
   }
 
   public function getApplicationGroup() {
     return self::GROUP_COMMUNICATION;
+  }
+
+  public function getRemarkupRules() {
+    return array(
+      new DivinerRemarkupRuleSymbol(),
+    );
   }
 
   public function buildMainMenuItems(
@@ -40,8 +58,9 @@ final class PhabricatorApplicationDiviner extends PhabricatorApplication {
     }
 
     if ($application && $application->getHelpURI()) {
-      $item = new PhabricatorMenuItemView();
+      $item = new PHUIListItemView();
       $item->setName(pht('%s Help', $application->getName()));
+      $item->addClass('core-menu-item');
       $item->setIcon('help');
       $item->setHref($application->getHelpURI());
       $items[] = $item;

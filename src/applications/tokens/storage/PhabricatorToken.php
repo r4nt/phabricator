@@ -27,6 +27,10 @@ final class PhabricatorToken extends PhabricatorTokenDAO
     return false;
   }
 
+  public function describeAutomaticCapability($capability) {
+    return null;
+  }
+
   public function renderIcon() {
     // TODO: Maybe move to a View class?
 
@@ -35,12 +39,10 @@ final class PhabricatorToken extends PhabricatorTokenDAO
 
     $sprite = substr($this->getPHID(), 10);
 
-    return phutil_tag(
-      'div',
-      array(
-        'class' => 'sprite-tokens token-icon token-'.$sprite,
-      ),
-      '');
+    return id(new PHUIIconView())
+      ->setSpriteSheet(PHUIIconView::SPRITE_TOKENS)
+      ->setSpriteIcon($sprite);
+
   }
 
 }

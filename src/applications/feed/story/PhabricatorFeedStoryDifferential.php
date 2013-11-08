@@ -9,20 +9,21 @@ final class PhabricatorFeedStoryDifferential extends PhabricatorFeedStory {
   public function renderView() {
     $data = $this->getStoryData();
 
-    $view = new PhabricatorFeedStoryView();
-    $view->setViewed($this->getHasViewed());
+    $view = $this->newStoryView();
+    $view->setAppIcon('differential-dark');
 
     $line = $this->getLineForData($data);
     $view->setTitle($line);
-    $view->setEpoch($data->getEpoch());
 
     $href = $this->getHandle($data->getValue('revision_phid'))->getURI();
     $view->setHref($href);
 
     $action = $data->getValue('action');
+
     switch ($action) {
       case DifferentialAction::ACTION_CREATE:
       case DifferentialAction::ACTION_CLOSE:
+      case DifferentialAction::ACTION_COMMENT:
         $full_size = true;
         break;
       default:
@@ -30,12 +31,10 @@ final class PhabricatorFeedStoryDifferential extends PhabricatorFeedStory {
         break;
     }
 
+    $view->setImage($this->getHandle($data->getAuthorPHID())->getImageURI());
     if ($full_size) {
-      $view->setImage($this->getHandle($data->getAuthorPHID())->getImageURI());
       $content = $this->renderSummary($data->getValue('feedback_content'));
       $view->appendChild($content);
-    } else {
-      $view->setOneLineStory(true);
     }
 
     return $view;
@@ -88,4 +87,70 @@ final class PhabricatorFeedStoryDifferential extends PhabricatorFeedStory {
         => 'PhabricatorFeedStoryDifferentialAggregate',
     );
   }
+
+  // TODO: At some point, make feed rendering not terrible and remove this
+  // hacky mess.
+  public function renderForAsanaBridge($implied_context = false) {
+    $data = $this->getStoryData();
+    $comment = $data->getValue('feedback_content');
+
+    $author_name = $this->getHandle($this->getAuthorPHID())->getName();
+    $action = $this->getValue('action');
+    $verb = DifferentialAction::getActionPastTenseVerb($action);
+
+    $engine = PhabricatorMarkupEngine::newMarkupEngine(array())
+      ->setConfig('viewer', new PhabricatorUser())
+      ->setMode(PhutilRemarkupEngine::MODE_TEXT);
+
+    $revision_phid = $this->getPrimaryObjectPHID();
+    $revision_name = $this->getHandle($revision_phid)->getFullName();
+
+    if ($implied_context) {
+      $title = "{$author_name} {$verb} this revision.";
+    } else {
+      $title = "{$author_name} {$verb} revision {$revision_name}.";
+    }
+
+    if (strlen($comment)) {
+      $comment = $engine->markupText($comment);
+
+      $title .= "\n\n";
+      $title .= $comment;
+    }
+
+    // Roughly render inlines into the comment.
+    $comment_id = $data->getValue('temporaryCommentID');
+    if ($comment_id) {
+      $inlines = id(new DifferentialInlineCommentQuery())
+        ->withCommentIDs(array($comment_id))
+        ->execute();
+      if ($inlines) {
+        $title .= "\n\n";
+        $title .= pht('Inline Comments');
+        $title .= "\n";
+        $changeset_ids = mpull($inlines, 'getChangesetID');
+        $changesets = id(new DifferentialChangeset())->loadAllWhere(
+          'id IN (%Ld)',
+          $changeset_ids);
+        foreach ($inlines as $inline) {
+          $changeset = idx($changesets, $inline->getChangesetID());
+          if (!$changeset) {
+            continue;
+          }
+
+          $filename = $changeset->getDisplayFilename();
+          $linenumber = $inline->getLineNumber();
+          $inline_text = $engine->markupText($inline->getContent());
+          $inline_text = rtrim($inline_text);
+
+          $title .= "{$filename}:{$linenumber} {$inline_text}\n";
+        }
+      }
+    }
+
+
+    return $title;
+  }
+
+
 }

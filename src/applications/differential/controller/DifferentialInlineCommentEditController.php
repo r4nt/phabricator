@@ -15,7 +15,13 @@ final class DifferentialInlineCommentEditController
     $revision_id = $this->revisionID;
     $changeset_id = $this->getChangesetID();
 
-    if (!id(new DifferentialRevision())->load($revision_id)) {
+    $viewer = $this->getRequest()->getUser();
+    $revision = id(new DifferentialRevisionQuery())
+      ->setViewer($viewer)
+      ->withIDs(array($revision_id))
+      ->executeOne();
+
+    if (!$revision) {
       throw new Exception("Invalid revision ID!");
     }
 
@@ -24,12 +30,14 @@ final class DifferentialInlineCommentEditController
     }
 
     return id(new DifferentialInlineComment())
-      ->setRevisionID($revision_id)
+      ->setRevision($revision)
       ->setChangesetID($changeset_id);
   }
 
   protected function loadComment($id) {
-    return id(new DifferentialInlineComment())->load($id);
+    return id(new DifferentialInlineCommentQuery())
+      ->withIDs(array($id))
+      ->executeOne();
   }
 
   protected function loadCommentForEdit($id) {

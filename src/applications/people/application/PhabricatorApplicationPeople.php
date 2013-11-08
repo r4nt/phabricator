@@ -23,7 +23,7 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
   }
 
   public function getApplicationGroup() {
-    return self::GROUP_ADMIN;
+    return self::GROUP_ORGANIZATION;
   }
 
   public function canUninstall() {
@@ -39,16 +39,24 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
   public function getRoutes() {
     return array(
       '/people/' => array(
-        '' => 'PhabricatorPeopleListController',
+        '(query/(?P<key>[^/]+)/)?' => 'PhabricatorPeopleListController',
         'logs/' => 'PhabricatorPeopleLogsController',
         'edit/(?:(?P<id>[1-9]\d*)/(?:(?P<view>\w+)/)?)?'
           => 'PhabricatorPeopleEditController',
         'ldap/' => 'PhabricatorPeopleLdapController',
+        'editprofile/(?P<id>[1-9]\d*)/' =>
+          'PhabricatorPeopleProfileEditController',
+        'picture/(?P<id>[1-9]\d*)/' =>
+          'PhabricatorPeopleProfilePictureController',
       ),
-      '/p/(?P<username>[\w._-]+)/(?:(?P<page>\w+)/)?'
+      '/p/(?P<username>[\w._-]+)/'
         => 'PhabricatorPeopleProfileController',
-      '/emailverify/(?P<code>[^/]+)/' =>
-        'PhabricatorEmailVerificationController',
+    );
+  }
+
+  public function getRemarkupRules() {
+    return array(
+      new PhabricatorRemarkupRuleMention(),
     );
   }
 
@@ -61,10 +69,10 @@ final class PhabricatorApplicationPeople extends PhabricatorApplication {
     if ($user->isLoggedIn()) {
       $image = $user->loadProfileImageURI();
 
-      $item = new PhabricatorMenuItemView();
+      $item = new PHUIListItemView();
       $item->setName($user->getUsername());
       $item->setHref('/p/'.$user->getUsername().'/');
-      $item->addClass('phabricator-core-menu-item');
+      $item->addClass('core-menu-item');
 
       $classes = array(
         'phabricator-core-menu-icon',

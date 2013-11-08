@@ -87,12 +87,11 @@ abstract class PhabricatorMailReplyHandler {
     $template->setBody($this->buildErrorMailBody($error, $mail));
     $template->setRelatedPHID($mail->getRelatedPHID());
     $phid = $this->getActor()->getPHID();
-    $tos = array(
-      $phid => PhabricatorObjectHandleData::loadOneHandle(
-        $phid,
-        // TODO: This could be cleaner (T603).
-        PhabricatorUser::getOmnipotentUser()),
-    );
+    $handle = id(new PhabricatorHandleQuery())
+      ->setViewer($this->getActor())
+      ->withPHIDs(array($phid))
+      ->executeOne();
+    $tos = array($phid => $handle);
     $mails = $this->multiplexMail($template, $tos, array());
 
     foreach ($mails as $email) {
@@ -261,7 +260,7 @@ EOBODY;
     // We compute a hash using the object's own PHID to prevent an attacker
     // from blindly interacting with objects that they haven't ever received
     // mail about by just sending to D1@, D2@, etc...
-    $hash = PhabricatorMetaMTAReceivedMail::computeMailHash(
+    $hash = PhabricatorObjectMailReceiver::computeMailHash(
       $receiver->getMailKey(),
       $receiver->getPHID());
 
@@ -281,19 +280,26 @@ EOBODY;
     PhabricatorObjectHandle $handle,
     $prefix) {
 
-    if ($handle->getType() != PhabricatorPHIDConstants::PHID_TYPE_USER) {
+    if ($handle->getType() != PhabricatorPeoplePHIDTypeUser::TYPECONST) {
       // You must be a real user to get a private reply handler address.
       return null;
     }
 
-    $user = head(id(new PhabricatorPeopleQuery())
-      ->withPhids(array($handle->getPHID()))
-      ->execute());
+    $user = id(new PhabricatorPeopleQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($handle->getPHID()))
+      ->executeOne();
+
+    if (!$user) {
+      // This may happen if a user was subscribed to something, and was then
+      // deleted.
+      return null;
+    }
 
     $receiver = $this->getMailReceiver();
     $receiver_id = $receiver->getID();
     $user_id = $user->getID();
-    $hash = PhabricatorMetaMTAReceivedMail::computeMailHash(
+    $hash = PhabricatorObjectMailReceiver::computeMailHash(
       $receiver->getMailKey(),
       $handle->getPHID());
     $domain = $this->getReplyHandlerDomain();
@@ -302,7 +308,7 @@ EOBODY;
     return $this->getSingleReplyHandlerPrefix($address);
   }
 
-  final protected function enhanceBodyWithAttachments(
+ final protected function enhanceBodyWithAttachments(
     $body,
     array $attachments,
     $format = '- {F%d, layout=link}') {
@@ -310,6 +316,7 @@ EOBODY;
       return $body;
     }
 
+    // TODO: (T603) What's the policy here?
     $files = id(new PhabricatorFile())
       ->loadAllWhere('phid in (%Ls)', $attachments);
 

@@ -9,18 +9,18 @@ final class AphrontFormView extends AphrontView {
   private $encType;
   private $workflow;
   private $id;
-  private $flexible;
-  private $noShading;
+  private $shaded = false;
   private $sigils = array();
+  private $metadata;
 
-  public function setFlexible($flexible) {
-    $this->flexible = $flexible;
+
+  public function setMetadata($metadata) {
+    $this->metadata = $metadata;
     return $this;
   }
 
-  public function setNoShading($shading) {
-    $this->noShading = $shading;
-    return $this;
+  public function getMetadata() {
+    return $this->metadata;
   }
 
   public function setID($id) {
@@ -43,6 +43,11 @@ final class AphrontFormView extends AphrontView {
     return $this;
   }
 
+  public function setShaded($shaded) {
+    $this->shaded = $shaded;
+    return $this;
+  }
+
   public function addHiddenInput($key, $value) {
     $this->data[$key] = $value;
     return $this;
@@ -58,21 +63,28 @@ final class AphrontFormView extends AphrontView {
     return $this;
   }
 
+  public function appendInstructions($text) {
+    return $this->appendChild(
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-form-instructions',
+        ),
+        $text));
+  }
+
+  public function appendRemarkupInstructions($remarkup) {
+    return $this->appendInstructions(
+      PhabricatorMarkupEngine::renderOneObject(
+        id(new PhabricatorMarkupOneOff())->setContent($remarkup),
+        'default',
+        $this->getUser()));
+  }
+
   public function render() {
-    if ($this->flexible) {
-      require_celerity_resource('phabricator-form-view-css');
-    }
-    require_celerity_resource('aphront-form-view-css');
 
-    $layout = new AphrontFormLayoutView();
-
-    if ((!$this->flexible) && (!$this->noShading)) {
-      $layout
-        ->setBackgroundShading(true)
-        ->setPadded(true);
-    }
-
-    $layout
+    require_celerity_resource('phui-form-view-css');
+    $layout = id (new PHUIFormLayoutView())
       ->appendChild($this->renderDataInputs())
       ->appendChild($this->renderChildren());
 
@@ -88,11 +100,12 @@ final class AphrontFormView extends AphrontView {
     return phabricator_form(
       $this->user,
       array(
-        'class'   => $this->flexible ? 'phabricator-form-view' : null,
+        'class'   => $this->shaded ? 'phui-form-shaded' : null,
         'action'  => $this->action,
         'method'  => $this->method,
         'enctype' => $this->encType,
         'sigil'   => $sigils ? implode(' ', $sigils) : null,
+        'meta'    => $this->metadata,
         'id'      => $this->id,
       ),
       $layout->render());

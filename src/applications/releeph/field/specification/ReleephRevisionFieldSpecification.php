@@ -3,19 +3,18 @@
 final class ReleephRevisionFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'revision';
+  }
+
   public function getName() {
     return 'Revision';
   }
 
   public function renderValueForHeaderView() {
-    $data = $this
+    $phid = $this
       ->getReleephRequest()
-      ->loadPhabricatorRepositoryCommitData();
-    if (!$data) {
-      return null;
-    }
-
-    $phid = $data->getCommitDetail('differential.revisionPHID');
+      ->loadRequestCommitDiffPHID();
     if (!$phid) {
       return null;
     }

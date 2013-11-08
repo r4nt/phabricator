@@ -44,23 +44,26 @@ final class PhameBlogListController extends PhameController {
 
     $blogs = $query->executeWithOffsetPager($pager);
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($title);
-
     $blog_list = $this->renderBlogList($blogs, $user, $nodata);
     $blog_list->setPager($pager);
 
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($title)
+        ->setHref($this->getApplicationURI()));
+
     $nav->appendChild(
       array(
-        $header,
+        $crumbs,
         $blog_list,
       ));
 
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title'   => $title,
-        'device'  => true,
+        'title' => $title,
+        'device' => true,
       ));
   }
 
@@ -69,12 +72,12 @@ final class PhameBlogListController extends PhameController {
     PhabricatorUser $user,
     $nodata) {
 
-    $view = new PhabricatorObjectItemListView();
+    $view = new PHUIObjectItemListView();
     $view->setNoDataString($nodata);
     $view->setUser($user);
     foreach ($blogs as $blog) {
 
-      $item = id(new PhabricatorObjectItemView())
+      $item = id(new PHUIObjectItemView())
         ->setHeader($blog->getName())
         ->setHref($this->getApplicationURI('blog/view/'.$blog->getID().'/'))
         ->setObject($blog);

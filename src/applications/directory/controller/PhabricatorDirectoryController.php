@@ -21,7 +21,10 @@ abstract class PhabricatorDirectoryController extends PhabricatorController {
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI(new PhutilURI('/'));
 
-    $applications = PhabricatorApplication::getAllInstalledApplications();
+    $applications = id(new PhabricatorApplicationQuery())
+      ->setViewer($user)
+      ->withInstalled(true)
+      ->execute();
 
     foreach ($applications as $key => $application) {
       if (!$application->shouldAppearInLaunchView()) {
@@ -81,13 +84,13 @@ abstract class PhabricatorDirectoryController extends PhabricatorController {
         $show_item_id = celerity_generate_unique_node_id();
         $hide_item_id = celerity_generate_unique_node_id();
 
-        $show_item = id(new PhabricatorMenuItemView())
+        $show_item = id(new PHUIListItemView())
           ->setName(pht('Show More Applications'))
           ->setHref('#')
           ->addSigil('reveal-content')
           ->setID($show_item_id);
 
-        $hide_item = id(new PhabricatorMenuItemView())
+        $hide_item = id(new PHUIListItemView())
           ->setName(pht('Show Fewer Applications'))
           ->setHref('#')
           ->setStyle('display: none')
@@ -118,13 +121,14 @@ abstract class PhabricatorDirectoryController extends PhabricatorController {
           while (count($tiles) % 3) {
             $tiles[] = id(new PhabricatorApplicationLaunchView());
           }
-          $label = id(new PhabricatorMenuItemView())
-            ->setType(PhabricatorMenuItemView::TYPE_LABEL)
+          $label = id(new PHUIListItemView())
+            ->setType(PHUIListItemView::TYPE_LABEL)
             ->setName($groups[$group]);
 
           if ($is_hide) {
-            $label->setStyle('display: none');
             $label_id = celerity_generate_unique_node_id();
+            $attrs = array();
+            $label->setStyle('display: none;');
             $label->setID($label_id);
             $tile_ids[] = $label_id;
           }

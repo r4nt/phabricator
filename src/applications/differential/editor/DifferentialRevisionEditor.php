@@ -17,9 +17,22 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
 
   private $auxiliaryFields = array();
   private $contentSource;
+  private $isCreate;
+  private $aphrontRequestForEventDispatch;
+
+
+  public function setAphrontRequestForEventDispatch(AphrontRequest $request) {
+    $this->aphrontRequestForEventDispatch = $request;
+    return $this;
+  }
+
+  public function getAphrontRequestForEventDispatch() {
+    return $this->aphrontRequestForEventDispatch;
+  }
 
   public function __construct(DifferentialRevision $revision) {
     $this->revision = $revision;
+    $this->isCreate = !($revision->getID());
   }
 
   public static function newRevisionFromConduitWithDiff(
@@ -27,16 +40,14 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     DifferentialDiff $diff,
     PhabricatorUser $actor) {
 
-    $revision = new DifferentialRevision();
+    $revision = DifferentialRevision::initializeNewRevision($actor);
     $revision->setPHID($revision->generatePHID());
-    $revision->setAuthorPHID($actor->getPHID());
-    $revision->setStatus(ArcanistDifferentialRevisionStatus::NEEDS_REVIEW);
 
     $editor = new DifferentialRevisionEditor($revision);
     $editor->setActor($actor);
+    $editor->addDiff($diff, null);
     $editor->copyFieldsFromConduit($fields);
 
-    $editor->addDiff($diff, null);
     $editor->save();
 
     return $revision;
@@ -48,18 +59,18 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     $revision = $this->revision;
     $revision->loadRelationships();
 
-    $aux_fields = DifferentialFieldSelector::newSelector()
+    $all_fields = DifferentialFieldSelector::newSelector()
       ->getFieldSpecifications();
 
-    foreach ($aux_fields as $key => $aux_field) {
+    $aux_fields = array();
+    foreach ($all_fields as $aux_field) {
       $aux_field->setRevision($revision);
+      $aux_field->setDiff($this->diff);
       $aux_field->setUser($actor);
-      if (!$aux_field->shouldAppearOnCommitMessage()) {
-        unset($aux_fields[$key]);
+      if ($aux_field->shouldAppearOnCommitMessage()) {
+        $aux_fields[$aux_field->getCommitMessageKey()] = $aux_field;
       }
     }
-
-    $aux_fields = mpull($aux_fields, null, 'getCommitMessageKey');
 
     foreach ($fields as $field => $value) {
       if (empty($aux_fields[$field])) {
@@ -73,8 +84,7 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
       $aux_field->validateField();
     }
 
-    $aux_fields = array_values($aux_fields);
-    $this->setAuxiliaryFields($aux_fields);
+    $this->setAuxiliaryFields($all_fields);
   }
 
   public function setAuxiliaryFields(array $auxiliary_fields) {
@@ -114,6 +124,16 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     }
     $this->diff = $diff;
     $this->comments = $comments;
+
+    $repository = id(new DifferentialRepositoryLookup())
+      ->setViewer($this->getActor())
+      ->setDiff($diff)
+      ->lookupRepository();
+
+    if ($repository) {
+      $this->getRevision()->setRepositoryPHID($repository->getPHID());
+    }
+
     return $this;
   }
 
@@ -146,9 +166,6 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     $revision = $this->getRevision();
 
     $is_new = $this->isNewRevision();
-    if ($is_new) {
-      $this->initializeNewRevision($revision);
-    }
 
     $revision->loadRelationships();
 
@@ -233,7 +250,7 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     $rem_ccs = array();
     $xscript_phid = null;
     if ($diff) {
-      $adapter = new HeraldDifferentialRevisionAdapter(
+      $adapter = HeraldDifferentialRevisionAdapter::newLegacyAdapter(
         $revision,
         $diff);
       $adapter->setExplicitCCs($new['ccs']);
@@ -250,15 +267,18 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
         $xscript_header);
 
       $sub = array(
-        'rev' => array(),
+        'rev' => $adapter->getReviewersAddedByHerald(),
         'ccs' => $adapter->getCCsAddedByHerald(),
       );
       $rem_ccs = $adapter->getCCsRemovedByHerald();
+      $blocking_reviewers = array_keys(
+        $adapter->getBlockingReviewersAddedByHerald());
     } else {
       $sub = array(
         'rev' => array(),
         'ccs' => array(),
       );
+      $blocking_reviewers = array();
     }
 
     // Remove any CCs which are prevented by Herald rules.
@@ -284,12 +304,15 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
       $stable[$key] = array_diff_key($old[$key], $add[$key] + $rem[$key]);
     }
 
-    self::alterReviewers(
+    // Prevent Herald rules from adding a revision's owner as a reviewer.
+    unset($add['rev'][$revision->getAuthorPHID()]);
+
+    self::updateReviewers(
       $revision,
-      $this->reviewers,
-      array_keys($rem['rev']),
+      $this->getActor(),
       array_keys($add['rev']),
-      $this->getActorPHID());
+      array_keys($rem['rev']),
+      $blocking_reviewers);
 
     // We want to attribute new CCs to a "reasonPHID", representing the reason
     // they were added. This is either a user (if some user explicitly CCs
@@ -345,13 +368,16 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
 
     $phids = array($this->getActorPHID());
 
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->getActor())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
     $actor_handle = $handles[$this->getActorPHID()];
 
     $changesets = null;
     $comment = null;
+    $old_status = $revision->getStatus();
+
     if ($diff) {
       $changesets = $diff->loadChangesets();
       // TODO: This should probably be in DifferentialFeedbackEditor?
@@ -400,6 +426,17 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
 
     $revision->save();
 
+    // If the actor just deleted all the blocking/rejected reviewers, we may
+    // be able to put the revision into "accepted".
+    switch ($revision->getStatus()) {
+      case ArcanistDifferentialRevisionStatus::NEEDS_REVISION:
+      case ArcanistDifferentialRevisionStatus::NEEDS_REVIEW:
+        $revision = self::updateAcceptedStatus(
+          $this->getActor(),
+          $revision);
+        break;
+    }
+
     $this->didWriteRevision();
 
     $event_data = array(
@@ -415,8 +452,6 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
         : $this->getComments(),
       'actor_phid'           => $revision->getAuthorPHID(),
     );
-    id(new PhabricatorTimelineEvent('difx', $event_data))
-      ->recordEvent();
 
     $mailed_phids = array();
     if (!$this->silentUpdate) {
@@ -574,20 +609,86 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
       array($revision->getAuthorPHID()));
   }
 
-  public static function alterReviewers(
+  public static function updateReviewers(
     DifferentialRevision $revision,
-    array $stable_phids,
-    array $rem_phids,
+    PhabricatorUser $actor,
     array $add_phids,
-    $reason_phid) {
+    array $remove_phids,
+    array $blocking_phids = array()) {
 
-    return self::alterRelationships(
-      $revision,
-      $stable_phids,
-      $rem_phids,
-      $add_phids,
-      $reason_phid,
-      DifferentialRevision::RELATION_REVIEWER);
+    $reviewers = $revision->getReviewers();
+
+    $editor = id(new PhabricatorEdgeEditor())
+      ->setActor($actor);
+
+    $reviewer_phids_map = array_fill_keys($reviewers, true);
+
+    $blocking_phids = array_fuse($blocking_phids);
+    foreach ($add_phids as $phid) {
+
+      // Adding an already existing edge again would have cause memory loss
+      // That is, the previous state for that reviewer would be lost
+      if (isset($reviewer_phids_map[$phid])) {
+        // TODO: If we're writing a blocking edge, we should overwrite an
+        // existing weaker edge (like "added" or "commented"), just not a
+        // stronger existing edge.
+        continue;
+      }
+
+      if (isset($blocking_phids[$phid])) {
+        $status = DifferentialReviewerStatus::STATUS_BLOCKING;
+      } else {
+        $status = DifferentialReviewerStatus::STATUS_ADDED;
+      }
+
+      $options = array(
+        'data' => array(
+          'status' => $status,
+        )
+      );
+
+      $editor->addEdge(
+        $revision->getPHID(),
+        PhabricatorEdgeConfig::TYPE_DREV_HAS_REVIEWER,
+        $phid,
+        $options);
+    }
+
+    foreach ($remove_phids as $phid) {
+      $editor->removeEdge(
+        $revision->getPHID(),
+        PhabricatorEdgeConfig::TYPE_DREV_HAS_REVIEWER,
+        $phid);
+    }
+
+    $editor->save();
+  }
+
+  public static function updateReviewerStatus(
+    DifferentialRevision $revision,
+    PhabricatorUser $actor,
+    $reviewer_phid,
+    $status) {
+
+    $options = array(
+      'data' => array(
+        'status' => $status
+      )
+    );
+
+    $active_diff = $revision->loadActiveDiff();
+    if ($active_diff) {
+      $options['data']['diff'] = $active_diff->getID();
+    }
+
+    id(new PhabricatorEdgeEditor())
+      ->setActor($actor)
+      ->addEdge(
+        $revision->getPHID(),
+        PhabricatorEdgeConfig::TYPE_DREV_HAS_REVIEWER,
+        $reviewer_phid,
+        $options)
+      ->save();
   }
 
   private static function alterRelationships(
@@ -682,10 +783,9 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
 
 
   private function createComment() {
-    $revision_id = $this->revision->getID();
     $comment = id(new DifferentialComment())
       ->setAuthorPHID($this->getActorPHID())
-      ->setRevisionID($revision_id)
+      ->setRevision($this->revision)
       ->setContent($this->getComments())
       ->setAction(DifferentialAction::ACTION_UPDATE)
       ->setMetadata(
@@ -751,12 +851,36 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     foreach ($this->auxiliaryFields as $aux_field) {
       $aux_field->willWriteRevision($this);
     }
+
+    $this->dispatchEvent(
+      PhabricatorEventType::TYPE_DIFFERENTIAL_WILLEDITREVISION);
   }
 
   private function didWriteRevision() {
     foreach ($this->auxiliaryFields as $aux_field) {
       $aux_field->didWriteRevision($this);
     }
+
+    $this->dispatchEvent(
+      PhabricatorEventType::TYPE_DIFFERENTIAL_DIDEDITREVISION);
+  }
+
+  private function dispatchEvent($type) {
+    $event = new PhabricatorEvent(
+      $type,
+      array(
+        'revision'      => $this->revision,
+        'new'           => $this->isCreate,
+      ));
+
+    $event->setUser($this->getActor());
+
+    $request = $this->getAphrontRequestForEventDispatch();
+    if ($request) {
+      $event->setAphrontRequest($request);
+    }
+
+    PhutilEventEngine::dispatchEvent($event);
   }
 
   /**
@@ -931,26 +1055,53 @@ final class DifferentialRevisionEditor extends PhabricatorEditor {
     }
   }
 
-  private function initializeNewRevision(DifferentialRevision $revision) {
-    // These fields aren't nullable; set them to sensible defaults if they
-    // haven't been configured. We're just doing this so we can generate an
-    // ID for the revision if we don't have one already.
-    $revision->setLineCount(0);
-    if ($revision->getStatus() === null) {
-      $revision->setStatus(ArcanistDifferentialRevisionStatus::NEEDS_REVIEW);
+  /**
+   * Try to move a revision to "accepted". We look for:
+   *
+   *   - at least one accepting reviewer who is a user; and
+   *   - no rejects; and
+   *   - no blocking reviewers.
+   */
+  public static function updateAcceptedStatus(
+    PhabricatorUser $viewer,
+    DifferentialRevision $revision) {
+
+    $revision = id(new DifferentialRevisionQuery())
+      ->setViewer($viewer)
+      ->withIDs(array($revision->getID()))
+      ->needRelationships(true)
+      ->needReviewerStatus(true)
+      ->needReviewerAuthority(true)
+      ->executeOne();
+
+    $has_user_accept = false;
+    foreach ($revision->getReviewerStatus() as $reviewer) {
+      $status = $reviewer->getStatus();
+      if ($status == DifferentialReviewerStatus::STATUS_BLOCKING) {
+        // We have a blocking reviewer, so just leave the revision in its
+        // existing state.
+        return $revision;
+      }
+
+      if ($status == DifferentialReviewerStatus::STATUS_REJECTED) {
+        // We have a rejecting reviewer, so leave the revisoin as is.
+        return $revision;
+      }
+
+      if ($reviewer->isUser()) {
+        if ($status == DifferentialReviewerStatus::STATUS_ACCEPTED) {
+          $has_user_accept = true;
+        }
+      }
     }
-    if ($revision->getTitle() === null) {
-      $revision->setTitle('Untitled Revision');
+
+    if ($has_user_accept) {
+      $revision
+        ->setStatus(ArcanistDifferentialRevisionStatus::ACCEPTED)
+        ->save();
     }
-    if ($revision->getAuthorPHID() === null) {
-      $revision->setAuthorPHID($this->getActorPHID());
-    }
-    if ($revision->getSummary() === null) {
-      $revision->setSummary('');
-    }
-    if ($revision->getTestPlan() === null) {
-      $revision->setTestPlan('');
-    }
+
+    return $revision;
   }
 
 }

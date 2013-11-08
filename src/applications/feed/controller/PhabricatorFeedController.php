@@ -5,7 +5,7 @@ abstract class PhabricatorFeedController extends PhabricatorController {
   public function buildStandardPageResponse($view, array $data) {
     $page = $this->buildStandardPageView();
 
-    $page->setApplicationName('Feed');
+    $page->setApplicationName(pht('Feed'));
     $page->setBaseURI('/feed/');
     $page->setTitle(idx($data, 'title'));
     $page->setGlyph("\xE2\x88\x9E");
@@ -23,12 +23,16 @@ abstract class PhabricatorFeedController extends PhabricatorController {
   }
 
   protected function buildSideNavView() {
+    $user = $this->getRequest()->getUser();
+
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI(new PhutilURI($this->getApplicationURI()));
 
-    $nav->addLabel('Feed');
-    $nav->addFilter('all',       'All Activity');
-    $nav->addFilter('projects',  'My Projects');
+    id(new PhabricatorFeedSearchEngine())
+      ->setViewer($user)
+      ->addNavigationItems($nav->getMenu());
+
+    $nav->selectFilter(null);
 
     return $nav;
   }

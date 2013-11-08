@@ -20,6 +20,7 @@ final class PhabricatorFeedStoryPublisher {
     $this->subscribedPHIDs = $phids;
     return $this;
   }
+
   public function setPrimaryObjectPHID($phid) {
     $this->primaryObjectPHID = $phid;
     return $this;
@@ -104,12 +105,11 @@ final class PhabricatorFeedStoryPublisher {
       $this->sendNotification($chrono_key);
     }
 
-    $uris = PhabricatorEnv::getEnvConfig('feed.http-hooks');
-    foreach ($uris as $uri) {
-      $task = PhabricatorWorker::scheduleTask(
-        'FeedPublisherWorker',
-        array('chrono_key' => $chrono_key, 'uri' => $uri));
-    }
+    PhabricatorWorker::scheduleTask(
+      'FeedPublisherWorker',
+      array(
+        'key' => $chrono_key,
+      ));
 
     return $story;
   }

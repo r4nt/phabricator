@@ -15,7 +15,7 @@ final class DifferentialSearchIndexer
 
     $doc = new PhabricatorSearchAbstractDocument();
     $doc->setPHID($rev->getPHID());
-    $doc->setDocumentType(PhabricatorPHIDConstants::PHID_TYPE_DREV);
+    $doc->setDocumentType(DifferentialPHIDTypeRevision::TYPECONST);
     $doc->setDocumentTitle($rev->getTitle());
     $doc->setDocumentCreated($rev->getDateCreated());
     $doc->setDocumentModified($rev->getDateModified());
@@ -41,7 +41,7 @@ final class DifferentialSearchIndexer
     $doc->addRelationship(
       PhabricatorSearchRelationship::RELATIONSHIP_AUTHOR,
       $rev->getAuthorPHID(),
-      PhabricatorPHIDConstants::PHID_TYPE_USER,
+      PhabricatorPeoplePHIDTypeUser::TYPECONST,
       $rev->getDateCreated());
 
     if ($rev->getStatus() != ArcanistDifferentialRevisionStatus::CLOSED &&
@@ -49,19 +49,18 @@ final class DifferentialSearchIndexer
       $doc->addRelationship(
         PhabricatorSearchRelationship::RELATIONSHIP_OPEN,
         $rev->getPHID(),
-        PhabricatorPHIDConstants::PHID_TYPE_DREV,
+        DifferentialPHIDTypeRevision::TYPECONST,
         time());
     }
 
-    $comments = $rev->loadRelatives(new DifferentialComment(), 'revisionID');
+    $comments = id(new DifferentialCommentQuery())
+      ->withRevisionIDs(array($rev->getID()))
+      ->execute();
 
-    $inlines = $rev->loadRelatives(
-      new DifferentialInlineComment(),
-      'revisionID',
-      'getID',
-      '(commentID IS NOT NULL)');
-
-    $touches = array();
+    $inlines = id(new DifferentialInlineCommentQuery())
+      ->withRevisionIDs(array($rev->getID()))
+      ->withNotDraft(true)
+      ->execute();
 
     foreach (array_merge($comments, $inlines) as $comment) {
       if (strlen($comment->getContent())) {
@@ -69,17 +68,6 @@ final class DifferentialSearchIndexer
           PhabricatorSearchField::FIELD_COMMENT,
           $comment->getContent());
       }
-
-      $author = $comment->getAuthorPHID();
-      $touches[$author] = $comment->getDateCreated();
-    }
-
-    foreach ($touches as $touch => $time) {
-      $doc->addRelationship(
-        PhabricatorSearchRelationship::RELATIONSHIP_TOUCH,
-        $touch,
-        PhabricatorPHIDConstants::PHID_TYPE_USER,
-        $time);
     }
 
     $rev->loadRelationships();
@@ -91,21 +79,22 @@ final class DifferentialSearchIndexer
         $doc->addRelationship(
           PhabricatorSearchRelationship::RELATIONSHIP_OWNER,
           $phid,
-          PhabricatorPHIDConstants::PHID_TYPE_USER,
+          PhabricatorPeoplePHIDTypeUser::TYPECONST,
           $rev->getDateModified()); // Bogus timestamp.
       }
     } else {
       $doc->addRelationship(
         PhabricatorSearchRelationship::RELATIONSHIP_OWNER,
         $rev->getAuthorPHID(),
-        PhabricatorPHIDConstants::PHID_TYPE_USER,
+        PhabricatorPeoplePHIDTypeUser::TYPECONST,
         $rev->getDateCreated());
     }
 
     $ccphids = $rev->getCCPHIDs();
-    $handles = id(new PhabricatorObjectHandleData($ccphids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer(PhabricatorUser::getOmnipotentUser())
-      ->loadHandles();
+      ->withPHIDs($ccphids)
+      ->execute();
 
     foreach ($handles as $phid => $handle) {
       $doc->addRelationship(

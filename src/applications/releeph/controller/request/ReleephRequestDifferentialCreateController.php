@@ -1,22 +1,27 @@
 <?php
 
 final class ReleephRequestDifferentialCreateController
-  extends ReleephController {
+  extends ReleephProjectController {
 
+  private $revisionID;
   private $revision;
 
   public function willProcessRequest(array $data) {
-    $diff_rev_id = $data['diffRevID'];
-    $diff_rev = id(new DifferentialRevision())->load($diff_rev_id);
-    if (!$diff_rev) {
-      throw new Exception(sprintf('D%d not found!', $diff_rev_id));
-    }
-    $this->revision = $diff_rev;
+    $this->revisionID = $data['diffRevID'];
   }
 
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
+
+    $diff_rev = id(new DifferentialRevisionQuery())
+      ->setViewer($user)
+      ->withIDs(array($this->revisionID))
+      ->executeOne();
+    if (!$diff_rev) {
+      return new Aphront404Response();
+    }
+    $this->revision = $diff_rev;
 
     $arc_project = id(new PhabricatorRepositoryArcanistProject())
       ->loadOneWhere('phid = %s', $this->revision->getArcanistProjectPHID());
@@ -25,7 +30,7 @@ final class ReleephRequestDifferentialCreateController
       'arcanistProjectID = %d AND isActive = 1',
       $arc_project->getID());
     if (!$projects) {
-      throw new ReleephRequestException(sprintf(
+      throw new Exception(sprintf(
         "D%d belongs to the '%s' Arcanist project, ".
         "which is not part of any Releeph project!",
         $this->revision->getID(),
@@ -36,7 +41,7 @@ final class ReleephRequestDifferentialCreateController
       'releephProjectID IN (%Ld) AND isActive = 1',
       mpull($projects, 'getID'));
     if (!$branches) {
-      throw new ReleephRequestException(sprintf(
+      throw new Exception(sprintf(
         "D%d could be in the Releeph project(s) %s, ".
         "but this project / none of these projects have open branches.",
         $this->revision->getID(),
@@ -57,14 +62,14 @@ final class ReleephRequestDifferentialCreateController
     require_celerity_resource('releeph-request-differential-create-dialog');
     $dialog = id(new AphrontDialogView())
       ->setUser($user)
-      ->setTitle('Choose Releeph Branch')
+      ->setTitle(pht('Choose Releeph Branch'))
       ->setClass('releeph-request-differential-create-dialog')
       ->addCancelButton('/D'.$request->getStr('D'));
 
     $dialog->appendChild(
-      "This differential revision changes code that is associated ".
+      pht("This differential revision changes code that is associated ".
       "with multiple Releeph branches.  ".
-      "Please select the branch where you would like this code to be picked.");
+      "Please select the branch where you would like this code to be picked."));
 
     foreach ($branch_groups as $project_id => $branches) {
       $project = idx($projects, $project_id);
@@ -91,8 +96,8 @@ final class ReleephRequestDifferentialCreateController
   }
 
   private function buildReleephRequestURI(ReleephBranch $branch) {
-    return id(new PhutilURI('/releeph/request/create/'))
-      ->setQueryParam('branchID', $branch->getID())
+    $uri = $branch->getURI('request/');
+    return id(new PhutilURI($uri))
       ->setQueryParam('D', $this->revision->getID());
   }
 

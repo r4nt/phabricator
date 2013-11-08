@@ -26,19 +26,36 @@ final class PhabricatorApplicationProject extends PhabricatorApplication {
     return self::GROUP_ORGANIZATION;
   }
 
+  public function getRemarkupRules() {
+    return array(
+      new ProjectRemarkupRule(),
+    );
+  }
+
   public function getRoutes() {
     return array(
       '/project/' => array(
-        '' => 'PhabricatorProjectListController',
+        '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorProjectListController',
         'filter/(?P<filter>[^/]+)/' => 'PhabricatorProjectListController',
         'edit/(?P<id>[1-9]\d*)/' => 'PhabricatorProjectProfileEditController',
         'members/(?P<id>[1-9]\d*)/'
           => 'PhabricatorProjectMembersEditController',
         'view/(?P<id>[1-9]\d*)/(?:(?P<page>\w+)/)?'
           => 'PhabricatorProjectProfileController',
+        'picture/(?P<id>[1-9]\d*)/' =>
+          'PhabricatorProjectProfilePictureController',
         'create/' => 'PhabricatorProjectCreateController',
+        'board/(?P<id>[1-9]\d*)/' => 'PhabricatorProjectBoardController',
         'update/(?P<id>[1-9]\d*)/(?P<action>[^/]+)/'
           => 'PhabricatorProjectUpdateController',
+        'history/(?P<id>[1-9]\d*)/' => 'PhabricatorProjectHistoryController',
+      ),
+    );
+  }
+
+  protected function getCustomCapabilities() {
+    return array(
+      ProjectCapabilityCreateProjects::CAPABILITY => array(
       ),
     );
   }

@@ -19,10 +19,6 @@ final class PhortuneProductTransaction
     return null;
   }
 
-  public function getApplicationObjectTypeName() {
-    return pht('product');
-  }
-
   public function getTitle() {
     $author_phid = $this->getAuthorPHID();
 
@@ -48,13 +44,16 @@ final class PhortuneProductTransaction
           return pht(
             '%s set product price to %s.',
             $this->renderHandleLink($author_phid),
-            PhortuneUtil::formatCurrency($new));
+            PhortuneCurrency::newFromUSDCents($new)
+              ->formatForDisplay());
         } else {
           return pht(
             '%s changed product price from %s to %s.',
             $this->renderHandleLink($author_phid),
-            PhortuneUtil::formatCurrency($old),
-            PhortuneUtil::formatCurrency($new));
+            PhortuneCurrency::newFromUSDCents($old)
+              ->formatForDisplay(),
+            PhortuneCurrency::newFromUSDCents($new)
+              ->formatForDisplay());
         }
         break;
       case self::TYPE_TYPE:

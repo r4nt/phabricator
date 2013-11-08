@@ -12,18 +12,18 @@ abstract class PhameController extends PhabricatorController {
     $nav = new AphrontSideNavFilterView();
     $nav->setBaseURI($base_uri);
 
-    $nav->addLabel('Create');
-    $nav->addFilter('post/new',   'New Post');
-    $nav->addFilter('blog/new',   'New Blog');
+    $nav->addLabel(pht('Create'));
+    $nav->addFilter('post/new', pht('New Post'));
+    $nav->addFilter('blog/new', pht('New Blog'));
 
-    $nav->addLabel('Posts');
-    $nav->addFilter('post/draft', 'My Drafts');
-    $nav->addFilter('post',       'My Posts');
-    $nav->addFilter('post/all',   'All Posts');
+    $nav->addLabel(pht('Posts'));
+    $nav->addFilter('post/draft', pht('My Drafts'));
+    $nav->addFilter('post', pht('My Posts'));
+    $nav->addFilter('post/all', pht('All Posts'));
 
-    $nav->addLabel('Blogs');
-    $nav->addFilter('blog/user',  'Joinable Blogs');
-    $nav->addFilter('blog/all',   'All Blogs');
+    $nav->addLabel(pht('Blogs'));
+    $nav->addFilter('blog/user', pht('Joinable Blogs'));
+    $nav->addFilter('blog/all', pht('All Blogs'));
 
     $nav->selectFilter(null);
 
@@ -36,44 +36,75 @@ abstract class PhameController extends PhabricatorController {
     $nodata) {
     assert_instances_of($posts, 'PhamePost');
 
-    $list = id(new PhabricatorObjectItemListView())
-      ->setUser($user)
-      ->setNoDataString($nodata);
+    $stories = array();
 
     foreach ($posts as $post) {
       $blogger = $this->getHandle($post->getBloggerPHID())->renderLink();
+      $bloggerURI = $this->getHandle($post->getBloggerPHID())->getURI();
+      $bloggerImage = $this->getHandle($post->getBloggerPHID())->getImageURI();
 
       $blog = null;
       if ($post->getBlog()) {
         $blog = $this->getHandle($post->getBlog()->getPHID())->renderLink();
       }
 
-      $published = null;
-      if ($post->getDatePublished()) {
-        $published = phabricator_date($post->getDatePublished(), $user);
+      $phame_post = '';
+      if ($post->getBody()) {
+        $phame_post = PhabricatorMarkupEngine::summarize($post->getBody());
       }
 
-      $draft = $post->isDraft();
+      $blog_view = $post->getViewURI();
+      $phame_title = phutil_tag('a', array('href' => $blog_view),
+        $post->getTitle());
 
-      $item = id(new PhabricatorObjectItemView())
+      $blogger = phutil_tag('strong', array(), $blogger);
+      if ($post->isDraft()) {
+        $title = pht('%s drafted a blog post on %s.',
+          $blogger, $blog);
+        $title = phutil_tag('em', array(), $title);
+      } else {
+        $title = pht('%s wrote a blog post on %s.',
+          $blogger, $blog);
+      }
+
+      $item = id(new PHUIObjectItemView())
         ->setObject($post)
         ->setHeader($post->getTitle())
         ->setHref($this->getApplicationURI('post/view/'.$post->getID().'/'));
 
-      if ($blog) {
-        $item->addAttribute($blog);
-      }
+      $story = id(new PHUIFeedStoryView())
+        ->setTitle($title)
+        ->setImage($bloggerImage)
+        ->setImageHref($bloggerURI)
+        ->setAppIcon('phame-dark')
+        ->setUser($user)
+        ->setPontification($phame_post, $phame_title);
 
-      if ($draft) {
-        $desc = pht('Draft by %s', $blogger);
-      } else {
-        $desc = pht('Published on %s by %s', $published, $blogger);
+      if ($post->getDatePublished()) {
+        $story->setEpoch($post->getDatePublished());
       }
-      $item->addAttribute($desc);
-
-      $list->addItem($item);
+      $stories[] = $story;
     }
 
-    return $list;
+    return $stories;
+  }
+
+  public function buildApplicationMenu() {
+    return $this->renderSideNavFilterView()->getMenu();
+  }
+
+  protected function buildApplicationCrumbs() {
+    $crumbs = parent::buildApplicationCrumbs();
+    $crumbs->addAction(
+      id(new PHUIListItemView())
+        ->setName(pht('New Blog'))
+        ->setHref($this->getApplicationURI('/blog/new'))
+        ->setIcon('create'));
+    $crumbs->addAction(
+      id(new PHUIListItemView())
+        ->setName(pht('New Post'))
+        ->setHref($this->getApplicationURI('/post/new'))
+        ->setIcon('new'));
+    return $crumbs;
   }
 }

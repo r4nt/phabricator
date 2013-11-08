@@ -13,19 +13,6 @@ final class PhabricatorAuthenticationConfigOptions
 
   public function getOptions() {
     return array(
-      $this->newOption(
-        'auth.password-auth-enabled', 'bool', true)
-        ->setBoolOptions(
-          array(
-            pht("Allow password authentication"),
-            pht("Don't allow password authentication")
-          ))
-        ->setSummary(pht("Enables password-based authentication."))
-        ->setDescription(
-          pht(
-            "Can users login with a username/password, or by following the ".
-            "link from a password reset email? You can disable this and ".
-            "configure one or more OAuth providers instead.")),
       $this->newOption('auth.sessions.web', 'int', 5)
         ->setSummary(
           pht("Number of web sessions a user can have simultaneously."))
@@ -42,21 +29,6 @@ final class PhabricatorAuthenticationConfigOptions
           pht(
             "Maximum number of simultaneous Conduit sessions each user is ".
             "permitted to have.")),
-     $this->newOption('auth.sshkeys.enabled', 'bool', false)
-        ->setBoolOptions(
-          array(
-            pht("Enable SSH key storage"),
-            pht("Disable SSH key storage")))
-        ->setSummary(
-          pht("Allow users to associate SSH keys with their accounts."))
-        ->setDescription(
-          pht(
-            "Set this true to enable the Settings -> SSH Public Keys panel, ".
-            "which will allow users to associated SSH public keys with their ".
-            "accounts. This is only really useful if you're setting up ".
-            "services over SSH and want to use Phabricator for ".
-            "authentication; in most situations you can leave this ".
-            "disabled.")),
      $this->newOption('auth.require-email-verification', 'bool', false)
         ->setBoolOptions(
           array(

@@ -8,6 +8,10 @@ final class PhabricatorSearchController
 
   private $key;
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function willProcessRequest(array $data) {
     $this->key = idx($data, 'key');
   }
@@ -32,7 +36,9 @@ final class PhabricatorSearchController
         $pref_jump = PhabricatorUserPreferences::PREFERENCE_SEARCHBAR_JUMP;
         if ($request->getStr('jump') != 'no' &&
             $user && $user->loadPreferences()->getPreference($pref_jump, 1)) {
-          $response = PhabricatorJumpNavHandler::jumpPostResponse($query_str);
+          $response = PhabricatorJumpNavHandler::getJumpResponse(
+            $user,
+            $query_str);
         } else {
           $response = null;
         }
@@ -47,23 +53,23 @@ final class PhabricatorSearchController
                 $query->setParameter('open', 1);
                 $query->setParameter(
                   'type',
-                  PhabricatorPHIDConstants::PHID_TYPE_DREV);
+                  DifferentialPHIDTypeRevision::TYPECONST);
                 break;
               case PhabricatorSearchScope::SCOPE_OPEN_TASKS:
                 $query->setParameter('open', 1);
                 $query->setParameter(
                   'type',
-                  PhabricatorPHIDConstants::PHID_TYPE_TASK);
+                  ManiphestPHIDTypeTask::TYPECONST);
                 break;
               case PhabricatorSearchScope::SCOPE_WIKI:
                 $query->setParameter(
                   'type',
-                  PhabricatorPHIDConstants::PHID_TYPE_WIKI);
+                  PhrictionPHIDTypeDocument::TYPECONST);
                 break;
               case PhabricatorSearchScope::SCOPE_COMMITS:
                 $query->setParameter(
                   'type',
-                  PhabricatorPHIDConstants::PHID_TYPE_CMIT);
+                  PhabricatorRepositoryPHIDTypeCommit::TYPECONST);
                 break;
               default:
                 break;
@@ -122,22 +128,18 @@ final class PhabricatorSearchController
     $author_value = array_select_keys(
       $handles,
       $query->getParameter('author', array()));
-    $author_value = mpull($author_value, 'getFullName', 'getPHID');
 
     $owner_value = array_select_keys(
       $handles,
       $query->getParameter('owner', array()));
-    $owner_value = mpull($owner_value, 'getFullName', 'getPHID');
 
     $subscribers_value = array_select_keys(
       $handles,
       $query->getParameter('subscribers', array()));
-    $subscribers_value = mpull($subscribers_value, 'getFullName', 'getPHID');
 
     $project_value = array_select_keys(
       $handles,
       $query->getParameter('project', array()));
-    $project_value = mpull($project_value, 'getFullName', 'getPHID');
 
     $search_form = new AphrontFormView();
     $search_form
@@ -198,8 +200,7 @@ final class PhabricatorSearchController
         id(new AphrontFormSubmitControl())
           ->setValue('Search'));
 
-    $search_panel = new AphrontPanelView();
-    $search_panel->setHeader('Search Phabricator');
+    $search_panel = new AphrontListFilterView();
     $search_panel->appendChild($search_form);
 
     require_celerity_resource('phabricator-search-results-css');
@@ -220,19 +221,28 @@ final class PhabricatorSearchController
       $results = $engine->executeSearch($query);
       $results = $pager->sliceResults($results);
 
+      // If there are any objects which match the query by name, and we're
+      // not paging through the results, prefix the results with the named
+      // objects.
       if (!$request->getInt('page')) {
-        $jump = PhabricatorPHID::fromObjectName($query->getQuery(), $user);
-        if ($jump) {
-          array_unshift($results, $jump);
+        $named = id(new PhabricatorObjectQuery())
+          ->setViewer($user)
+          ->withNames(array($query->getQuery()))
+          ->execute();
+        if ($named) {
+          $results = array_merge(array_keys($named), $results);
         }
       }
 
       if ($results) {
-
-        $loader = id(new PhabricatorObjectHandleData($results))
-          ->setViewer($user);
-        $handles = $loader->loadHandles();
-        $objects = $loader->loadObjects();
+        $handles = id(new PhabricatorHandleQuery())
+          ->setViewer($user)
+          ->withPHIDs($results)
+          ->execute();
+        $objects = id(new PhabricatorObjectQuery())
+          ->setViewer($user)
+          ->withPHIDs($results)
+          ->execute();
         $results = array();
         foreach ($handles as $phid => $handle) {
           $view = id(new PhabricatorSearchResultView())
@@ -241,6 +251,7 @@ final class PhabricatorSearchController
             ->setObject(idx($objects, $phid));
           $results[] = $view->render();
         }
+
         $results = hsprintf(
           '<div class="phabricator-search-result-list">'.
             '%s'.
@@ -254,17 +265,30 @@ final class PhabricatorSearchController
             '<p class="phabricator-search-no-results">No search results.</p>'.
           '</div>');
       }
+      $results = id(new PHUIBoxView())
+        ->addMargin(PHUI::MARGIN_LARGE)
+        ->addPadding(PHUI::PADDING_LARGE)
+        ->setShadow(true)
+        ->appendChild($results)
+        ->addClass('phabricator-search-result-box');
     } else {
       $results = null;
     }
 
-    return $this->buildStandardPageResponse(
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName(pht('Search')));
+
+    return $this->buildApplicationPage(
       array(
+        $crumbs,
         $search_panel,
         $results,
       ),
       array(
-        'title' => 'Search Results',
+        'title' => pht('Search Results'),
+        'device' => true,
       ));
   }
 

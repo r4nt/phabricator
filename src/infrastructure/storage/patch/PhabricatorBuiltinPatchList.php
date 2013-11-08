@@ -126,6 +126,7 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       'db.timeline' => array(
         'type'  => 'db',
         'name'  => 'timeline',
+        'dead'  => true,
       ),
       'db.user' => array(
         'type'  => 'db',
@@ -186,6 +187,30 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       'db.phrequent' => array(
         'type' => 'db',
         'name' => 'phrequent',
+      ),
+      'db.diviner' => array(
+        'type' => 'db',
+        'name' => 'diviner',
+      ),
+      'db.auth' => array(
+        'type' => 'db',
+        'name' => 'auth',
+      ),
+      'db.doorkeeper' => array(
+        'type' => 'db',
+        'name' => 'doorkeeper',
+      ),
+      'db.legalpad' => array(
+        'type' => 'db',
+        'name' => 'legalpad',
+      ),
+      'db.policy' => array(
+        'type' => 'db',
+        'name' => 'policy',
+      ),
+      'db.nuance' => array(
+        'type' => 'db',
+        'name' => 'nuance',
       ),
       '0000.legacy.sql' => array(
         'type'    => 'sql',
@@ -1233,7 +1258,492 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       '20130403.conpherencecachemig.php' => array(
         'type' => 'php',
         'name' => $this->getPatchPath('20130403.conpherencecachemig.php'),
-      )
+      ),
+      '20130409.commitdrev.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130409.commitdrev.php'),
+      ),
+      '20130417.externalaccount.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130417.externalaccount.sql'),
+      ),
+      '20130423.updateexternalaccount.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130423.updateexternalaccount.sql'),
+      ),
+      '20130423.phortunepaymentrevised.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130423.phortunepaymentrevised.sql'),
+      ),
+      '20130423.conpherenceindices.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130423.conpherenceindices.sql'),
+      ),
+      '20130426.search_savedquery.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130426.search_savedquery.sql'),
+      ),
+      '20130502.countdownrevamp1.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130502.countdownrevamp1.sql'),
+      ),
+      '20130502.countdownrevamp2.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130502.countdownrevamp2.php'),
+      ),
+      '20130502.countdownrevamp3.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130502.countdownrevamp3.sql'),
+      ),
+      '20130507.releephrqsimplifycols.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130507.releephrqsimplifycols.sql'),
+      ),
+      '20130507.releephrqmailkey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130507.releephrqmailkey.sql'),
+      ),
+      '20130507.releephrqmailkeypop.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130507.releephrqmailkeypop.php'),
+      ),
+      '20130508.search_namedquery.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130508.search_namedquery.sql'),
+      ),
+      '20130508.releephtransactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130508.releephtransactions.sql'),
+      ),
+      '20130508.releephtransactionsmig.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130508.releephtransactionsmig.php'),
+      ),
+      '20130513.receviedmailstatus.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130513.receviedmailstatus.sql'),
+      ),
+      '20130519.diviner.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130519.diviner.sql'),
+      ),
+      '20130521.dropconphimages.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130521.dropconphimages.sql'),
+      ),
+      '20130523.maniphest_owners.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130523.maniphest_owners.sql'),
+      ),
+      '20130524.repoxactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130524.repoxactions.sql'),
+      ),
+      '20130529.macroauthor.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130529.macroauthor.sql'),
+      ),
+      '20130529.macroauthormig.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130529.macroauthormig.php'),
+      ),
+      '20130530.sessionhash.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130530.sessionhash.php'),
+      ),
+      '20130530.macrodatekey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130530.macrodatekey.sql'),
+      ),
+      '20130530.pastekeys.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130530.pastekeys.sql'),
+      ),
+      '20130531.filekeys.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130531.filekeys.sql'),
+      ),
+      '20130602.morediviner.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130602.morediviner.sql'),
+      ),
+      '20130602.namedqueries.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130602.namedqueries.sql'),
+      ),
+      '20130606.userxactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130606.userxactions.sql'),
+      ),
+      '20130607.xaccount.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130607.xaccount.sql'),
+      ),
+      '20130611.migrateoauth.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130611.migrateoauth.php'),
+      ),
+      '20130611.nukeldap.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130611.nukeldap.php'),
+      ),
+      '20130613.authdb.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130613.authdb.sql'),
+      ),
+      '20130619.authconf.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130619.authconf.php'),
+      ),
+      '20130620.diffxactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130620.diffxactions.sql'),
+      ),
+      '20130621.diffcommentphid.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130621.diffcommentphid.sql'),
+      ),
+      '20130621.diffcommentphidmig.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130621.diffcommentphidmig.php'),
+      ),
+      '20130621.diffcommentunphid.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130621.diffcommentunphid.sql'),
+      ),
+      '20130622.doorkeeper.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130622.doorkeeper.sql'),
+      ),
+      '20130628.legalpadv0.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130628.legalpadv0.sql'),
+      ),
+      '20130701.conduitlog.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130701.conduitlog.sql'),
+      ),
+      'legalpad-mailkey.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('legalpad-mailkey.sql'),
+      ),
+      'legalpad-mailkey-populate.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('legalpad-mailkey-populate.php'),
+      ),
+      '20130703.legalpaddocdenorm.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130703.legalpaddocdenorm.sql'),
+      ),
+      '20130703.legalpaddocdenorm.php' => array(
+        'type'    => 'php',
+        'name'    => $this->getPatchPath('20130703.legalpaddocdenorm.php'),
+      ),
+      '20130709.legalpadsignature.sql' => array(
+        'type'    => 'sql',
+        'name'    => $this->getPatchPath('20130709.legalpadsignature.sql'),
+      ),
+      '20130709.droptimeline.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130709.droptimeline.sql'),
+      ),
+      '20130711.trimrealnames.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130711.trimrealnames.php'),
+      ),
+      '20130714.votexactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130714.votexactions.sql'),
+      ),
+      '20130715.votecomments.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130715.votecomments.php'),
+      ),
+      '20130715.voteedges.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130715.voteedges.sql'),
+      ),
+      '20130711.pholioimageobsolete.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130711.pholioimageobsolete.sql'),
+      ),
+      '20130711.pholioimageobsolete.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130711.pholioimageobsolete.php'),
+      ),
+      '20130711.pholioimageobsolete2.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130711.pholioimageobsolete2.sql'),
+      ),
+      '20130716.archivememberlessprojects.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130716.archivememberlessprojects.php'),
+      ),
+      '20130722.pholioreplace.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130722.pholioreplace.sql'),
+      ),
+      '20130723.taskstarttime.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130723.taskstarttime.sql'),
+      ),
+      '20130727.ponderquestionstatus.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130727.ponderquestionstatus.sql'),
+      ),
+      '20130726.ponderxactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130726.ponderxactions.sql'),
+      ),
+      '20130728.ponderunique.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130728.ponderunique.php'),
+      ),
+      '20130728.ponderuniquekey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130728.ponderuniquekey.sql'),
+      ),
+      '20130728.ponderxcomment.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130728.ponderxcomment.php'),
+      ),
+      '20130801.pastexactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130801.pastexactions.sql'),
+      ),
+      '20130801.pastexactions.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130801.pastexactions.php'),
+      ),
+      '20130805.pastemailkey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130805.pastemailkey.sql'),
+      ),
+      '20130805.pasteedges.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130805.pasteedges.sql'),
+      ),
+      '20130805.pastemailkeypop.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130805.pastemailkeypop.php'),
+      ),
+      '20130802.heraldphid.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130802.heraldphid.sql'),
+      ),
+      '20130802.heraldphids.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130802.heraldphids.php'),
+      ),
+      '20130802.heraldphidukey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130802.heraldphidukey.sql'),
+      ),
+      '20130802.heraldxactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130802.heraldxactions.sql'),
+      ),
+      '20130731.releephrepoid.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130731.releephrepoid.sql'),
+      ),
+      '20130731.releephproject.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130731.releephproject.sql'),
+      ),
+      '20130731.releephcutpointidentifier.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130731.releephcutpointidentifier.sql'),
+      ),
+      '20130814.usercustom.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130814.usercustom.sql'),
+      ),
+      '20130820.releephxactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130820.releephxactions.sql'),
+      ),
+      '20130826.divinernode.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130826.divinernode.sql'),
+      ),
+      '20130820.filexactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130820.filexactions.sql'),
+      ),
+      '20130820.filemailkey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130820.filemailkey.sql'),
+      ),
+      '20130820.file-mailkey-populate.php' => array(
+        'type' => 'php',
+        'name' =>
+          $this->getPatchPath('20130820.file-mailkey-populate.php'),
+      ),
+      '20130912.maniphest.1.touch.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130912.maniphest.1.touch.sql'),
+      ),
+      '20130912.maniphest.2.created.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130912.maniphest.2.created.sql'),
+      ),
+      '20130912.maniphest.3.nameindex.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130912.maniphest.3.nameindex.sql'),
+      ),
+      '20130912.maniphest.4.fillindex.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130912.maniphest.4.fillindex.php'),
+      ),
+      '20130913.maniphest.1.migratesearch.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130913.maniphest.1.migratesearch.php'),
+      ),
+      '20130914.usercustom.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130914.usercustom.sql'),
+      ),
+      '20130915.maniphestcustom.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130915.maniphestcustom.sql'),
+      ),
+      '20130915.maniphestmigrate.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130915.maniphestmigrate.php'),
+      ),
+      '20130919.mfieldconf.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130919.mfieldconf.php'),
+      ),
+      '20130920.repokeyspolicy.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130920.repokeyspolicy.sql'),
+      ),
+      '20130921.mtransactions.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130921.mtransactions.sql'),
+      ),
+      '20130921.xmigratemaniphest.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130921.xmigratemaniphest.php'),
+      ),
+      '20130923.mrename.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130923.mrename.sql'),
+      ),
+      '20130924.mdraftkey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130924.mdraftkey.sql'),
+      ),
+      '20130925.mpolicy.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130925.mpolicy.sql'),
+      ),
+      '20130925.xpolicy.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130925.xpolicy.sql'),
+      ),
+      '20130926.dcustom.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130926.dcustom.sql'),
+      ),
+      '20130926.dinkeys.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130926.dinkeys.sql'),
+      ),
+      '20130927.audiomacro.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130927.audiomacro.sql'),
+      ),
+      '20130929.filepolicy.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130929.filepolicy.sql'),
+      ),
+      '20131004.dxedgekey.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131004.dxedgekey.sql'),
+      ),
+      '20131004.dxreviewers.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20131004.dxreviewers.php'),
+      ),
+      '20131006.hdisable.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131006.hdisable.sql'),
+      ),
+      '20131010.pstorage.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131010.pstorage.sql'),
+      ),
+      '20131015.cpolicy.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131015.cpolicy.sql'),
+      ),
+      '20130915.maniphestqdrop.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20130915.maniphestqdrop.sql'),
+      ),
+      '20130926.dinline.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20130926.dinline.php'),
+      ),
+      '20131020.pcustom.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131020.pcustom.sql'),
+      ),
+      '20131020.col1.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131020.col1.sql'),
+      ),
+      '20131020.pxaction.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131020.pxaction.sql'),
+      ),
+      '20131020.pxactionmig.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20131020.pxactionmig.php'),
+      ),
+      '20131020.harbormaster.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131020.harbormaster.sql'),
+      ),
+      '20131025.repopush.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131025.repopush.sql'),
+      ),
+      '20131026.commitstatus.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131026.commitstatus.sql'),
+      ),
+      '20131030.repostatusmessage.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131030.repostatusmessage.sql'),
+      ),
+      '20131031.vcspassword.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131031.vcspassword.sql'),
+      ),
+      '20131105.buildstep.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131105.buildstep.sql'),
+      ),
+      '20131106.diffphid.1.col.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131106.diffphid.1.col.sql'),
+      ),
+      '20131106.diffphid.2.mig.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20131106.diffphid.2.mig.php'),
+      ),
+      '20131106.diffphid.3.key.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131106.diffphid.3.key.sql'),
+      ),
+      '20131106.nuance-v0.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131106.nuance-v0.sql'),
+      ),
     );
   }
 }

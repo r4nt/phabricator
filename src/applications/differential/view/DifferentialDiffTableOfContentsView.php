@@ -82,8 +82,9 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
       $type = $changeset->getChangeType();
       $ftype = $changeset->getFileType();
       $ref = idx($this->references, $id);
-      $link = $this->renderChangesetLink($changeset, $ref);
+      $display_file = $changeset->getDisplayFilename();
 
+      $meta = null;
       if (DifferentialChangeType::isOldLocationChangeType($type)) {
         $away = $changeset->getAwayPaths();
         if (count($away) > 1) {
@@ -99,18 +100,25 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
           $meta = phutil_implode_html(phutil_tag('br'), $meta);
         } else {
           if ($type == DifferentialChangeType::TYPE_MOVE_AWAY) {
-            $meta = pht('Moved to %s', reset($away));
+            $display_file = $this->renderRename(
+              $display_file,
+              reset($away),
+              "\xE2\x86\x92");
           } else {
             $meta = pht('Copied to %s', reset($away));
           }
         }
       } else if ($type == DifferentialChangeType::TYPE_MOVE_HERE) {
-        $meta = pht('Moved from %s', $changeset->getOldFile());
+        $old_file = $changeset->getOldFile();
+        $display_file = $this->renderRename(
+          $display_file,
+          $old_file,
+          "\xE2\x86\x90");
       } else if ($type == DifferentialChangeType::TYPE_COPY_HERE) {
         $meta = pht('Copied from %s', $changeset->getOldFile());
-      } else {
-        $meta = null;
       }
+
+      $link = $this->renderChangesetLink($changeset, $ref, $display_file);
 
       $line_count = $changeset->getAffectedLineCount();
       if ($line_count == 0) {
@@ -205,8 +213,8 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
       $editor_link,
       $reveal_link);
 
-    return hsprintf(
-      '%s%s'.
+    $content = hsprintf(
+      '%s'.
       '<div class="differential-toc differential-panel">'.
         '<table>'.
           '<tr>'.
@@ -224,13 +232,46 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
         ->setAnchorName('toc')
         ->setNavigationMarker(true)
         ->render(),
-      id(new PhabricatorHeaderView())
-        ->setHeader(pht('Table of Contents'))
-        ->render(),
       pht('Coverage (All)'),
       pht('Coverage (Touched)'),
       phutil_implode_html("\n", $rows),
       $buttons);
+
+    return id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Table of Contents'))
+      ->appendChild($content);
+  }
+
+  private function renderRename($display_file, $other_file, $arrow) {
+    $old = explode('/', $display_file);
+    $new = explode('/', $other_file);
+
+    $start = count($old);
+    foreach ($old as $index => $part) {
+      if (!isset($new[$index]) || $part != $new[$index]) {
+        $start = $index;
+        break;
+      }
+    }
+
+    $end = count($old);
+    foreach (array_reverse($old) as $from_end => $part) {
+      $index = count($new) - $from_end - 1;
+      if (!isset($new[$index]) || $part != $new[$index]) {
+        $end = $from_end;
+        break;
+      }
+    }
+
+    $rename =
+      '{'.
+      implode('/', array_slice($old, $start, count($old) - $end - $start)).
+      ' '.$arrow.' '.
+      implode('/', array_slice($new, $start, count($new) - $end - $start)).
+      '}';
+
+    array_splice($new, $start, count($new) - $end - $start, $rename);
+    return implode('/', $new);
   }
 
   private function renderCoverage(array $coverage, $file) {
@@ -250,8 +291,10 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
   }
 
 
-  private function renderChangesetLink(DifferentialChangeset $changeset, $ref) {
-    $display_file = $changeset->getDisplayFilename();
+  private function renderChangesetLink(
+    DifferentialChangeset $changeset,
+    $ref,
+    $display_file) {
 
     return javelin_tag(
       'a',

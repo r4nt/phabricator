@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group maniphest
- */
 final class ManiphestTaskEditController extends ManiphestController {
 
   private $id;
@@ -16,27 +13,108 @@ final class ManiphestTaskEditController extends ManiphestController {
     $request = $this->getRequest();
     $user = $request->getUser();
 
+    $can_edit_assign = $this->hasApplicationCapability(
+      ManiphestCapabilityEditAssign::CAPABILITY);
+    $can_edit_policies = $this->hasApplicationCapability(
+      ManiphestCapabilityEditPolicies::CAPABILITY);
+    $can_edit_priority = $this->hasApplicationCapability(
+      ManiphestCapabilityEditPriority::CAPABILITY);
+    $can_edit_projects = $this->hasApplicationCapability(
+      ManiphestCapabilityEditProjects::CAPABILITY);
+    $can_edit_status = $this->hasApplicationCapability(
+      ManiphestCapabilityEditStatus::CAPABILITY);
+
     $files = array();
     $parent_task = null;
     $template_id = null;
 
     if ($this->id) {
-      $task = id(new ManiphestTask())->load($this->id);
+      $task = id(new ManiphestTaskQuery())
+        ->setViewer($user)
+        ->requireCapabilities(
+          array(
+            PhabricatorPolicyCapability::CAN_VIEW,
+            PhabricatorPolicyCapability::CAN_EDIT,
+          ))
+        ->withIDs(array($this->id))
+        ->executeOne();
       if (!$task) {
         return new Aphront404Response();
       }
     } else {
-      $task = new ManiphestTask();
-      $task->setPriority(ManiphestTaskPriority::getDefaultPriority());
-      $task->setAuthorPHID($user->getPHID());
+      $task = ManiphestTask::initializeNewTask($user);
 
       // These allow task creation with defaults.
       if (!$request->isFormPost()) {
         $task->setTitle($request->getStr('title'));
 
-        $default_projects = $request->getStr('projects');
-        if ($default_projects) {
-          $task->setProjectPHIDs(explode(';', $default_projects));
+        if ($can_edit_projects) {
+          $projects = $request->getStr('projects');
+          if ($projects) {
+            $tokens = explode(';', $projects);
+
+            $slug_map = id(new PhabricatorProjectQuery())
+              ->setViewer($user)
+              ->withPhrictionSlugs($tokens)
+              ->execute();
+
+            $name_map = id(new PhabricatorProjectQuery())
+              ->setViewer($user)
+              ->withNames($tokens)
+              ->execute();
+
+            $phid_map = id(new PhabricatorProjectQuery())
+              ->setViewer($user)
+              ->withPHIDs($tokens)
+              ->execute();
+
+            $all_map = mpull($slug_map, null, 'getPhrictionSlug') +
+              mpull($name_map, null, 'getName') +
+              mpull($phid_map, null, 'getPHID');
+
+            $default_projects = array();
+            foreach ($tokens as $token) {
+              if (isset($all_map[$token])) {
+                $default_projects[] = $all_map[$token]->getPHID();
+              }
+            }
+
+            if ($default_projects) {
+              $task->setProjectPHIDs($default_projects);
+            }
+          }
+        }
+
+        if ($can_edit_priority) {
+          $priority = $request->getInt('priority');
+          if ($priority !== null) {
+            $priority_map = ManiphestTaskPriority::getTaskPriorityMap();
+            if (isset($priority_map[$priority])) {
+                $task->setPriority($priority);
+            }
+          }
+        }
+
+        $task->setDescription($request->getStr('description'));
+
+        if ($can_edit_assign) {
+          $assign = $request->getStr('assign');
+          if (strlen($assign)) {
+            $assign_user = id(new PhabricatorPeopleQuery())
+              ->setViewer($user)
+              ->withUsernames(array($assign))
+              ->executeOne();
+            if (!$assign_user) {
+              $assign_user = id(new PhabricatorPeopleQuery())
+                ->setViewer($user)
+                ->withPHIDs(array($assign))
+                ->executeOne();
+            }
+
+            if ($assign_user) {
+              $task->setOwnerPHID($assign_user->getPHID());
+            }
+          }
         }
       }
 
@@ -52,9 +130,10 @@ final class ManiphestTaskEditController extends ManiphestController {
       }
 
       if ($file_phids) {
-        $files = id(new PhabricatorFile())->loadAllWhere(
-          'phid IN (%Ls)',
-          $file_phids);
+        $files = id(new PhabricatorFileQuery())
+          ->setViewer($user)
+          ->withPHIDs($file_phids)
+          ->execute();
       }
 
       $template_id = $request->getInt('template');
@@ -62,7 +141,10 @@ final class ManiphestTaskEditController extends ManiphestController {
       // You can only have a parent task if you're creating a new task.
       $parent_id = $request->getInt('parent');
       if ($parent_id) {
-        $parent_task = id(new ManiphestTask())->load($parent_id);
+        $parent_task = id(new ManiphestTaskQuery())
+          ->setViewer($user)
+          ->withIDs(array($parent_id))
+          ->executeOne();
         if (!$template_id) {
           $template_id = $parent_id;
         }
@@ -72,8 +154,18 @@ final class ManiphestTaskEditController extends ManiphestController {
     $errors = array();
     $e_title = true;
 
-    $extensions = ManiphestTaskExtensions::newExtensions();
-    $aux_fields = $extensions->loadFields($task, $user);
+    $field_list = PhabricatorCustomField::getObjectFields(
+      $task,
+      PhabricatorCustomField::ROLE_EDIT);
+
+    foreach ($field_list->getFields() as $field) {
+      $field->setObject($task);
+      $field->setViewer($user);
+    }
+
+    $field_list->readFieldsFromStorage($task);
+
+    $aux_fields = $field_list->getFields();
 
     if ($request->isFormPost()) {
       $changes = array();
@@ -82,25 +174,16 @@ final class ManiphestTaskEditController extends ManiphestController {
       $new_desc = $request->getStr('description');
       $new_status = $request->getStr('status');
 
-      $workflow = '';
-
-      if ($task->getID()) {
-        if ($new_title != $task->getTitle()) {
-          $changes[ManiphestTransactionType::TYPE_TITLE] = $new_title;
-        }
-        if ($new_desc != $task->getDescription()) {
-          $changes[ManiphestTransactionType::TYPE_DESCRIPTION] = $new_desc;
-        }
-        if ($new_status != $task->getStatus()) {
-          $changes[ManiphestTransactionType::TYPE_STATUS] = $new_status;
-        }
-      } else {
-        $task->setTitle($new_title);
-        $task->setDescription($new_desc);
-        $changes[ManiphestTransactionType::TYPE_STATUS] =
-          ManiphestTaskStatus::STATUS_OPEN;
-
+      if (!$task->getID()) {
         $workflow = 'create';
+      } else {
+        $workflow = '';
+      }
+
+      $changes[ManiphestTransaction::TYPE_TITLE] = $new_title;
+      $changes[ManiphestTransaction::TYPE_DESCRIPTION] = $new_desc;
+      if ($can_edit_status) {
+        $changes[ManiphestTransaction::TYPE_STATUS] = $new_status;
       }
 
       $owner_tokenizer = $request->getArr('assigned_to');
@@ -111,70 +194,78 @@ final class ManiphestTaskEditController extends ManiphestController {
         $errors[] = pht('Title is required.');
       }
 
-      foreach ($aux_fields as $aux_field) {
-        $aux_field->setValueFromRequest($request);
+      $old_values = array();
+      foreach ($aux_fields as $aux_arr_key => $aux_field) {
+        // TODO: This should be buildFieldTransactionsFromRequest() once we
+        // switch to ApplicationTransactions properly.
 
-        if ($aux_field->isRequired() && !$aux_field->getValue()) {
-          $errors[] = pht('%s is required.', $aux_field->getLabel());
-          $aux_field->setError(pht('Required'));
+        $aux_old_value = $aux_field->getOldValueForApplicationTransactions();
+        $aux_field->readValueFromRequest($request);
+        $aux_new_value = $aux_field->getNewValueForApplicationTransactions();
+
+        // TODO: We're faking a call to the ApplicaitonTransaction validation
+        // logic here. We need valid objects to pass, but they aren't used
+        // in a meaningful way. For now, build User objects. Once the Maniphest
+        // objects exist, this will switch over automatically. This is a big
+        // hack but shouldn't be long for this world.
+        $placeholder_editor = new PhabricatorUserProfileEditor();
+
+        $field_errors = $aux_field->validateApplicationTransactions(
+          $placeholder_editor,
+          PhabricatorTransactions::TYPE_CUSTOMFIELD,
+          array(
+            id(new ManiphestTransaction())
+              ->setOldValue($aux_old_value)
+              ->setNewValue($aux_new_value),
+          ));
+
+        foreach ($field_errors as $error) {
+          $errors[] = $error->getMessage();
         }
 
-        try {
-          $aux_field->validate();
-        } catch (Exception $e) {
-          $errors[] = $e->getMessage();
-          $aux_field->setError(pht('Invalid'));
-        }
+        $old_values[$aux_field->getFieldKey()] = $aux_old_value;
       }
 
       if ($errors) {
+        $task->setTitle($new_title);
+        $task->setDescription($new_desc);
         $task->setPriority($request->getInt('priority'));
         $task->setOwnerPHID($owner_phid);
         $task->setCCPHIDs($request->getArr('cc'));
         $task->setProjectPHIDs($request->getArr('projects'));
       } else {
-        if ($request->getInt('priority') != $task->getPriority()) {
-          $changes[ManiphestTransactionType::TYPE_PRIORITY] =
+
+        if ($can_edit_priority) {
+          $changes[ManiphestTransaction::TYPE_PRIORITY] =
             $request->getInt('priority');
         }
-
-        if ($owner_phid != $task->getOwnerPHID()) {
-          $changes[ManiphestTransactionType::TYPE_OWNER] = $owner_phid;
+        if ($can_edit_assign) {
+          $changes[ManiphestTransaction::TYPE_OWNER] = $owner_phid;
         }
 
-        if ($request->getArr('cc') != $task->getCCPHIDs()) {
-          $changes[ManiphestTransactionType::TYPE_CCS] = $request->getArr('cc');
+        $changes[ManiphestTransaction::TYPE_CCS] = $request->getArr('cc');
+
+        if ($can_edit_projects) {
+          $changes[ManiphestTransaction::TYPE_PROJECTS] =
+            $request->getArr('projects');
         }
 
-        $new_proj_arr = $request->getArr('projects');
-        $new_proj_arr = array_values($new_proj_arr);
-        sort($new_proj_arr);
-
-        $cur_proj_arr = $task->getProjectPHIDs();
-        $cur_proj_arr = array_values($cur_proj_arr);
-        sort($cur_proj_arr);
-
-        if ($new_proj_arr != $cur_proj_arr) {
-          $changes[ManiphestTransactionType::TYPE_PROJECTS] = $new_proj_arr;
+        if ($can_edit_policies) {
+          $changes[PhabricatorTransactions::TYPE_VIEW_POLICY] =
+            $request->getStr('viewPolicy');
+          $changes[PhabricatorTransactions::TYPE_EDIT_POLICY] =
+            $request->getStr('editPolicy');
         }
 
         if ($files) {
           $file_map = mpull($files, 'getPHID');
           $file_map = array_fill_keys($file_map, array());
-          $changes[ManiphestTransactionType::TYPE_ATTACH] = array(
-            PhabricatorPHIDConstants::PHID_TYPE_FILE => $file_map,
+          $changes[ManiphestTransaction::TYPE_ATTACH] = array(
+            PhabricatorFilePHIDTypeFile::TYPECONST => $file_map,
           );
         }
 
-        $content_source = PhabricatorContentSource::newForSource(
-          PhabricatorContentSource::SOURCE_WEB,
-          array(
-            'ip' => $request->getRemoteAddr(),
-          ));
-
         $template = new ManiphestTransaction();
-        $template->setAuthorPHID($user->getPHID());
-        $template->setContentSource($content_source);
         $transactions = array();
 
         foreach ($changes as $type => $value) {
@@ -188,10 +279,15 @@ final class ManiphestTaskEditController extends ManiphestController {
           foreach ($aux_fields as $aux_field) {
             $transaction = clone $template;
             $transaction->setTransactionType(
-              ManiphestTransactionType::TYPE_AUXILIARY);
-            $aux_key = $aux_field->getAuxiliaryKey();
-            $transaction->setMetadataValue('aux:key', $aux_key);
-            $transaction->setNewValue($aux_field->getValueForStorage());
+              PhabricatorTransactions::TYPE_CUSTOMFIELD);
+            $aux_key = $aux_field->getFieldKey();
+            $transaction->setMetadataValue('customfield:key', $aux_key);
+            $old = idx($old_values, $aux_key);
+            $new = $aux_field->getNewValueForApplicationTransactions();
+
+            $transaction->setOldValue($old);
+            $transaction->setNewValue($new);
+
             $transactions[] = $transaction;
           }
         }
@@ -213,10 +309,11 @@ final class ManiphestTaskEditController extends ManiphestController {
           $task = $event->getValue('task');
           $transactions = $event->getValue('transactions');
 
-          $editor = new ManiphestTransactionEditor();
-          $editor->setActor($user);
-          $editor->setAuxiliaryFields($aux_fields);
-          $editor->applyTransactions($task, $transactions);
+          $editor = id(new ManiphestTransactionEditor())
+            ->setActor($user)
+            ->setContentSourceFromRequest($request)
+            ->setContinueOnNoEffect(true)
+            ->applyTransactions($task, $transactions);
 
           $event = new PhabricatorEvent(
             PhabricatorEventType::TYPE_MANIPHEST_DIDEDITTASK,
@@ -242,6 +339,13 @@ final class ManiphestTaskEditController extends ManiphestController {
           $workflow = $parent_task->getID();
         }
 
+        if ($request->isAjax()) {
+          return id(new AphrontAjaxResponse())->setContent(
+            array(
+              'tasks' => $this->renderSingleTask($task),
+            ));
+        }
+
         $redirect_uri = '/T'.$task->getID();
 
         if ($workflow) {
@@ -257,23 +361,37 @@ final class ManiphestTaskEditController extends ManiphestController {
           $user->getPHID(),
         ));
         if ($template_id) {
-          $template_task = id(new ManiphestTask())->load($template_id);
+          $template_task = id(new ManiphestTaskQuery())
+            ->setViewer($user)
+            ->withIDs(array($template_id))
+            ->executeOne();
           if ($template_task) {
             $task->setCCPHIDs($template_task->getCCPHIDs());
             $task->setProjectPHIDs($template_task->getProjectPHIDs());
             $task->setOwnerPHID($template_task->getOwnerPHID());
             $task->setPriority($template_task->getPriority());
 
-            if ($aux_fields) {
-              $template_task->loadAndAttachAuxiliaryAttributes();
-              foreach ($aux_fields as $aux_field) {
-                if (!$aux_field->shouldCopyWhenCreatingSimilarTask()) {
-                  continue;
-                }
+            $template_fields = PhabricatorCustomField::getObjectFields(
+              $template_task,
+              PhabricatorCustomField::ROLE_EDIT);
 
-                $aux_key = $aux_field->getAuxiliaryKey();
-                $value = $template_task->getAuxiliaryAttribute($aux_key);
-                $aux_field->setValueFromStorage($value);
+            $fields = $template_fields->getFields();
+            foreach ($fields as $key => $field) {
+              if (!$field->shouldCopyWhenCreatingSimilarTask()) {
+                unset($fields[$key]);
+              }
+              if (empty($aux_fields[$key])) {
+                unset($fields[$key]);
+              }
+            }
+
+            if ($fields) {
+              id(new PhabricatorCustomFieldList($fields))
+                ->readFieldsFromStorage($template_task);
+
+              foreach ($fields as $key => $field) {
+                $aux_fields[$key]->setValueFromStorage(
+                  $field->getValueForStorage());
               }
             }
           }
@@ -284,8 +402,7 @@ final class ManiphestTaskEditController extends ManiphestController {
     $phids = array_merge(
       array($task->getOwnerPHID()),
       $task->getCCPHIDs(),
-      $task->getProjectPHIDs(),
-      array_mergev(mpull($aux_fields, 'getRequiredHandlePHIDs')));
+      $task->getProjectPHIDs());
 
     if ($parent_task) {
       $phids[] = $parent_task->getPHID();
@@ -295,12 +412,6 @@ final class ManiphestTaskEditController extends ManiphestController {
     $phids = array_unique($phids);
 
     $handles = $this->loadViewerHandles($phids);
-
-    foreach ($aux_fields as $aux_field) {
-      $aux_field->setHandles($handles);
-    }
-
-    $tvalues = mpull($handles, 'getFullName', 'getPHID');
 
     $error_view = null;
     if ($errors) {
@@ -312,21 +423,19 @@ final class ManiphestTaskEditController extends ManiphestController {
     $priority_map = ManiphestTaskPriority::getTaskPriorityMap();
 
     if ($task->getOwnerPHID()) {
-      $assigned_value = array(
-        $task->getOwnerPHID() => $handles[$task->getOwnerPHID()]->getFullName(),
-      );
+      $assigned_value = array($handles[$task->getOwnerPHID()]);
     } else {
       $assigned_value = array();
     }
 
     if ($task->getCCPHIDs()) {
-      $cc_value = array_select_keys($tvalues, $task->getCCPHIDs());
+      $cc_value = array_select_keys($handles, $task->getCCPHIDs());
     } else {
       $cc_value = array();
     }
 
     if ($task->getProjectPHIDs()) {
-      $projects_value = array_select_keys($tvalues, $task->getProjectPHIDs());
+      $projects_value = array_select_keys($handles, $task->getProjectPHIDs());
     } else {
       $projects_value = array();
     }
@@ -354,11 +463,14 @@ final class ManiphestTaskEditController extends ManiphestController {
 
     $project_tokenizer_id = celerity_generate_unique_node_id();
 
-    $form = new AphrontFormView();
-    $form
-      ->setUser($user)
-      ->setAction($request->getRequestURI()->getPath())
-      ->addHiddenInput('template', $template_id);
+    if ($request->isAjax()) {
+      $form = new PHUIFormLayoutView();
+    } else {
+      $form = new AphrontFormView();
+      $form
+        ->setUser($user)
+        ->addHiddenInput('template', $template_id);
+    }
 
     if ($parent_task) {
       $form
@@ -378,7 +490,7 @@ final class ManiphestTaskEditController extends ManiphestController {
           ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_SHORT)
           ->setValue($task->getTitle()));
 
-    if ($task->getID()) {
+    if ($task->getID() && $can_edit_status) {
       // Only show this in "edit" mode, not "create" mode, since creating a
       // non-open task is kind of silly and it would just clutter up the
       // "create" interface.
@@ -391,53 +503,81 @@ final class ManiphestTaskEditController extends ManiphestController {
             ->setOptions(ManiphestTaskStatus::getTaskStatusMap()));
     }
 
-    $form
-      ->appendChild(
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($user)
+      ->setObject($task)
+      ->execute();
+
+    if ($can_edit_assign) {
+      $form->appendChild(
         id(new AphrontFormTokenizerControl())
           ->setLabel(pht('Assigned To'))
           ->setName('assigned_to')
           ->setValue($assigned_value)
           ->setUser($user)
           ->setDatasource('/typeahead/common/users/')
-          ->setLimit(1))
+          ->setLimit(1));
+    }
+
+    $form
       ->appendChild(
         id(new AphrontFormTokenizerControl())
           ->setLabel(pht('CC'))
           ->setName('cc')
           ->setValue($cc_value)
           ->setUser($user)
-          ->setDatasource('/typeahead/common/mailable/'))
-      ->appendChild(
-        id(new AphrontFormSelectControl())
-          ->setLabel(pht('Priority'))
-          ->setName('priority')
-          ->setOptions($priority_map)
-          ->setValue($task->getPriority()))
-      ->appendChild(
-        id(new AphrontFormTokenizerControl())
-          ->setLabel(pht('Projects'))
-          ->setName('projects')
-          ->setValue($projects_value)
-          ->setID($project_tokenizer_id)
-          ->setCaption(
-            javelin_tag(
-              'a',
-              array(
-                'href'        => '/project/create/',
-                'mustcapture' => true,
-                'sigil'       => 'project-create',
-              ),
-              pht('Create New Project')))
-          ->setDatasource('/typeahead/common/projects/'));
+          ->setDatasource('/typeahead/common/mailable/'));
+
+    if ($can_edit_priority) {
+      $form
+        ->appendChild(
+          id(new AphrontFormSelectControl())
+            ->setLabel(pht('Priority'))
+            ->setName('priority')
+            ->setOptions($priority_map)
+            ->setValue($task->getPriority()));
+    }
+
+    if ($can_edit_policies) {
+      $form
+        ->appendChild(
+          id(new AphrontFormPolicyControl())
+            ->setUser($user)
+            ->setCapability(PhabricatorPolicyCapability::CAN_VIEW)
+            ->setPolicyObject($task)
+            ->setPolicies($policies)
+            ->setName('viewPolicy'))
+        ->appendChild(
+          id(new AphrontFormPolicyControl())
+            ->setUser($user)
+            ->setCapability(PhabricatorPolicyCapability::CAN_EDIT)
+            ->setPolicyObject($task)
+            ->setPolicies($policies)
+            ->setName('editPolicy'));
+    }
+
+    if ($can_edit_projects) {
+      $form
+        ->appendChild(
+          id(new AphrontFormTokenizerControl())
+            ->setLabel(pht('Projects'))
+            ->setName('projects')
+            ->setValue($projects_value)
+            ->setID($project_tokenizer_id)
+            ->setCaption(
+              javelin_tag(
+                'a',
+                array(
+                  'href'        => '/project/create/',
+                  'mustcapture' => true,
+                  'sigil'       => 'project-create',
+                ),
+                pht('Create New Project')))
+            ->setDatasource('/typeahead/common/projects/'));
+    }
 
     foreach ($aux_fields as $aux_field) {
-      if ($aux_field->isRequired() &&
-          !$aux_field->getError() &&
-          !$aux_field->getValue()) {
-        $aux_field->setError(true);
-      }
-
-      $aux_control = $aux_field->renderControl();
+      $aux_control = $aux_field->renderEditControl();
       $form->appendChild($aux_control);
     }
 
@@ -484,13 +624,20 @@ final class ManiphestTaskEditController extends ManiphestController {
     $form
       ->appendChild($description_control);
 
-    if (!$task->getID()) {
-      $form
+
+    if ($request->isAjax()) {
+      $dialog = id(new AphrontDialogView())
+        ->setUser($user)
+        ->setWidth(AphrontDialogView::WIDTH_FULL)
+        ->setTitle($header_name)
         ->appendChild(
-          id(new AphrontFormDragAndDropUploadControl())
-            ->setLabel(pht('Attached Files'))
-            ->setName('files')
-            ->setActivatedClass('aphront-panel-view-drag-and-drop'));
+          array(
+            $error_view,
+            $form,
+          ))
+        ->addCancelButton($cancel_uri)
+        ->addSubmitButton($button_name);
+      return id(new AphrontDialogResponse())->setDialog($dialog);
     }
 
     $form
@@ -499,38 +646,18 @@ final class ManiphestTaskEditController extends ManiphestController {
           ->addCancelButton($cancel_uri)
           ->setValue($button_name));
 
-    $panel = new AphrontPanelView();
-    $panel->setWidth(AphrontPanelView::WIDTH_FULL);
-    $panel->setHeader($header_name);
-    $panel->appendChild($form);
-    $panel->setNoBackground();
-    $inst1 = pht('Description Preview');
-    $inst2 = pht('Loading preview...');
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($header_name)
+      ->setFormError($error_view)
+      ->setForm($form);
 
-    $description_preview_panel = hsprintf(
-      '<div class="aphront-panel-preview aphront-panel-preview-full">
-        <div class="maniphest-description-preview-header">
-          %s
-        </div>
-        <div id="description-preview">
-          <div class="aphront-panel-preview-loading-text">
-            %s
-          </div>
-        </div>
-      </div>',
-      $inst1,
-      $inst2);
-
-    Javelin::initBehavior(
-      'maniphest-description-preview',
-      array(
-        'preview'   => 'description-preview',
-        'textarea'  => 'description-textarea',
-        'uri'       => '/maniphest/task/descriptionpreview/',
-      ));
+    $preview = id(new PHUIRemarkupPreviewPanel())
+      ->setHeader(pht('Description Preview'))
+      ->setControlID('description-textarea')
+      ->setPreviewURI($this->getApplicationURI('task/descriptionpreview/'));
 
     if ($task->getID()) {
-      $page_objects = array( $task->getPHID() );
+      $page_objects = array($task->getPHID());
     } else {
       $page_objects = array();
     }
@@ -538,20 +665,13 @@ final class ManiphestTaskEditController extends ManiphestController {
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
-        ->setName($header_name)
-        ->setHref($this->getApplicationURI('/task/create/')))
-      ->addAction(
-        id(new PhabricatorMenuItemView())
-          ->setHref($this->getApplicationURI('/task/create/'))
-          ->setName(pht('Create Task'))
-          ->setIcon('create'));
+        ->setName($header_name));
 
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $error_view,
-        $panel,
-        $description_preview_panel,
+        $form_box,
+        $preview,
       ),
       array(
         'title' => $header_name,

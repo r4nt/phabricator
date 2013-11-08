@@ -3,6 +3,10 @@
 final class ReleephDiffMessageFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'commit:message';
+  }
+
   public function getName() {
     return 'Message';
   }
@@ -12,26 +16,32 @@ final class ReleephDiffMessageFieldSpecification
   }
 
   public function renderValueForHeaderView() {
-    $commit_data = $this
-      ->getReleephRequest()
-      ->loadPhabricatorRepositoryCommitData();
-    if (!$commit_data) {
-      return '';
-    }
-
-    $engine = PhabricatorMarkupEngine::newDifferentialMarkupEngine();
-    $engine->setConfig('viewer', $this->getUser());
     $markup = phutil_tag(
       'div',
       array(
         'class' => 'phabricator-remarkup',
       ),
-      $engine->markupText($commit_data->getCommitMessage()));
+      $this->getMarkupEngineOutput());
 
     return id(new AphrontNoteView())
       ->setTitle('Commit Message')
       ->appendChild($markup)
       ->render();
+  }
+
+  public function shouldMarkup() {
+    return true;
+  }
+
+  public function getMarkupText($field) {
+    $commit_data = $this
+      ->getReleephRequest()
+      ->loadPhabricatorRepositoryCommitData();
+    if ($commit_data) {
+      return $commit_data->getCommitMessage();
+    } else {
+      return '';
+    }
   }
 
 }

@@ -7,10 +7,6 @@ final class PhabricatorMetaMTASendGridReceiveController
     return false;
   }
 
-  public function shouldRequireAdmin() {
-    return false;
-  }
-
   public function processRequest() {
 
     // No CSRF for SendGrid.
@@ -39,8 +35,6 @@ final class PhabricatorMetaMTASendGridReceiveController
       'text' => $request->getStr('text'),
       'html' => $request->getStr('from'),
     ));
-    $received->setMessageIDHash(
-      PhabricatorHash::digestForIndex($received->getMessageID()));
 
     $file_phids = array();
     foreach ($_FILES as $file_raw) {

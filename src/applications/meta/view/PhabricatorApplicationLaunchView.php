@@ -115,7 +115,7 @@ final class PhabricatorApplicationLaunchView extends AphrontView {
       } else {
         $icon = $application->getIconName();
         $classes[] = 'sprite-apps-large';
-        $classes[] = 'app-'.$icon.'-light-large';
+        $classes[] = 'apps-'.$icon.'-light-large';
       }
 
       $icon = phutil_tag(
@@ -129,8 +129,8 @@ final class PhabricatorApplicationLaunchView extends AphrontView {
       $classes = array();
       if ($application->getQuickCreateURI()) {
         $classes[] = 'phabricator-application-create-icon';
-        $classes[] = 'sprite-icon';
-        $classes[] = 'action-new-grey';
+        $classes[] = 'sprite-icons';
+        $classes[] = 'icons-new-white';
         $plus_icon = phutil_tag(
           'span',
           array(

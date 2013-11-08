@@ -9,4 +9,14 @@ abstract class PhabricatorDaemon extends PhutilDaemon {
     $root = dirname($phabricator);
     require_once $root.'/scripts/__init_script__.php';
   }
+
+  protected function willSleep($duration) {
+    LiskDAO::closeAllConnections();
+    return;
+  }
+
+  public function getViewer() {
+    return PhabricatorUser::getOmnipotentUser();
+  }
+
 }

@@ -4,14 +4,22 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
   implements
     PhabricatorSubscribableInterface,
     PhabricatorApplicationTransactionInterface,
+    PhabricatorFlaggableInterface,
     PhabricatorPolicyInterface {
 
+  protected $authorPHID;
   protected $filePHID;
-  protected $phid;
   protected $name;
   protected $isDisabled = 0;
+  protected $audioPHID;
+  protected $audioBehavior = self::AUDIO_BEHAVIOR_NONE;
 
-  private $file;
+  private $file = self::ATTACHABLE;
+  private $audio = self::ATTACHABLE;
+
+  const AUDIO_BEHAVIOR_NONE   = 'audio:none';
+  const AUDIO_BEHAVIOR_ONCE   = 'audio:once';
+  const AUDIO_BEHAVIOR_LOOP   = 'audio:loop';
 
   public function attachFile(PhabricatorFile $file) {
     $this->file = $file;
@@ -19,11 +27,16 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
   }
 
   public function getFile() {
-    if (!$this->file) {
-      throw new Exception("Attach a file with attachFile() first!");
-    }
+    return $this->assertAttached($this->file);
+  }
 
-    return $this->file;
+  public function attachAudio(PhabricatorFile $audio = null) {
+    $this->audio = $audio;
+    return $this;
+  }
+
+  public function getAudio() {
+    return $this->assertAttached($this->audio);
   }
 
   public function getConfiguration() {
@@ -34,7 +47,7 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_MCRO);
+      PhabricatorMacroPHIDTypeMacro::TYPECONST);
   }
 
   public function isAutomaticallySubscribed($phid) {
@@ -52,16 +65,19 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
   public function getCapabilities() {
     return array(
       PhabricatorPolicyCapability::CAN_VIEW,
-      PhabricatorPolicyCapability::CAN_EDIT,
     );
   }
 
   public function getPolicy($capability) {
-    return PhabricatorPolicies::POLICY_USER;
+    return PhabricatorPolicies::getMostOpenPolicy();
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return null;
   }
 
 }

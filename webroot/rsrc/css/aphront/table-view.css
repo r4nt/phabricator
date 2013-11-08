@@ -24,6 +24,7 @@
   color: #525252;
   text-shadow: 0 1px 0 white;
   font-weight: bold;
+  background-color: #d9dde2;
   background-image: url(/rsrc/image/texture/table_header.png);
   background-repeat: repeat-x;
 }
@@ -167,6 +168,12 @@ th.aphront-table-view-sortable-selected {
   white-space:      normal;
 }
 
+.aphront-table-view td.prewrap {
+  font-family: "Monaco", monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
 .aphront-table-view td.narrow {
   width:            1px;
 }
@@ -193,7 +200,7 @@ span.single-display-line-content {
 .aphront-table-view tr.no-data td {
   padding:    1em;
   text-align: center;
-  color:      #888888;
+  color:      {$lightgreytext};
   font-style: italic;
 }
 

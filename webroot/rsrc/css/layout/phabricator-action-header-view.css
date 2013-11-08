@@ -8,7 +8,7 @@
 }
 
 .phabricator-action-header-title {
-  color: #333;
+  color: {$darkgreytext};
   float: left;
   font-size: 14px;
   font-weight: bold;
@@ -28,12 +28,16 @@
   padding-left: 2px;
 }
 
+.phabricator-action-header-icon-item .phui-icon-view {
+  display: inline-block;
+}
+
 .phabricator-action-header-icon-item .phabricator-tag-view {
   margin: 4px 2px 0;
 }
 
 .phabricator-action-header-link {
-  color: #333;
+  color: {$darkgreytext};
 }
 
 .gradient-green-header .phabricator-action-header-title,
@@ -45,7 +49,11 @@
 .gradient-blue-header .phabricator-action-header-link,
 .gradient-yellow-header .phabricator-action-header-link {
   color: #fff;
-  text-shadow: 0 -1px 1px rgba(0,0,0,.5);
+  text-shadow: 0 -1px 1px rgba(0,0,0,.7);
+}
+
+.phabricator-action-header-icon-list .phabricator-tag-view {
+  font-weight: normal;
 }
 
 .phabricator-action-header-title span {
@@ -54,5 +62,4 @@
   width: 16px;
   margin-right: 4px;
 }
-
 

@@ -10,15 +10,11 @@ final class PhluxTransaction extends PhabricatorApplicationTransaction {
   }
 
   public function getApplicationTransactionType() {
-    return PhabricatorPHIDConstants::PHID_TYPE_PVAR;
+    return PhluxPHIDTypeVariable::TYPECONST;
   }
 
   public function getApplicationTransactionCommentObject() {
     return null;
-  }
-
-  public function getApplicationObjectTypeName() {
-    return pht('variable');
   }
 
   public function getTitle() {

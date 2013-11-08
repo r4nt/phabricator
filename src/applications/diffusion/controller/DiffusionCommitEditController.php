@@ -3,6 +3,7 @@
 final class DiffusionCommitEditController extends DiffusionController {
 
   public function willProcessRequest(array $data) {
+    $data['user'] = $this->getRequest()->getUser();
     $this->diffusionRequest = DiffusionRequest::newFromDictionary($data);
   }
 
@@ -14,7 +15,7 @@ final class DiffusionCommitEditController extends DiffusionController {
     $callsign   = $drequest->getRepository()->getCallsign();
     $repository = $drequest->getRepository();
     $commit     = $drequest->loadCommit();
-    $page_title = 'Edit Diffusion Commit';
+    $page_title = pht('Edit Diffusion Commit');
 
     if (!$commit) {
       return new Aphront404Response();
@@ -26,7 +27,7 @@ final class DiffusionCommitEditController extends DiffusionController {
       $commit_phid,
       $edge_type);
     $handles = $this->loadViewerHandles($current_proj_phids);
-    $proj_t_values = mpull($handles, 'getFullName', 'getPHID');
+    $proj_t_values = $handles;
 
     if ($request->isFormPost()) {
       $proj_phids = $request->getArr('projects');
@@ -56,7 +57,7 @@ final class DiffusionCommitEditController extends DiffusionController {
       ->setAction($request->getRequestURI()->getPath())
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-        ->setLabel('Projects')
+        ->setLabel(pht('Projects'))
         ->setName('projects')
         ->setValue($proj_t_values)
         ->setID($tokenizer_id)
@@ -76,19 +77,21 @@ final class DiffusionCommitEditController extends DiffusionController {
     ));
 
     $submit = id(new AphrontFormSubmitControl())
-      ->setValue('Save')
+      ->setValue(pht('Save'))
       ->addCancelButton('/r'.$callsign.$commit->getCommitIdentifier());
     $form->appendChild($submit);
 
-    $panel = id(new AphrontPanelView())
-      ->setHeader('Edit Diffusion Commit')
-      ->appendChild($form)
-      ->setWidth(AphrontPanelView::WIDTH_FORM);
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($page_title)
+      ->setForm($form);
 
-    return $this->buildStandardPageResponse(
-      $panel,
+    return $this->buildApplicationPage(
+      array(
+        $form_box,
+      ),
       array(
         'title' => $page_title,
+        'device' => true,
       ));
   }
 

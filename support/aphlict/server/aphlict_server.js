@@ -35,7 +35,7 @@ function parse_command_line_arguments(argv) {
   return config;
 }
 
-if (process.getuid() != 0) {
+if (process.getuid() !== 0) {
   console.log(
     "ERROR: "+
     "This server must be run as root because it needs to bind to privileged "+
@@ -118,8 +118,8 @@ var MAX_ID = 9007199254740991;//2^53 -1
 // you want to write something pretty be my guest
 
 function generate_id() {
-  if (typeof generate_id.current_id == 'undefined'
-      || generate_id.current_id > MAX_ID) {
+  if (typeof generate_id.current_id == 'undefined' ||
+      generate_id.current_id > MAX_ID) {
     generate_id.current_id = 0;
   }
   return generate_id.current_id++;
@@ -129,18 +129,16 @@ var send_server = net.createServer(function(socket) {
   var client_id = generate_id();
   var client_name = '[' + socket.remoteAddress + '] [#' + client_id + '] ';
 
-  socket.on('connect', function() {
-    clients[client_id] = socket;
-    current_connections++;
-    log(client_name + 'connected\t\t('
-        + current_connections + ' current connections)');
-  });
+  clients[client_id] = socket;
+  current_connections++;
+  log(client_name + 'connected\t\t(' +
+    current_connections + ' current connections)');
 
   socket.on('close', function() {
     delete clients[client_id];
     current_connections--;
-    log(client_name + 'closed\t\t('
-        + current_connections + ' current connections)');
+    log(client_name + 'closed\t\t(' +
+      current_connections + ' current connections)');
   });
 
   socket.on('timeout', function() {
@@ -153,7 +151,7 @@ var send_server = net.createServer(function(socket) {
   });
 
   socket.on('error', function (e) {
-    log(cliient_name + 'Uncaught error in send server: ' + e);
+    log(client_name + 'Uncaught error in send server: ' + e);
   });
 }).listen(config.port);
 
@@ -182,6 +180,11 @@ var receive_server = http.createServer(function(request, response) {
       response.end();
     });
   } else if (request.url == '/status/') {
+    request.on('data', function(data) {
+      // We just ignore the request data, but newer versions of Node don't
+      // get to 'end' if we don't process the data. See T2953.
+    });
+
     request.on('end', function() {
       var status = {
         'uptime': (new Date().getTime() - start_time),

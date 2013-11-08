@@ -1,14 +1,20 @@
 <?php
 
+/**
+ * @group file
+ */
 final class PhabricatorFile extends PhabricatorFileDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorTokenReceiverInterface,
+    PhabricatorSubscribableInterface,
+    PhabricatorFlaggableInterface,
+    PhabricatorPolicyInterface {
 
   const STORAGE_FORMAT_RAW  = 'raw';
 
   const METADATA_IMAGE_WIDTH  = 'width';
   const METADATA_IMAGE_HEIGHT = 'height';
 
-  protected $phid;
   protected $name;
   protected $mimeType;
   protected $byteSize;
@@ -16,6 +22,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
   protected $secretKey;
   protected $contentHash;
   protected $metadata = array();
+  protected $mailKey;
 
   protected $storageEngine;
   protected $storageFormat;
@@ -23,6 +30,10 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
   protected $ttl;
   protected $isExplicitUpload = 1;
+  protected $viewPolicy = PhabricatorPolicies::POLICY_USER;
+
+  private $objects = self::ATTACHABLE;
+  private $objectPHIDs = self::ATTACHABLE;
 
   public function getConfiguration() {
     return array(
@@ -35,7 +46,17 @@ final class PhabricatorFile extends PhabricatorFileDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_FILE);
+      PhabricatorFilePHIDTypeFile::TYPECONST);
+  }
+
+  public function save() {
+    if (!$this->getSecretKey()) {
+      $this->setSecretKey($this->generateSecretKey());
+    }
+    if (!$this->getMailKey()) {
+      $this->setMailKey(Filesystem::readRandomCharacters(20));
+    }
+    return parent::save();
   }
 
   public static function readUploadedFileData($spec) {
@@ -384,29 +405,60 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public function delete() {
-    // delete all records of this file in transformedfile
-    $trans_files = id(new PhabricatorTransformedFile())->loadAllWhere(
-      'TransformedPHID = %s', $this->getPHID());
+
+    // We want to delete all the rows which mark this file as the transformation
+    // of some other file (since we're getting rid of it). We also delete all
+    // the transformations of this file, so that a user who deletes an image
+    // doesn't need to separately hunt down and delete a bunch of thumbnails and
+    // resizes of it.
+
+    $outbound_xforms = id(new PhabricatorFileQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withTransforms(
+        array(
+          array(
+            'originalPHID' => $this->getPHID(),
+            'transform'    => true,
+          ),
+        ))
+      ->execute();
+
+    foreach ($outbound_xforms as $outbound_xform) {
+      $outbound_xform->delete();
+    }
+
+    $inbound_xforms = id(new PhabricatorTransformedFile())->loadAllWhere(
+      'transformedPHID = %s',
+      $this->getPHID());
 
     $this->openTransaction();
-    foreach ($trans_files as $trans_file) {
-      $trans_file->delete();
-    }
-    $ret = parent::delete();
+      foreach ($inbound_xforms as $inbound_xform) {
+        $inbound_xform->delete();
+      }
+      $ret = parent::delete();
     $this->saveTransaction();
 
     // Check to see if other files are using storage
     $other_file = id(new PhabricatorFile())->loadAllWhere(
       'storageEngine = %s AND storageHandle = %s AND
-      storageFormat = %s AND id != %d LIMIT 1', $this->getStorageEngine(),
-      $this->getStorageHandle(), $this->getStorageFormat(),
+      storageFormat = %s AND id != %d LIMIT 1',
+      $this->getStorageEngine(),
+      $this->getStorageHandle(),
+      $this->getStorageFormat(),
       $this->getID());
 
     // If this is the only file using the storage, delete storage
-    if (count($other_file) == 0) {
+    if (!$other_file) {
       $engine = $this->instantiateStorageEngine();
-      $engine->deleteFile($this->getStorageHandle());
+      try {
+        $engine->deleteFile($this->getStorageHandle());
+      } catch (Exception $ex) {
+        // In the worst case, we're leaving some data stranded in a storage
+        // engine, which is fine.
+        phlog($ex);
+      }
     }
+
     return $ret;
   }
 
@@ -460,6 +512,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return (string) $uri;
   }
 
+  public function getProfileThumbURI() {
+    $path = '/file/xform/thumb-profile/'.$this->getPHID().'/'
+      .$this->getSecretKey().'/';
+    return PhabricatorEnv::getCDNURI($path);
+  }
+
   public function getThumb60x45URI() {
     $path = '/file/xform/thumb-60x45/'.$this->getPHID().'/'
       .$this->getSecretKey().'/';
@@ -506,6 +564,16 @@ final class PhabricatorFile extends PhabricatorFileDAO
     }
 
     $mime_map = PhabricatorEnv::getEnvConfig('files.image-mime-types');
+    $mime_type = $this->getMimeType();
+    return idx($mime_map, $mime_type);
+  }
+
+  public function isAudio() {
+    if (!$this->isViewableInBrowser()) {
+      return false;
+    }
+
+    $mime_map = PhabricatorEnv::getEnvConfig('files.audio-mime-types');
     $mime_type = $this->getMimeType();
     return idx($mime_map, $mime_type);
   }
@@ -611,13 +679,6 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return ($key == $this->getSecretKey());
   }
 
-  public function save() {
-    if (!$this->getSecretKey()) {
-      $this->setSecretKey($this->generateSecretKey());
-    }
-    return parent::save();
-  }
-
   public function generateSecretKey() {
     return Filesystem::readRandomCharacters(20);
   }
@@ -665,20 +726,143 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return $this;
   }
 
-  public static function getMetadataName($metadata) {
-    switch ($metadata) {
-      case self::METADATA_IMAGE_WIDTH:
-        $name = pht('Width');
-        break;
-      case self::METADATA_IMAGE_HEIGHT:
-        $name = pht('Height');
-        break;
-      default:
-        $name = ucfirst($metadata);
-        break;
+
+  /**
+   * Load (or build) the {@class:PhabricatorFile} objects for builtin file
+   * resources. The builtin mechanism allows files shipped with Phabricator
+   * to be treated like normal files so that APIs do not need to special case
+   * things like default images or deleted files.
+   *
+   * Builtins are located in `resources/builtin/` and identified by their
+   * name.
+   *
+   * @param  PhabricatorUser                Viewing user.
+   * @param  list<string>                   List of builtin file names.
+   * @return dict<string, PhabricatorFile>  Dictionary of named builtins.
+   */
+  public static function loadBuiltins(PhabricatorUser $user, array $names) {
+    $specs = array();
+    foreach ($names as $name) {
+      $specs[] = array(
+        'originalPHID' => PhabricatorPHIDConstants::PHID_VOID,
+        'transform'    => 'builtin:'.$name,
+      );
     }
 
-    return $name;
+    // NOTE: Anyone is allowed to access builtin files.
+
+    $files = id(new PhabricatorFileQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withTransforms($specs)
+      ->execute();
+
+    $files = mpull($files, null, 'getName');
+
+    $root = dirname(phutil_get_library_root('phabricator'));
+    $root = $root.'/resources/builtin/';
+
+    $build = array();
+    foreach ($names as $name) {
+      if (isset($files[$name])) {
+        continue;
+      }
+
+      // This is just a sanity check to prevent loading arbitrary files.
+      if (basename($name) != $name) {
+        throw new Exception("Invalid builtin name '{$name}'!");
+      }
+
+      $path = $root.$name;
+
+      if (!Filesystem::pathExists($path)) {
+        throw new Exception("Builtin '{$path}' does not exist!");
+      }
+
+      $data = Filesystem::readFile($path);
+      $params = array(
+        'name' => $name,
+        'ttl'  => time() + (60 * 60 * 24 * 7),
+      );
+
+      $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
+        $file = PhabricatorFile::newFromFileData($data, $params);
+        $xform = id(new PhabricatorTransformedFile())
+          ->setOriginalPHID(PhabricatorPHIDConstants::PHID_VOID)
+          ->setTransform('builtin:'.$name)
+          ->setTransformedPHID($file->getPHID())
+          ->save();
+      unset($unguarded);
+
+      $file->attachObjectPHIDs(array());
+      $file->attachObjects(array());
+
+      $files[$name] = $file;
+    }
+
+    return $files;
+  }
+
+
+  /**
+   * Convenience wrapper for @{method:loadBuiltins}.
+   *
+   * @param PhabricatorUser   Viewing user.
+   * @param string            Single builtin name to load.
+   * @return PhabricatorFile  Corresponding builtin file.
+   */
+  public static function loadBuiltin(PhabricatorUser $user, $name) {
+    return idx(self::loadBuiltins($user, array($name)), $name);
+  }
+
+  public function getObjects() {
+    return $this->assertAttached($this->objects);
+  }
+
+  public function attachObjects(array $objects) {
+    $this->objects = $objects;
+    return $this;
+  }
+
+  public function getObjectPHIDs() {
+    return $this->assertAttached($this->objectPHIDs);
+  }
+
+  public function attachObjectPHIDs(array $object_phids) {
+    $this->objectPHIDs = $object_phids;
+    return $this;
+  }
+
+  public function getImageHeight() {
+    if (!$this->isViewableImage()) {
+      return null;
+    }
+    return idx($this->metadata, self::METADATA_IMAGE_HEIGHT);
+  }
+
+  public function getImageWidth() {
+    if (!$this->isViewableImage()) {
+      return null;
+    }
+    return idx($this->metadata, self::METADATA_IMAGE_WIDTH);
+  }
+
+  /**
+   * Write the policy edge between this file and some object.
+   *
+   * @param PhabricatorUser Acting user.
+   * @param phid Object PHID to attach to.
+   * @return this
+   */
+  public function attachToObject(PhabricatorUser $actor, $phid) {
+    $edge_type = PhabricatorEdgeConfig::TYPE_OBJECT_HAS_FILE;
+
+    id(new PhabricatorEdgeEditor())
+      ->setActor($actor)
+      ->setSuppressEvents(true)
+      ->addEdge($phid, $edge_type, $this->getPHID())
+      ->save();
+
+    return $this;
   }
 
 
@@ -688,6 +872,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
   public function getCapabilities() {
     return array(
       PhabricatorPolicyCapability::CAN_VIEW,
+      PhabricatorPolicyCapability::CAN_EDIT,
     );
   }
 
@@ -697,7 +882,54 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    $viewer_phid = $viewer->getPHID();
+    if ($viewer_phid) {
+      if ($this->getAuthorPHID() == $viewer_phid) {
+        return true;
+      }
+    }
+
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        // If you can see any object this file is attached to, you can see
+        // the file.
+        return (count($this->getObjects()) > 0);
+    }
+
     return false;
   }
+
+  public function describeAutomaticCapability($capability) {
+    $out = array();
+    $out[] = pht('The user who uploaded a file can always view and edit it.');
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        $out[] = pht(
+          'Files attached to objects are visible to users who can view '.
+          'those objects.');
+        break;
+    }
+
+    return $out;
+  }
+
+
+/* -(  PhabricatorSubscribableInterface Implementation  )-------------------- */
+
+
+  public function isAutomaticallySubscribed($phid) {
+    return ($this->authorPHID == $phid);
+  }
+
+
+/* -(  PhabricatorTokenReceiverInterface  )---------------------------------- */
+
+
+  public function getUsersToNotifyOfTokenGiven() {
+    return array(
+      $this->getAuthorPHID(),
+    );
+  }
+
 
 }

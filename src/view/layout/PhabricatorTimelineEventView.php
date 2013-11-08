@@ -14,6 +14,7 @@ final class PhabricatorTimelineEventView extends AphrontView {
   private $isEdited;
   private $transactionPHID;
   private $isPreview;
+  private $eventGroup = array();
 
   public function setTransactionPHID($transaction_phid) {
     $this->transactionPHID = $transaction_phid;
@@ -99,11 +100,19 @@ final class PhabricatorTimelineEventView extends AphrontView {
     return $this;
   }
 
-  public function render() {
-    $content = $this->renderChildren();
+  public function getEventGroup() {
+    return array_merge(array($this), $this->eventGroup);
+  }
 
+  public function addEventToGroup(PhabricatorTimelineEventView $event) {
+    $this->eventGroup[] = $event;
+    return $this;
+  }
+
+
+  public function renderEventTitle() {
     $title = $this->title;
-    if (($title === null) && $this->isEmptyContent($content)) {
+    if (($title === null) && !$this->hasChildren()) {
       $title = '';
     }
 
@@ -117,16 +126,22 @@ final class PhabricatorTimelineEventView extends AphrontView {
       if ($this->icon) {
         $title_classes[] = 'phabricator-timeline-title-with-icon';
 
+        $fill_classes = array();
+        $fill_classes[] = 'phabricator-timeline-icon-fill';
+        if ($this->color) {
+          $fill_classes[] = 'phabricator-timeline-icon-fill-'.$this->color;
+        }
+
         $icon = phutil_tag(
           'span',
           array(
-            'class' => 'phabricator-timeline-icon-fill',
+            'class' => implode(' ', $fill_classes),
           ),
           phutil_tag(
             'span',
             array(
-              'class' => 'phabricator-timeline-icon sprite-icon '.
-                         'action-'.$this->icon.'-white',
+              'class' => 'phabricator-timeline-icon sprite-icons '.
+                         'icons-'.$this->icon.'-white',
             ),
             ''));
       }
@@ -136,9 +151,21 @@ final class PhabricatorTimelineEventView extends AphrontView {
         array(
           'class' => implode(' ', $title_classes),
         ),
-        array($title, $extra));
+        array($icon, $title, $extra));
+    }
 
-      $title = array($icon, $title);
+    return $title;
+  }
+
+  public function render() {
+
+    $group_titles = array();
+    $group_children = array();
+    foreach ($this->getEventGroup() as $event) {
+      $group_titles[] = $event->renderEventTitle();
+      if ($event->hasChildren()) {
+        $group_children[] = $event->renderChildren();
+      }
     }
 
     $wedge = phutil_tag(
@@ -162,43 +189,53 @@ final class PhabricatorTimelineEventView extends AphrontView {
 
     $classes = array();
     $classes[] = 'phabricator-timeline-event-view';
-    $classes[] = 'phabricator-timeline-border';
-    if (!$this->isEmptyContent($content)) {
+    if ($group_children) {
       $classes[] = 'phabricator-timeline-major-event';
       $content = phutil_tag(
         'div',
         array(
-          'class' => implode(' ', $content_classes),
+          'class' => 'phabricator-timeline-inner-content',
         ),
-        phutil_tag(
-          'div',
-          array(
-            'class' => 'phabricator-timeline-inner-content',
-          ),
-          array(
-            $title,
-            phutil_tag(
-              'div',
-              array(
-                'class' => 'phabricator-timeline-core-content',
-              ),
-              $content),
-          )));
-      $content = array($image, $wedge, $content);
+        array(
+          $group_titles,
+          phutil_tag(
+            'div',
+            array(
+              'class' => 'phabricator-timeline-core-content',
+            ),
+            $group_children),
+        ));
     } else {
       $classes[] = 'phabricator-timeline-minor-event';
-      $content = phutil_tag(
-        'div',
-        array(
-          'class' => implode(' ', $content_classes),
-        ),
-        array($image, $wedge, $title));
+      $content = $group_titles;
     }
+
+    $content = phutil_tag(
+      'div',
+      array(
+        'class' => 'phabricator-timeline-group phabricator-timeline-border',
+      ),
+      $content);
+
+    $content = phutil_tag(
+      'div',
+      array(
+        'class' => implode(' ', $content_classes),
+      ),
+      array($image, $wedge, $content));
 
     $outer_classes = $this->classes;
     $outer_classes[] = 'phabricator-timeline-shell';
-    if ($this->color) {
-      $outer_classes[] = 'phabricator-timeline-'.$this->color;
+    $color = null;
+    foreach ($this->getEventGroup() as $event) {
+      if ($event->color) {
+        $color = $event->color;
+        break;
+      }
+    }
+
+    if ($color) {
+      $outer_classes[] = 'phabricator-timeline-'.$color;
     }
 
     $sigil = null;

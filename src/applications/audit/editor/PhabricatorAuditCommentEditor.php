@@ -381,9 +381,10 @@ final class PhabricatorAuditCommentEditor extends PhabricatorEditor {
 
     $commit_phid = $commit->getPHID();
     $phids = array($commit_phid);
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->getActor())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
     $handle = $handles[$commit_phid];
 
     $name = $handle->getName();
@@ -402,12 +403,14 @@ final class PhabricatorAuditCommentEditor extends PhabricatorEditor {
 
     $prefix = PhabricatorEnv::getEnvConfig('metamta.diffusion.subject-prefix');
 
-    $repository = id(new PhabricatorRepository())
-      ->load($commit->getRepositoryID());
+    $repository = id(new PhabricatorRepositoryQuery())
+      ->setViewer($this->getActor())
+      ->withIDs(array($commit->getRepositoryID()))
+      ->executeOne();
     $threading = self::getMailThreading($repository, $commit);
     list($thread_id, $thread_topic) = $threading;
 
-    $body       = $this->renderMailBody(
+    $body = $this->renderMailBody(
       $comment,
       "{$name}: {$summary}",
       $handle,
@@ -419,7 +422,7 @@ final class PhabricatorAuditCommentEditor extends PhabricatorEditor {
 
     $author_phid = $data->getCommitDetail('authorPHID');
     if ($author_phid) {
-      $email_to[] = $author_phid;
+      $email_to[$author_phid] = true;
     }
 
     foreach ($other_comments as $other_comment) {
@@ -427,19 +430,29 @@ final class PhabricatorAuditCommentEditor extends PhabricatorEditor {
     }
 
     foreach ($requests as $request) {
-      if ($request->getAuditStatus() == PhabricatorAuditStatusConstants::CC) {
-        $email_cc[$request->getAuditorPHID()] = true;
-      } else if ($request->getAuditStatus() ==
-                 PhabricatorAuditStatusConstants::RESIGNED) {
-        unset($email_cc[$request->getAuditorPHID()]);
+      switch ($request->getAuditStatus()) {
+        case PhabricatorAuditStatusConstants::CC:
+        case PhabricatorAuditStatusConstants::AUDIT_REQUIRED:
+          $email_cc[$request->getAuditorPHID()] = true;
+          break;
+        case PhabricatorAuditStatusConstants::RESIGNED:
+          unset($email_cc[$request->getAuditorPHID()]);
+          break;
+        case PhabricatorAuditStatusConstants::CONCERNED:
+        case PhabricatorAuditStatusConstants::AUDIT_REQUESTED:
+          $email_to[$request->getAuditorPHID()] = true;
+          break;
       }
     }
+
+    $email_to = array_keys($email_to);
     $email_cc = array_keys($email_cc);
 
     $phids = array_merge($email_to, $email_cc);
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->getActor())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
 
     // NOTE: Always set $is_new to false, because the "first" mail in the
     // thread is the Herald notification of the commit.

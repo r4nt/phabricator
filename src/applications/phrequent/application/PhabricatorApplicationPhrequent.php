@@ -35,7 +35,7 @@ final class PhabricatorApplicationPhrequent extends PhabricatorApplication {
   public function getRoutes() {
     return array(
       '/phrequent/' => array(
-        '' => 'PhrequentListController',
+        '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhrequentListController',
         'track/(?P<verb>[a-z]+)/(?P<phid>[^/]+)/'
           => 'PhrequentTrackController'
       ),

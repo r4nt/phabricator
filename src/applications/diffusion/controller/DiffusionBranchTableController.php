@@ -2,10 +2,14 @@
 
 final class DiffusionBranchTableController extends DiffusionController {
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function processRequest() {
     $drequest = $this->getDiffusionRequest();
     $request = $this->getRequest();
-    $user = $request->getUser();
+    $viewer = $request->getUser();
 
     $repository = $drequest->getRepository();
 
@@ -14,53 +18,55 @@ final class DiffusionBranchTableController extends DiffusionController {
     $pager->setOffset($request->getInt('offset'));
 
     // TODO: Add support for branches that contain commit
-    $query = DiffusionBranchQuery::newFromDiffusionRequest($drequest);
-    $query->setOffset($pager->getOffset());
-    $query->setLimit($pager->getPageSize() + 1);
-    $branches = $query->loadBranches();
-
+    $branches = DiffusionBranchInformation::newFromConduit(
+      $this->callConduitWithDiffusionRequest(
+        'diffusion.branchquery',
+        array(
+          'offset' => $pager->getOffset(),
+          'limit' => $pager->getPageSize() + 1
+        )));
     $branches = $pager->sliceResults($branches);
 
     $content = null;
     if (!$branches) {
-      $content = new AphrontErrorView();
-      $content->setTitle('No Branches');
-      $content->appendChild('This repository has no branches.');
-      $content->setSeverity(AphrontErrorView::SEVERITY_NODATA);
+      $content = $this->renderStatusMessage(
+        pht('No Branches'),
+        pht('This repository has no branches.'));
     } else {
-      $commits = id(new PhabricatorAuditCommitQuery())
-        ->withIdentifiers(
-          $drequest->getRepository()->getID(),
-          mpull($branches, 'getHeadCommitIdentifier'))
-        ->needCommitData(true)
+      $commits = id(new DiffusionCommitQuery())
+        ->setViewer($viewer)
+        ->withIdentifiers(mpull($branches, 'getHeadCommitIdentifier'))
+        ->withRepository($repository)
         ->execute();
 
       $view = id(new DiffusionBranchTableView())
+        ->setUser($viewer)
         ->setBranches($branches)
-        ->setUser($user)
         ->setCommits($commits)
         ->setDiffusionRequest($drequest);
 
       $panel = id(new AphrontPanelView())
-        ->setHeader('Branches')
+        ->setNoBackground(true)
         ->appendChild($view)
         ->appendChild($pager);
 
       $content = $panel;
     }
 
-    return $this->buildStandardPageResponse(
+    $crumbs = $this->buildCrumbs(
       array(
-        $this->buildCrumbs(
-          array(
-            'branches'    => true,
-          )),
+        'branches' => true,
+      ));
+
+    return $this->buildApplicationPage(
+      array(
+        $crumbs,
         $content,
       ),
       array(
         'title' => array(
-          'Branches',
-          $repository->getCallsign().' Repository',
+          pht('Branches'),
+          'r'.$repository->getCallsign(),
         ),
       ));
   }

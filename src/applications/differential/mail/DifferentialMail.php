@@ -136,9 +136,10 @@ abstract class DifferentialMail extends PhabricatorMail {
         $raw = $revision->getRawRelations($relation_subscribed);
 
         $reason_phids = ipull($raw, 'reasonPHID');
-        $reason_handles = id(new PhabricatorObjectHandleData($reason_phids))
+        $reason_handles = id(new PhabricatorHandleQuery())
           ->setViewer($this->getActor())
-          ->loadHandles();
+          ->withPHIDs($reason_phids)
+          ->execute();
 
         $explicit_cc = array();
         foreach ($raw as $relation) {
@@ -146,7 +147,7 @@ abstract class DifferentialMail extends PhabricatorMail {
             continue;
           }
           $type = $reason_handles[$relation['reasonPHID']]->getType();
-          if ($type == PhabricatorPHIDConstants::PHID_TYPE_USER) {
+          if ($type == PhabricatorPeoplePHIDTypeUser::TYPECONST) {
             $explicit_cc[] = $relation['objectPHID'];
           }
         }
@@ -177,12 +178,14 @@ abstract class DifferentialMail extends PhabricatorMail {
     }
     $phids = array_keys($phids);
 
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->getActor())
-      ->loadHandles();
-    $objects = id(new PhabricatorObjectHandleData($phids))
+      ->withPHIDs($phids)
+      ->execute();
+    $objects = id(new PhabricatorObjectQuery())
       ->setViewer($this->getActor())
-      ->loadObjects();
+      ->withPHIDs($phids)
+      ->execute();
 
     $to_handles = array_select_keys($handles, $to_phids);
     $cc_handles = array_select_keys($handles, $cc_phids);
@@ -290,9 +293,8 @@ abstract class DifferentialMail extends PhabricatorMail {
 
     if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
       if ($this->getHeraldTranscriptURI() && $this->isFirstMailToRecipients()) {
-        $manage_uri = '/herald/view/differential/';
         $xscript_uri = $this->getHeraldTranscriptURI();
-        $body->addHeraldSection($manage_uri, $xscript_uri);
+        $body->addHeraldSection($xscript_uri);
       }
     }
 

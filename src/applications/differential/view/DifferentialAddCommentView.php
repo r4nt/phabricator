@@ -61,11 +61,15 @@ final class DifferentialAddCommentView extends AphrontView {
 
     $enable_reviewers = DifferentialAction::allowReviewers($action);
     $enable_ccs = ($action == DifferentialAction::ACTION_ADDCCS);
+    $add_reviewers_labels = array(
+      'add_reviewers' => pht('Add Reviewers'),
+      'request_review' => pht('Add Reviewers'),
+      'resign' => pht('Suggest Reviewers'),
+    );
 
     $form = new AphrontFormView();
     $form
       ->setWorkflow(true)
-      ->setFlexible(true)
       ->setUser($this->user)
       ->setAction($this->actionURI)
       ->addHiddenInput('revision_id', $revision->getID())
@@ -78,7 +82,8 @@ final class DifferentialAddCommentView extends AphrontView {
           ->setOptions($this->actions))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel(pht('Add Reviewers'))
+          ->setLabel($enable_reviewers ? $add_reviewers_labels[$action] :
+            $add_reviewers_labels['add_reviewers'])
           ->setName('reviewers')
           ->setControlID('add-reviewers')
           ->setControlStyle($enable_reviewers ? null : 'display: none')
@@ -108,12 +113,17 @@ final class DifferentialAddCommentView extends AphrontView {
       array(
         'dynamic' => array(
           'add-reviewers-tokenizer' => array(
-            'actions' => array('request_review' => 1, 'add_reviewers' => 1),
-            'src' => '/typeahead/common/users/',
+            'actions' => array(
+              'request_review' => 1,
+              'add_reviewers' => 1,
+              'resign' => 1,
+            ),
+            'src' => '/typeahead/common/usersorprojects/',
             'value' => $this->reviewers,
             'row' => 'add-reviewers',
             'ondemand' => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
-            'placeholder' => pht('Type a user name...'),
+            'labels' => $add_reviewers_labels,
+            'placeholder' => pht('Type a user or project name...'),
           ),
           'add-ccs-tokenizer' => array(
             'actions' => array('add_ccs' => 1),
@@ -162,28 +172,33 @@ final class DifferentialAddCommentView extends AphrontView {
       }
     }
 
-    $header = id(new PhabricatorHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setHeader($is_serious ? pht('Add Comment') : pht('Leap Into Action'));
 
-    return hsprintf(
-      '%s'.
-      '<div class="differential-add-comment-panel">'.
-        '%s%s%s'.
+    $anchor = id(new PhabricatorAnchorView())
+        ->setAnchorName('comment')
+        ->setNavigationMarker(true);
+
+    $warn = phutil_tag('div', array('id' => 'warnings'), $warning_container);
+
+    $preview = hsprintf(
         '<div class="aphront-panel-preview aphront-panel-flush">'.
           '<div id="comment-preview">'.
             '<span class="aphront-panel-preview-loading-text">%s</span>'.
           '</div>'.
           '<div id="inline-comment-preview">'.
           '</div>'.
-        '</div>'.
-      '</div>',
-      id(new PhabricatorAnchorView())
-        ->setAnchorName('comment')
-        ->setNavigationMarker(true)
-        ->render(),
-      $header->render(),
-      $form->render(),
-      phutil_tag('div', array('id' => 'warnings'), $warning_container),
+        '</div>',
       pht('Loading comment preview...'));
+
+
+
+    $comment_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->appendChild($anchor)
+      ->appendChild($warn)
+      ->appendChild($form);
+
+    return array($comment_box, $preview);
   }
 }

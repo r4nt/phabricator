@@ -54,9 +54,8 @@ final class PhabricatorFeedStoryDifferentialAggregate
         break;
     }
 
-    $view = new PhabricatorFeedStoryView();
-    $view->setEpoch($this->getEpoch());
-    $view->setViewed($this->getHasViewed());
+    $view = $this->newStoryView();
+    $view->setAppIcon('differential-dark');
     $view->setTitle($title);
 
     $href = $this->getHandle($data->getValue('revision_phid'))->getURI();

@@ -7,9 +7,14 @@ final class DiffusionCommitController extends DiffusionController {
   private $auditAuthorityPHIDs;
   private $highlightedAudits;
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function willProcessRequest(array $data) {
     // This controller doesn't use blob/path stuff, just pass the dictionary
     // in directly instead of using the AphrontRequest parsing mechanism.
+    $data['user'] = $this->getRequest()->getUser();
     $drequest = DiffusionRequest::newFromDictionary($data);
     $this->diffusionRequest = $drequest;
   }
@@ -29,18 +34,33 @@ final class DiffusionCommitController extends DiffusionController {
     $repository = $drequest->getRepository();
     $commit = $drequest->loadCommit();
 
+    $crumbs = $this->buildCrumbs(array(
+      'commit' => true,
+    ));
+
     if (!$commit) {
-      $query = DiffusionExistsQuery::newFromDiffusionRequest($drequest);
-      $exists = $query->loadExistentialData();
+      $exists = $this->callConduitWithDiffusionRequest(
+        'diffusion.existsquery',
+        array('commit' => $drequest->getCommit()));
       if (!$exists) {
         return new Aphront404Response();
       }
-      return $this->buildStandardPageResponse(
-        id(new AphrontErrorView())
-        ->setTitle('Error displaying commit.')
-        ->appendChild('Failed to load the commit because the commit has not '.
-                      'been parsed yet.'),
-          array('title' => 'Commit Still Parsing'));
+
+      $error = id(new AphrontErrorView())
+        ->setTitle(pht('Commit Still Parsing'))
+        ->appendChild(
+          pht(
+            'Failed to load the commit because the commit has not been '.
+            'parsed yet.'));
+
+      return $this->buildApplicationPage(
+        array(
+          $crumbs,
+          $error,
+        ),
+        array(
+          'title' => pht('Commit Still Parsing'),
+        ));
     }
 
     $commit_data = $drequest->loadCommitData();
@@ -50,19 +70,25 @@ final class DiffusionCommitController extends DiffusionController {
       ->setAnchorName('top')
       ->setNavigationMarker(true);
 
+    $audit_requests = id(new PhabricatorAuditQuery())
+      ->withCommitPHIDs(array($commit->getPHID()))
+      ->execute();
+    $this->auditAuthorityPHIDs =
+      PhabricatorAuditCommentEditor::loadAuditPHIDsForUser($user);
+
     $is_foreign = $commit_data->getCommitDetail('foreign-svn-stub');
     $changesets = null;
     if ($is_foreign) {
       $subpath = $commit_data->getCommitDetail('svn-subpath');
 
       $error_panel = new AphrontErrorView();
-      $error_panel->setTitle('Commit Not Tracked');
+      $error_panel->setTitle(pht('Commit Not Tracked'));
       $error_panel->setSeverity(AphrontErrorView::SEVERITY_WARNING);
       $error_panel->appendChild(
-        "This Diffusion repository is configured to track only one ".
+        pht("This Diffusion repository is configured to track only one ".
         "subdirectory of the entire Subversion repository, and this commit ".
-        "didn't affect the tracked subdirectory ('".$subpath."'), so no ".
-        "information is available.");
+        "didn't affect the tracked subdirectory ('%s'), so no ".
+        "information is available.", $subpath));
       $content[] = $error_panel;
       $content[] = $top_anchor;
     } else {
@@ -72,10 +98,11 @@ final class DiffusionCommitController extends DiffusionController {
       require_celerity_resource('diffusion-commit-view-css');
       require_celerity_resource('phabricator-remarkup-css');
 
-      $parent_query = DiffusionCommitParentsQuery::newFromDiffusionRequest(
-        $drequest);
+      $parents = $this->callConduitWithDiffusionRequest(
+        'diffusion.commitparentsquery',
+        array('commit' => $drequest->getCommit()));
 
-      $headsup_view = id(new PhabricatorHeaderView())
+      $headsup_view = id(new PHUIHeaderView())
         ->setHeader(nonempty($commit->getSummary(), pht('Commit Detail')));
 
       $headsup_actions = $this->renderHeadsupActionList($commit, $repository);
@@ -83,43 +110,59 @@ final class DiffusionCommitController extends DiffusionController {
       $commit_properties = $this->loadCommitProperties(
         $commit,
         $commit_data,
-        $parent_query->loadParents());
-      $property_list = id(new PhabricatorPropertyListView())
-        ->setHasKeyboardShortcuts(true);
+        $parents,
+        $audit_requests);
+      $property_list = id(new PHUIPropertyListView())
+        ->setHasKeyboardShortcuts(true)
+        ->setUser($user)
+        ->setObject($commit);
       foreach ($commit_properties as $key => $value) {
         $property_list->addProperty($key, $value);
       }
 
-      $property_list->addTextContent(
+      $message = $commit_data->getCommitMessage();
+
+      $revision = $commit->getCommitIdentifier();
+      $message = $this->linkBugtraq($message);
+
+      $message = $engine->markupText($message);
+
+      $property_list->invokeWillRenderEvent();
+      $property_list->setActionList($headsup_actions);
+
+      $detail_list = new PHUIPropertyListView();
+      $detail_list->addSectionHeader(
+        pht('Description'),
+        PHUIPropertyListView::ICON_SUMMARY);
+      $detail_list->addTextContent(
         phutil_tag(
           'div',
           array(
             'class' => 'diffusion-commit-message phabricator-remarkup',
           ),
-          $engine->markupText($commit_data->getCommitMessage())));
-
+          $message));
       $content[] = $top_anchor;
-      $content[] = $headsup_view;
-      $content[] = $headsup_actions;
-      $content[] = $property_list;
+
+      $object_box = id(new PHUIObjectBoxView())
+        ->setHeader($headsup_view)
+        ->addPropertyList($property_list)
+        ->addPropertyList($detail_list);
+
+      $content[] = $object_box;
     }
 
-    $query = new PhabricatorAuditQuery();
-    $query->withCommitPHIDs(array($commit->getPHID()));
-    $audit_requests = $query->execute();
-
-    $this->auditAuthorityPHIDs =
-      PhabricatorAuditCommentEditor::loadAuditPHIDsForUser($user);
-
-    $content[] = $this->buildAuditTable($commit, $audit_requests);
     $content[] = $this->buildComments($commit);
 
     $hard_limit = 1000;
 
-    $change_query = DiffusionPathChangeQuery::newFromDiffusionRequest(
-      $drequest);
-    $change_query->setLimit($hard_limit + 1);
-    $changes = $change_query->loadChanges();
+    if ($commit->isImported()) {
+      $change_query = DiffusionPathChangeQuery::newFromDiffusionRequest(
+        $drequest);
+      $change_query->setLimit($hard_limit + 1);
+      $changes = $change_query->loadChanges();
+    } else {
+      $changes = array();
+    }
 
     $was_limited = (count($changes) > $hard_limit);
     if ($was_limited) {
@@ -128,11 +171,21 @@ final class DiffusionCommitController extends DiffusionController {
 
     $content[] = $this->buildMergesTable($commit);
 
+    // TODO: This is silly, but the logic to figure out which audits are
+    // highlighted currently lives in PhabricatorAuditListView. Refactor this
+    // to be less goofy.
+    $highlighted_audits = id(new PhabricatorAuditListView())
+      ->setAudits($audit_requests)
+      ->setAuthorityPHIDs($this->auditAuthorityPHIDs)
+      ->setUser($user)
+      ->setCommits(array($commit->getPHID() => $commit))
+      ->getHighlightedAudits();
+
     $owners_paths = array();
-    if ($this->highlightedAudits) {
+    if ($highlighted_audits) {
       $packages = id(new PhabricatorOwnersPackage())->loadAllWhere(
         'phid IN (%Ls)',
-        mpull($this->highlightedAudits, 'getAuditorPHID'));
+        mpull($highlighted_audits, 'getAuditorPHID'));
       if ($packages) {
         $owners_paths = id(new PhabricatorOwnersPath())->loadAllWhere(
           'repositoryPHID = %s AND packageID IN (%Ld)',
@@ -158,56 +211,51 @@ final class DiffusionCommitController extends DiffusionController {
     }
 
     if ($bad_commit) {
-      $error_panel = new AphrontErrorView();
-      $error_panel->setTitle('Bad Commit');
-      $error_panel->appendChild($bad_commit['description']);
-
-      $content[] = $error_panel;
+      $content[] = $this->renderStatusMessage(
+        pht('Bad Commit'),
+        $bad_commit['description']);
     } else if ($is_foreign) {
       // Don't render anything else.
+    } else if (!$commit->isImported()) {
+      $content[] = $this->renderStatusMessage(
+        pht('Still Importing...'),
+        pht(
+          'This commit is still importing. Changes will be visible once '.
+          'the import finishes.'));
     } else if (!count($changes)) {
-      $no_changes = new AphrontErrorView();
-      $no_changes->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $no_changes->setTitle('Not Yet Parsed');
-      // TODO: This can also happen with weird SVN changes that don't do
-      // anything (or only alter properties?), although the real no-changes case
-      // is extremely rare and might be impossible to produce organically. We
-      // should probably write some kind of "Nothing Happened!" change into the
-      // DB once we parse these changes so we can distinguish between
-      // "not parsed yet" and "no changes".
-      $no_changes->appendChild(
-        "This commit hasn't been fully parsed yet (or doesn't affect any ".
-        "paths).");
-      $content[] = $no_changes;
+      $content[] = $this->renderStatusMessage(
+        pht('Empty Commit'),
+        pht(
+          'This commit is empty and does not affect any paths.'));
     } else if ($was_limited) {
-      $huge_commit = new AphrontErrorView();
-      $huge_commit->setSeverity(AphrontErrorView::SEVERITY_WARNING);
-      $huge_commit->setTitle(pht('Enormous Commit'));
-      $huge_commit->appendChild(
+      $content[] = $this->renderStatusMessage(
+        pht('Enormous Commit'),
         pht(
           'This commit is enormous, and affects more than %d files. '.
           'Changes are not shown.',
           $hard_limit));
-      $content[] = $huge_commit;
     } else {
+      // The user has clicked "Show All Changes", and we should show all the
+      // changes inline even if there are more than the soft limit.
+      $show_all_details = $request->getBool('show_all');
+
       $change_panel = new AphrontPanelView();
       $change_panel->setHeader("Changes (".number_format($count).")");
       $change_panel->setID('toc');
-      if ($count > self::CHANGES_LIMIT) {
+      if ($count > self::CHANGES_LIMIT && !$show_all_details) {
         $show_all_button = phutil_tag(
           'a',
           array(
             'class'   => 'button green',
             'href'    => '?show_all=true',
           ),
-          'Show All Changes');
+          pht('Show All Changes'));
+
         $warning_view = id(new AphrontErrorView())
           ->setSeverity(AphrontErrorView::SEVERITY_WARNING)
           ->setTitle('Very Large Commit')
-          ->appendChild(phutil_tag(
-            'p',
-            array(),
-            "This commit is very large. Load each file individually."));
+          ->appendChild(
+            pht("This commit is very large. Load each file individually."));
 
         $change_panel->appendChild($warning_view);
         $change_panel->addButton($show_all_button);
@@ -261,7 +309,7 @@ final class DiffusionCommitController extends DiffusionController {
         $changeset->setID($path_ids[$changeset->getFilename()]);
       }
 
-      if ($count <= self::CHANGES_LIMIT) {
+      if ($count <= self::CHANGES_LIMIT || $show_all_details) {
         $visible_changesets = $changesets;
       } else {
         $visible_changesets = array();
@@ -320,10 +368,6 @@ final class DiffusionCommitController extends DiffusionController {
       $repository,
       $commit->getCommitIdentifier());
 
-    $crumbs = $this->buildCrumbs(array(
-      'commit' => true,
-    ));
-
     $prefs = $user->loadPreferences();
     $pref_filetree = PhabricatorUserPreferences::PREFERENCE_DIFF_FILETREE;
     $pref_collapse = PhabricatorUserPreferences::PREFERENCE_NAV_COLLAPSED;
@@ -347,33 +391,40 @@ final class DiffusionCommitController extends DiffusionController {
     return $this->buildApplicationPage(
       $content,
       array(
-        'title' => $commit_id
+        'title' => $commit_id,
+        'pageObjects' => array($commit->getPHID()),
       ));
   }
 
   private function loadCommitProperties(
     PhabricatorRepositoryCommit $commit,
     PhabricatorRepositoryCommitData $data,
-    array $parents) {
+    array $parents,
+    array $audit_requests) {
 
     assert_instances_of($parents, 'PhabricatorRepositoryCommit');
     $user = $this->getRequest()->getUser();
     $commit_phid = $commit->getPHID();
 
-    $edges = id(new PhabricatorEdgeQuery())
+    $edge_query = id(new PhabricatorEdgeQuery())
       ->withSourcePHIDs(array($commit_phid))
       ->withEdgeTypes(array(
         PhabricatorEdgeConfig::TYPE_COMMIT_HAS_TASK,
-        PhabricatorEdgeConfig::TYPE_COMMIT_HAS_PROJECT
-      ))
-      ->execute();
+        PhabricatorEdgeConfig::TYPE_COMMIT_HAS_PROJECT,
+        PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV,
+      ));
+
+    $edges = $edge_query->execute();
 
     $task_phids = array_keys(
       $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_TASK]);
     $proj_phids = array_keys(
       $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_PROJECT]);
+    $revision_phid = key(
+      $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV]);
 
-    $phids = array_merge($task_phids, $proj_phids);
+    $phids = $edge_query->getDestinationPHIDs(array($commit_phid));
+
     if ($data->getCommitDetail('authorPHID')) {
       $phids[] = $data->getCommitDetail('authorPHID');
     }
@@ -382,9 +433,6 @@ final class DiffusionCommitController extends DiffusionController {
     }
     if ($data->getCommitDetail('committerPHID')) {
       $phids[] = $data->getCommitDetail('committerPHID');
-    }
-    if ($data->getCommitDetail('differential.revisionPHID')) {
-      $phids[] = $data->getCommitDetail('differential.revisionPHID');
     }
     if ($parents) {
       foreach ($parents as $parent) {
@@ -402,10 +450,48 @@ final class DiffusionCommitController extends DiffusionController {
     if ($commit->getAuditStatus()) {
       $status = PhabricatorAuditCommitStatusConstants::getStatusName(
         $commit->getAuditStatus());
-      $props['Status'] = phutil_tag(
-        'strong',
-        array(),
-        $status);
+      $tag = id(new PhabricatorTagView())
+        ->setType(PhabricatorTagView::TYPE_STATE)
+        ->setName($status);
+
+      switch ($commit->getAuditStatus()) {
+        case PhabricatorAuditCommitStatusConstants::NEEDS_AUDIT:
+          $tag->setBackgroundColor(PhabricatorTagView::COLOR_ORANGE);
+          break;
+        case PhabricatorAuditCommitStatusConstants::CONCERN_RAISED:
+          $tag->setBackgroundColor(PhabricatorTagView::COLOR_RED);
+          break;
+        case PhabricatorAuditCommitStatusConstants::PARTIALLY_AUDITED:
+          $tag->setBackgroundColor(PhabricatorTagView::COLOR_BLUE);
+          break;
+        case PhabricatorAuditCommitStatusConstants::FULLY_AUDITED:
+          $tag->setBackgroundColor(PhabricatorTagView::COLOR_GREEN);
+          break;
+      }
+
+      $props['Status'] = $tag;
+    }
+
+    if ($audit_requests) {
+      $user_requests = array();
+      $other_requests = array();
+      foreach ($audit_requests as $audit_request) {
+        if ($audit_request->isUser()) {
+          $user_requests[] = $audit_request;
+        } else {
+          $other_requests[] = $audit_request;
+        }
+      }
+
+      if ($user_requests) {
+        $props['Auditors'] = $this->renderAuditStatusView(
+          $user_requests);
+      }
+
+      if ($other_requests) {
+        $props['Project/Package Auditors'] = $this->renderAuditStatusView(
+          $other_requests);
+      }
     }
 
     $props['Committed'] = phabricator_datetime($commit->getEpoch(), $user);
@@ -432,7 +518,6 @@ final class DiffusionCommitController extends DiffusionController {
       }
     }
 
-    $revision_phid = $data->getCommitDetail('differential.revisionPHID');
     if ($revision_phid) {
       $props['Differential Revision'] = $handles[$revision_phid]->renderLink();
     }
@@ -452,13 +537,13 @@ final class DiffusionCommitController extends DiffusionController {
       array(
         'id' => 'commit-branches',
       ),
-      'Unknown');
+      pht('Unknown'));
     $props['Tags'] = phutil_tag(
       'span',
       array(
         'id' => 'commit-tags',
       ),
-      'Unknown');
+      pht('Unknown'));
 
     $callsign = $request->getRepository()->getCallsign();
     $root = '/diffusion/'.$callsign.'/commit/'.$commit->getCommitIdentifier();
@@ -493,33 +578,6 @@ final class DiffusionCommitController extends DiffusionController {
     }
 
     return $props;
-  }
-
-  private function buildAuditTable(
-    PhabricatorRepositoryCommit $commit,
-    array $audits) {
-    assert_instances_of($audits, 'PhabricatorRepositoryAuditRequest');
-    $user = $this->getRequest()->getUser();
-
-    $view = new PhabricatorAuditListView();
-    $view->setAudits($audits);
-    $view->setCommits(array($commit));
-    $view->setUser($user);
-    $view->setShowCommits(false);
-
-    $phids = $view->getRequiredHandlePHIDs();
-    $handles = $this->loadViewerHandles($phids);
-    $view->setHandles($handles);
-    $view->setAuthorityPHIDs($this->auditAuthorityPHIDs);
-    $this->highlightedAudits = $view->getHighlightedAudits();
-
-    $panel = new AphrontPanelView();
-    $panel->setHeader('Audits');
-    $panel->setCaption('Audits you are responsible for are highlighted.');
-    $panel->appendChild($view);
-    $panel->setNoBackground();
-
-    return $panel;
   }
 
   private function buildComments(PhabricatorRepositoryCommit $commit) {
@@ -577,7 +635,15 @@ final class DiffusionCommitController extends DiffusionController {
     PhabricatorRepositoryCommit $commit,
     array $audit_requests) {
     assert_instances_of($audit_requests, 'PhabricatorRepositoryAuditRequest');
-    $user = $this->getRequest()->getUser();
+
+    $request = $this->getRequest();
+    $user = $request->getUser();
+
+    if (!$user->isLoggedIn()) {
+      return id(new PhabricatorApplicationTransactionCommentView())
+        ->setUser($user)
+        ->setRequestURI($request->getRequestURI());
+    }
 
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
 
@@ -606,13 +672,13 @@ final class DiffusionCommitController extends DiffusionController {
       ->addHiddenInput('commit', $commit->getPHID())
       ->appendChild(
         id(new AphrontFormSelectControl())
-          ->setLabel('Action')
+          ->setLabel(pht('Action'))
           ->setName('action')
           ->setID('audit-action')
           ->setOptions($actions))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('Add Auditors')
+          ->setLabel(pht('Add Auditors'))
           ->setName('auditors')
           ->setControlID('add-auditors')
           ->setControlStyle('display: none')
@@ -620,7 +686,7 @@ final class DiffusionCommitController extends DiffusionController {
           ->setDisableBehavior(true))
       ->appendChild(
         id(new AphrontFormTokenizerControl())
-          ->setLabel('Add CCs')
+          ->setLabel(pht('Add CCs'))
           ->setName('ccs')
           ->setControlID('add-ccs')
           ->setControlStyle('display: none')
@@ -628,20 +694,18 @@ final class DiffusionCommitController extends DiffusionController {
           ->setDisableBehavior(true))
       ->appendChild(
         id(new PhabricatorRemarkupControl())
-          ->setLabel('Comments')
+          ->setLabel(pht('Comments'))
           ->setName('content')
           ->setValue($draft)
           ->setID('audit-content')
           ->setUser($user))
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->setValue($is_serious ? 'Submit' : 'Cook the Books'));
+          ->setValue($is_serious ? pht('Submit') : pht('Cook the Books')));
 
-    $panel = new AphrontPanelView();
-    $panel->setHeader($is_serious ? 'Audit Commit' : 'Creative Accounting');
-    $panel->appendChild($form);
-    $panel->addClass('aphront-panel-accent');
-    $panel->addClass('aphront-panel-flush');
+    $header = new PHUIHeaderView();
+    $header->setHeader(
+      $is_serious ? pht('Audit Commit') : pht('Creative Accounting'));
 
     require_celerity_resource('phabricator-transaction-view-css');
 
@@ -654,14 +718,14 @@ final class DiffusionCommitController extends DiffusionController {
             'src' => '/typeahead/common/users/',
             'row' => 'add-auditors',
             'ondemand' => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
-            'placeholder' => 'Type a user name...',
+            'placeholder' => pht('Type a user name...'),
           ),
           'add-ccs-tokenizer' => array(
             'actions' => array('add_ccs' => 1),
             'src' => '/typeahead/common/mailable/',
             'row' => 'add-ccs',
             'ondemand' => PhabricatorEnv::getEnvConfig('tokenizer.ondemand'),
-            'placeholder' => 'Type a user or mailing list...',
+            'placeholder' => pht('Type a user or mailing list...'),
           ),
         ),
         'select' => 'audit-action',
@@ -695,6 +759,10 @@ final class DiffusionCommitController extends DiffusionController {
     // Differential better.
     require_celerity_resource('differential-core-view-css');
 
+    $comment_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->appendChild($form);
+
     return phutil_tag(
       'div',
       array(
@@ -706,7 +774,7 @@ final class DiffusionCommitController extends DiffusionController {
           ->setAnchorName('comment')
           ->setNavigationMarker(true)
           ->render(),
-        $panel->render(),
+        $comment_box,
         $preview_panel));
   }
 
@@ -791,13 +859,20 @@ final class DiffusionCommitController extends DiffusionController {
 
   private function buildMergesTable(PhabricatorRepositoryCommit $commit) {
     $drequest = $this->getDiffusionRequest();
-
     $limit = 50;
 
-    $merge_query = DiffusionMergedCommitsQuery::newFromDiffusionRequest(
-      $drequest);
-    $merge_query->setLimit($limit + 1);
-    $merges = $merge_query->loadMergedCommits();
+    $merges = array();
+    try {
+      $merges = $this->callConduitWithDiffusionRequest(
+        'diffusion.mergedcommitsquery',
+        array(
+          'commit' => $drequest->getCommit(),
+          'limit' => $limit + 1));
+    } catch (ConduitException $ex) {
+      if ($ex->getMessage() != 'ERR-UNSUPPORTED-VCS') {
+        throw $ex;
+      }
+    }
 
     if (!$merges) {
       return null;
@@ -822,7 +897,7 @@ final class DiffusionCommitController extends DiffusionController {
     $history_table->setHandles($handles);
 
     $panel = new AphrontPanelView();
-    $panel->setHeader('Merged Changes');
+    $panel->setHeader(pht('Merged Changes'));
     $panel->setCaption($caption);
     $panel->appendChild($history_table);
     $panel->setNoBackground();
@@ -839,16 +914,23 @@ final class DiffusionCommitController extends DiffusionController {
 
     $actions = id(new PhabricatorActionListView())
       ->setUser($user)
-      ->setObject($commit);
+      ->setObject($commit)
+      ->setObjectURI($request->getRequestURI());
 
-    // TODO -- integrate permissions into whether or not this action is shown
-    $uri = '/diffusion/'.$repository->getCallSign().'/commit/'.
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $user,
+      $commit,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $uri = '/diffusion/'.$repository->getCallsign().'/commit/'.
            $commit->getCommitIdentifier().'/edit/';
 
     $action = id(new PhabricatorActionView())
-      ->setName('Edit Commit')
+      ->setName(pht('Edit Commit'))
       ->setHref($uri)
-      ->setIcon('edit');
+      ->setIcon('edit')
+      ->setDisabled(!$can_edit)
+      ->setWorkflow(!$can_edit);
     $actions->addAction($action);
 
     require_celerity_resource('phabricator-object-selector-css');
@@ -857,30 +939,16 @@ final class DiffusionCommitController extends DiffusionController {
     $maniphest = 'PhabricatorApplicationManiphest';
     if (PhabricatorApplication::isClassInstalled($maniphest)) {
       $action = id(new PhabricatorActionView())
-        ->setName('Edit Maniphest Tasks')
+        ->setName(pht('Edit Maniphest Tasks'))
         ->setIcon('attach')
         ->setHref('/search/attach/'.$commit->getPHID().'/TASK/edge/')
-        ->setWorkflow(true);
-      $actions->addAction($action);
-    }
-
-    if ($user->getIsAdmin()) {
-      $action = id(new PhabricatorActionView())
-        ->setName('MetaMTA Transcripts')
-        ->setIcon('file')
-        ->setHref('/mail/?phid='.$commit->getPHID());
+        ->setWorkflow(true)
+        ->setDisabled(!$can_edit);
       $actions->addAction($action);
     }
 
     $action = id(new PhabricatorActionView())
-      ->setName('Herald Transcripts')
-      ->setIcon('file')
-      ->setHref('/herald/transcript/?phid='.$commit->getPHID())
-      ->setWorkflow(true);
-    $actions->addAction($action);
-
-    $action = id(new PhabricatorActionView())
-      ->setName('Download Raw Diff')
+      ->setName(pht('Download Raw Diff'))
       ->setHref($request->getRequestURI()->alter('diff', true))
       ->setIcon('download');
     $actions->addAction($action);
@@ -889,50 +957,32 @@ final class DiffusionCommitController extends DiffusionController {
   }
 
   private function buildRefs(DiffusionRequest $request) {
-    // Not turning this into a proper Query class since it's pretty simple,
-    // one-off, and Git-specific.
-
+    // this is git-only, so save a conduit round trip and just get out of
+    // here if the repository isn't git
     $type_git = PhabricatorRepositoryType::REPOSITORY_TYPE_GIT;
-
     $repository = $request->getRepository();
     if ($repository->getVersionControlSystem() != $type_git) {
       return null;
     }
 
-    list($stdout) = $repository->execxLocalCommand(
-      'log --format=%s -n 1 %s --',
-      '%d',
-      $request->getCommit());
-
-    // %d, gives a weird output format
-    // similar to (remote/one, remote/two, remote/three)
-    $refs = trim($stdout, "() \n");
-    if (!$refs) {
-        return null;
-    }
-    $refs = explode(',', $refs);
-    $refs = array_map('trim', $refs);
-
+    $results = $this->callConduitWithDiffusionRequest(
+      'diffusion.refsquery',
+      array('commit' => $request->getCommit()));
     $ref_links = array();
-    foreach ($refs as $ref) {
-      $ref_links[] = phutil_tag(
-        'a',
-        array(
-          'href' => $request->generateURI(
-            array(
-              'action'  => 'browse',
-              'branch'  => $ref,
-            )),
-        ),
-        $ref);
+    foreach ($results as $ref_data) {
+      $ref_links[] = phutil_tag('a',
+        array('href' => $ref_data['href']),
+        $ref_data['ref']);
     }
-
     return phutil_implode_html(', ', $ref_links);
   }
 
   private function buildRawDiffResponse(DiffusionRequest $drequest) {
-    $raw_query = DiffusionRawDiffQuery::newFromDiffusionRequest($drequest);
-    $raw_diff  = $raw_query->loadRawDiff();
+    $raw_diff = $this->callConduitWithDiffusionRequest(
+      'diffusion.rawdiffquery',
+      array(
+        'commit' => $drequest->getCommit(),
+        'path' => $drequest->getPath()));
 
     $file = PhabricatorFile::buildFromFileDataOrHash(
       $raw_diff,
@@ -942,5 +992,93 @@ final class DiffusionCommitController extends DiffusionController {
 
     return id(new AphrontRedirectResponse())->setURI($file->getBestURI());
   }
+
+  private function renderAuditStatusView(array $audit_requests) {
+    assert_instances_of($audit_requests, 'PhabricatorRepositoryAuditRequest');
+
+    $phids = mpull($audit_requests, 'getAuditorPHID');
+    $this->loadHandles($phids);
+
+    $authority_map = array_fill_keys($this->auditAuthorityPHIDs, true);
+
+    $view = new PHUIStatusListView();
+    foreach ($audit_requests as $request) {
+      $item = new PHUIStatusItemView();
+
+      switch ($request->getAuditStatus()) {
+        case PhabricatorAuditStatusConstants::AUDIT_NOT_REQUIRED:
+          $item->setIcon('open-blue', pht('Commented'));
+          break;
+        case PhabricatorAuditStatusConstants::AUDIT_REQUIRED:
+          $item->setIcon('warning-blue', pht('Audit Required'));
+          break;
+        case PhabricatorAuditStatusConstants::CONCERNED:
+          $item->setIcon('reject-red', pht('Concern Raised'));
+          break;
+        case PhabricatorAuditStatusConstants::ACCEPTED:
+          $item->setIcon('accept-green', pht('Accepted'));
+          break;
+        case PhabricatorAuditStatusConstants::AUDIT_REQUESTED:
+          $item->setIcon('warning-dark', pht('Audit Requested'));
+          break;
+        case PhabricatorAuditStatusConstants::RESIGNED:
+          $item->setIcon('open-dark', pht('Resigned'));
+          break;
+        case PhabricatorAuditStatusConstants::CLOSED:
+          $item->setIcon('accept-blue', pht('Closed'));
+          break;
+        case PhabricatorAuditStatusConstants::CC:
+          $item->setIcon('info-dark', pht('Subscribed'));
+          break;
+        default:
+          $item->setIcon(
+            'question-dark',
+            pht('%s?', $request->getAuditStatus()));
+          break;
+      }
+
+      $note = array();
+      foreach ($request->getAuditReasons() as $reason) {
+        $note[] = phutil_tag('div', array(), $reason);
+      }
+      $item->setNote($note);
+
+      $auditor_phid = $request->getAuditorPHID();
+      $target = $this->getHandle($auditor_phid)->renderLink();
+      $item->setTarget($target);
+
+      if (isset($authority_map[$auditor_phid])) {
+        $item->setHighlighted(true);
+      }
+
+      $view->addItem($item);
+    }
+
+    return $view;
+  }
+
+  private function linkBugtraq($corpus) {
+    $url = PhabricatorEnv::getEnvConfig('bugtraq.url');
+    if (!strlen($url)) {
+      return $corpus;
+    }
+
+    $regexes = PhabricatorEnv::getEnvConfig('bugtraq.logregex');
+    if (!$regexes) {
+      return $corpus;
+    }
+
+    $parser = id(new PhutilBugtraqParser())
+      ->setBugtraqPattern("[[ {$url} | %BUGID% ]]")
+      ->setBugtraqCaptureExpression(array_shift($regexes));
+
+    $select = array_shift($regexes);
+    if ($select) {
+      $parser->setBugtraqSelectExpression($select);
+    }
+
+    return $parser->processCorpus($corpus);
+  }
+
 
 }

@@ -248,6 +248,23 @@ final class PhabricatorEnv {
 
 
   /**
+   * Get the current configuration setting for a given key. If the key
+   * does not exist, return a default value instead of throwing. This is
+   * primarily useful for migrations involving keys which are slated for
+   * removal.
+   *
+   * @task read
+   */
+  public static function getEnvConfigIfExists($key, $default = null) {
+    try {
+      return self::getEnvConfig($key);
+    } catch (Exception $ex) {
+      return $default;
+    }
+  }
+
+
+  /**
    * Get the fully-qualified URI for a path.
    *
    * @task read
@@ -276,6 +293,21 @@ final class PhabricatorEnv {
       $production_domain = self::getAnyBaseURI();
     }
     return rtrim($production_domain, '/').$path;
+  }
+
+  public static function getAllowedURIs($path) {
+    $uri = new PhutilURI($path);
+    if ($uri->getDomain()) {
+      return $path;
+    }
+
+    $allowed_uris = self::getEnvConfig('phabricator.allowed-uris');
+    $return = array();
+    foreach ($allowed_uris as $allowed_uri) {
+      $return[] = rtrim($allowed_uri, '/').$path;
+    }
+
+    return $return;
   }
 
 
@@ -496,6 +528,8 @@ final class PhabricatorEnv {
     foreach ($tmp as $source) {
       self::$sourceStack->pushSource($source);
     }
+
+    self::dropConfigCache();
   }
 
   private static function dropConfigCache() {

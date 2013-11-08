@@ -12,13 +12,12 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
   private $glyph;
   private $menuContent;
   private $showChrome = true;
-  private $layDownSomeDust = false;
   private $disableConsole;
   private $searchDefaultScope;
   private $pageObjects = array();
   private $applicationMenu;
 
-  public function setApplicationMenu(PhabricatorMenuView $application_menu) {
+  public function setApplicationMenu(PHUIListView $application_menu) {
     $this->applicationMenu = $application_menu;
     return $this;
   }
@@ -55,17 +54,8 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     return $this;
   }
 
-  public function setDust($is_dusty) {
-    $this->layDownSomeDust = $is_dusty;
-    return $this;
-  }
-
   public function getShowChrome() {
     return $this->showChrome;
-  }
-
-  public function getDust() {
-    return $this->layDownSomeDust;
   }
 
   public function setSearchDefaultScope($search_default_scope) {
@@ -85,6 +75,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
   public function getTitle() {
     $use_glyph = true;
+
     $request = $this->getRequest();
     if ($request) {
       $user = $request->getUser();
@@ -94,9 +85,23 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       }
     }
 
-    return ($use_glyph ?
-            $this->getGlyph() : '['.$this->getApplicationName().']').
-      ' '.parent::getTitle();
+    $title = parent::getTitle();
+
+    $prefix = null;
+    if ($use_glyph) {
+      $prefix = $this->getGlyph();
+    } else {
+      $application_name = $this->getApplicationName();
+      if (strlen($application_name)) {
+        $prefix = '['.$application_name.']';
+      }
+    }
+
+    if (strlen($prefix)) {
+      $title = $prefix.' '.$title;
+    }
+
+    return $title;
   }
 
 
@@ -113,8 +118,9 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
     require_celerity_resource('phabricator-core-css');
     require_celerity_resource('phabricator-zindex-css');
-    require_celerity_resource('phabricator-core-buttons-css');
-    require_celerity_resource('spacing-css');
+    require_celerity_resource('phui-button-css');
+    require_celerity_resource('phui-spacing-css');
+    require_celerity_resource('phui-form-css');
     require_celerity_resource('sprite-gradient-css');
     require_celerity_resource('phabricator-standard-page-view');
 
@@ -183,7 +189,10 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       Javelin::initBehavior(
         'dark-console',
         array(
-          'uri' => $request ? (string)$request->getRequestURI() : '?',
+          // NOTE: We use a generic label here to prevent input reflection
+          // and mitigate compression attacks like BREACH. See discussion in
+          // T3684.
+          'uri' => pht('Main Request'),
           'selected' => $user ? $user->getConsoleTab() : null,
           'visible'  => $user ? (int)$user->getConsoleVisible() : true,
           'headers' => $headers,
@@ -193,8 +202,14 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       require_celerity_resource('javelin-behavior-error-log');
     }
 
+    if ($user) {
+      $viewer = $user;
+    } else {
+      $viewer = new PhabricatorUser();
+    }
+
     $menu = id(new PhabricatorMainMenuView())
-      ->setUser($request->getUser())
+      ->setUser($viewer)
       ->setDefaultSearchScope($this->getSearchDefaultScope());
 
     if ($this->getController()) {
@@ -228,8 +243,11 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
     return hsprintf(
       '%s<style type="text/css">'.
-      '.PhabricatorMonospaced { font: %s; } '.
-      '.platform-windows .PhabricatorMonospaced { font: %s; }'.
+      '.PhabricatorMonospaced, '.
+      '.phabricator-remarkup .remarkup-code-block { font: %s; } '.
+      '.platform-windows .PhabricatorMonospaced, '.
+      '.platform-windows .phabricator-remarkup '.
+        '.remarkup-code-block { font: %s; }'.
       '</style>%s',
       parent::getHead(),
       phutil_safe_html($monospaced),
@@ -333,7 +351,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     $user = $request->getUser();
 
     $container = null;
-    if ($user->isLoggedIn()) {
+    if ($user && $user->isLoggedIn()) {
 
       $aphlict_object_id = celerity_generate_unique_node_id();
       $aphlict_container_id = celerity_generate_unique_node_id();
@@ -361,7 +379,8 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
         'div',
         array(
           'id' => $aphlict_container_id,
-          'style' => 'position: absolute; width: 0; height: 0;',
+          'style' =>
+            'position: absolute; width: 0; height: 0; overflow: hidden;',
         ),
         '');
     }
@@ -384,10 +403,6 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       $classes[] = 'phabricator-chromeless-page';
     }
 
-    if ($this->getDust()) {
-      $classes[] = 'make-me-sneeze';
-    }
-
     $agent = AphrontRequest::getHTTPHeader('User-Agent');
 
     // Try to guess the device resolution based on UA strings to avoid a flash
@@ -407,6 +422,10 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       $classes[] = 'platform-mac';
     } else if (preg_match('@X11@', $agent)) {
       $classes[] = 'platform-linux';
+    }
+
+    if ($this->getRequest()->getStr('__print__')) {
+      $classes[] = 'printable';
     }
 
     return implode(' ', $classes);

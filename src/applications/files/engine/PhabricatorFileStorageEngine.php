@@ -9,12 +9,18 @@
  *
  * For more information, see @{article:File Storage Technical Documentation}.
  *
+ * @task construct Constructing an Engine
  * @task meta Engine Metadata
  * @task file Managing File Data
  * @group filestorage
  */
 abstract class PhabricatorFileStorageEngine {
 
+  /**
+   * Construct a new storage engine.
+   *
+   * @task construct
+   */
   final public function __construct() {
     // <empty>
   }
@@ -48,7 +54,7 @@ abstract class PhabricatorFileStorageEngine {
    * some metadata keys (like "name" and "author") in it. You should be prepared
    * to handle writes which specify no metadata, but might want to optionally
    * use some keys in this array for debugging or logging purposes. This is
-   * the same dictionary passed to @{method:PhabricatorFile::NewFromFileData},
+   * the same dictionary passed to @{method:PhabricatorFile::newFromFileData},
    * so you could conceivably do custom things with it.
    *
    * If you are unable to write for whatever reason (e.g., the disk is full),

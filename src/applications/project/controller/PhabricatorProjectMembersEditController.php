@@ -16,6 +16,7 @@ final class PhabricatorProjectMembersEditController
     $project = id(new PhabricatorProjectQuery())
       ->setViewer($user)
       ->withIDs(array($this->id))
+      ->needMembers(true)
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
@@ -25,12 +26,8 @@ final class PhabricatorProjectMembersEditController
     if (!$project) {
       return new Aphront404Response();
     }
-    $profile = $project->loadProfile();
-    if (empty($profile)) {
-      $profile = new PhabricatorProjectProfile();
-    }
 
-    $member_phids = $project->loadMemberPHIDs();
+    $member_phids = $project->getMemberPHIDs();
 
     $errors = array();
     if ($request->isFormPost()) {
@@ -57,7 +54,7 @@ final class PhabricatorProjectMembersEditController
       if ($changed_something) {
         $xaction = new PhabricatorProjectTransaction();
         $xaction->setTransactionType(
-          PhabricatorProjectTransactionType::TYPE_MEMBERS);
+          PhabricatorProjectTransaction::TYPE_MEMBERS);
         $xaction->setNewValue(array_keys($member_map));
         $xactions[] = $xaction;
       }
@@ -100,25 +97,19 @@ final class PhabricatorProjectMembersEditController
         id(new AphrontFormSubmitControl())
           ->addCancelButton('/project/view/'.$project->getID().'/')
           ->setValue(pht('Add Members')));
-    $faux_form = id(new AphrontFormLayoutView())
-      ->setBackgroundShading(true)
-      ->setPadded(true)
+    $faux_form = id(new AphrontFormView())
+      ->setUser($user)
       ->appendChild(
         id(new AphrontFormInsetView())
-          ->setTitle(pht('Current Members (%d)', count($handles)))
           ->appendChild($list));
 
-    $panel = new AphrontPanelView();
-    $panel->setHeader($header_name);
-    $panel->setWidth(AphrontPanelView::WIDTH_FORM);
-    $panel->setNoBackground();
-    $panel->appendChild($form);
-    $panel->appendChild(phutil_tag('br'));
-    $panel->appendChild($faux_form);
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Current Members (%d)', count($handles)))
+      ->setForm($faux_form);
 
-    $nav = $this->buildLocalNavigation($project);
-    $nav->selectFilter('members');
-    $nav->appendChild($panel);
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->setForm($form);
 
     $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView());
     $crumbs->addCrumb(
@@ -129,10 +120,13 @@ final class PhabricatorProjectMembersEditController
       id(new PhabricatorCrumbView())
         ->setName(pht('Edit Members'))
         ->setHref($this->getApplicationURI()));
-    $nav->setCrumbs($crumbs);
 
     return $this->buildApplicationPage(
-      $nav,
+      array(
+        $crumbs,
+        $form_box,
+        $box,
+      ),
       array(
         'title' => $title,
         'device' => true,

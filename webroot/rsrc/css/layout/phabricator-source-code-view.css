@@ -3,6 +3,7 @@
  */
 
 .phabricator-source-code-container {
+  background: #ffffff;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -10,6 +11,7 @@
 .phabricator-source-code {
   white-space: pre-wrap;
   padding: 2px 8px 1px;
+  width: 100%;
 }
 
 .phabricator-source-line {

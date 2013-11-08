@@ -1,6 +1,6 @@
 <?php
 
-final class ReleephProjectCreateController extends ReleephController {
+final class ReleephProjectCreateController extends ReleephProjectController {
 
   public function processRequest() {
     $request = $this->getRequest();
@@ -8,15 +8,7 @@ final class ReleephProjectCreateController extends ReleephController {
     $trunk_branch = trim($request->getStr('trunkBranch'));
     $arc_pr_id = $request->getInt('arcPrID');
 
-
-    // Only allow arc projects with repositories.  Sort and re-key by ID.
-    $arc_projects = id(new PhabricatorRepositoryArcanistProject())->loadAll();
-    $arc_projects = mpull(
-      msort(
-        mfilter($arc_projects, 'getRepositoryID'),
-        'getName'),
-      null,
-      'getID');
+    $arc_projects = $this->loadArcProjects();
 
     $e_name = true;
     $e_trunk_branch = true;
@@ -24,21 +16,15 @@ final class ReleephProjectCreateController extends ReleephController {
 
     if ($request->isFormPost()) {
       if (!$name) {
-        $e_name = 'Required';
-        $errors[] =
-          'Your releeph project should have a simple descriptive name.';
+        $e_name = pht('Required');
+        $errors[] = pht(
+          'Your Releeph project should have a simple descriptive name.');
       }
 
       if (!$trunk_branch) {
-        $e_trunk_branch = 'Required';
-        $errors[] =
-          'You must specify which branch you will be picking from.';
-      }
-
-      $all_names = mpull(id(new ReleephProject())->loadAll(), 'getName');
-
-      if (in_array($name, $all_names)) {
-        $errors[] = "Releeph project name {$name} is already taken";
+        $e_trunk_branch = pht('Required');
+        $errors[] = pht(
+          'You must specify which branch you will be picking from.');
       }
 
       $arc_project = $arc_projects[$arc_pr_id];
@@ -48,14 +34,21 @@ final class ReleephProjectCreateController extends ReleephController {
         $releeph_project = id(new ReleephProject())
           ->setName($name)
           ->setTrunkBranch($trunk_branch)
-          ->setRepositoryID($pr_repository->getID())
           ->setRepositoryPHID($pr_repository->getPHID())
           ->setArcanistProjectID($arc_project->getID())
           ->setCreatedByUserPHID($request->getUser()->getPHID())
-          ->setIsActive(1)
-          ->save();
+          ->setIsActive(1);
 
-        return id(new AphrontRedirectResponse())->setURI('/releeph/');
+        try {
+          $releeph_project->save();
+
+          return id(new AphrontRedirectResponse())
+            ->setURI($releeph_project->getURI());
+        } catch (AphrontQueryDuplicateKeyException $ex) {
+          $e_name = pht('Not Unique');
+          $errors[] = pht(
+            'Another project already uses this name.');
+        }
       }
     }
 
@@ -63,44 +56,24 @@ final class ReleephProjectCreateController extends ReleephController {
     if ($errors) {
       $error_view = new AphrontErrorView();
       $error_view->setErrors($errors);
-      $error_view->setTitle('Form Errors');
     }
 
-    // Make our own optgroup select control
-    $arc_project_choices = array();
-    $pr_repositories = mpull(
-      msort(
-        array_filter(
-          // Some arc-projects don't have repositories
-          mpull($arc_projects, 'loadRepository')),
-        'getName'),
-      null,
-      'getID');
-
-    foreach ($pr_repositories as $pr_repo_id => $pr_repository) {
-      $options = array();
-      foreach ($arc_projects as $arc_project) {
-        if ($arc_project->getRepositoryID() == $pr_repo_id) {
-          $options[$arc_project->getID()] = $arc_project->getName();
-        }
-      }
-      $arc_project_choices[$pr_repository->getName()] = $options;
-    }
+    $arc_project_options = $this->getArcProjectSelectOptions($arc_projects);
 
     $project_name_input = id(new AphrontFormTextControl())
-      ->setLabel('Name')
+      ->setLabel(pht('Name'))
       ->setDisableAutocomplete(true)
       ->setName('name')
       ->setValue($name)
       ->setError($e_name)
-      ->setCaption('A name like "Thrift" but not "Thrift releases".');
+      ->setCaption(pht('A name like "Thrift" but not "Thrift releases".'));
 
     $arc_project_input = id(new AphrontFormSelectControl())
-      ->setLabel('Arc Project')
+      ->setLabel(pht('Arc Project'))
       ->setName('arcPrID')
       ->setValue($arc_pr_id)
-      ->setCaption(hsprintf(
-        "If your Arc project isn't listed, associate it with a repository %s",
+      ->setCaption(pht(
+        'If your Arc project isn\'t listed, associate it with a repository %s',
         phutil_tag(
           'a',
           array(
@@ -108,10 +81,10 @@ final class ReleephProjectCreateController extends ReleephController {
             'target' => '_blank',
           ),
           'here')))
-      ->setOptions($arc_project_choices);
+      ->setOptions($arc_project_options);
 
     $branch_name_preview = id(new ReleephBranchPreviewView())
-      ->setLabel('Example Branch')
+      ->setLabel(pht('Example Branch'))
       ->addControl('projectName', $project_name_input)
       ->addControl('arcProjectID', $arc_project_input)
       ->addStatic('template', '')
@@ -123,27 +96,77 @@ final class ReleephProjectCreateController extends ReleephController {
       ->appendChild($arc_project_input)
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Trunk')
+          ->setLabel(pht('Trunk'))
           ->setName('trunkBranch')
           ->setValue($trunk_branch)
           ->setError($e_trunk_branch)
-          ->setCaption('The development branch, '.
-              'from which requests will be picked.'))
+          ->setCaption(pht('The development branch, '.
+              'from which requests will be picked.')))
       ->appendChild($branch_name_preview)
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->addCancelButton('/releeph/project/')
-          ->setValue('Create'));
+          ->setValue(pht('Create')));
 
-    $panel = id(new AphrontPanelView())
-      ->setHeader('Create Releeph Project')
-      ->appendChild($form)
-      ->setWidth(AphrontPanelView::WIDTH_FORM);
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Create New Project'))
+      ->setFormError($error_view)
+      ->setForm($form);
 
-    return $this->buildStandardPageResponse(
-      array($error_view, $panel),
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName(pht('New Project')));
+
+    return $this->buildApplicationPage(
       array(
-        'title' => 'Create new Releeph Project'
+        $crumbs,
+        $form_box,
+      ),
+      array(
+        'title' => pht('Create New Project'),
+        'device' => true,
       ));
   }
+
+  private function loadArcProjects() {
+    $viewer = $this->getRequest()->getUser();
+
+    $projects = id(new PhabricatorRepositoryArcanistProjectQuery())
+      ->setViewer($viewer)
+      ->needRepositories(true)
+      ->execute();
+
+    $projects = mfilter($projects, 'getRepository');
+    $projects = msort($projects, 'getName');
+
+    return $projects;
+  }
+
+  private function getArcProjectSelectOptions(array $arc_projects) {
+    assert_instances_of($arc_projects, 'PhabricatorRepositoryArcanistProject');
+
+    $repos = mpull($arc_projects, 'getRepository');
+    $repos = mpull($repos, null, 'getID');
+
+    $groups = array();
+    foreach ($arc_projects as $arc_project) {
+      $id = $arc_project->getID();
+      $repo_id = $arc_project->getRepository()->getID();
+      $groups[$repo_id][$id] = $arc_project->getName();
+    }
+
+    $choices = array();
+    foreach ($groups as $repo_id => $group) {
+      $repo_name = $repos[$repo_id]->getName();
+      $callsign = $repos[$repo_id]->getCallsign();
+      $name = "r{$callsign} ({$repo_name})";
+      $choices[$name] = $group;
+    }
+
+    ksort($choices);
+
+    return $choices;
+  }
+
 }

@@ -6,7 +6,7 @@ final class PhabricatorImageTransformer {
     PhabricatorFile $file,
     $upper_text,
     $lower_text) {
-    $image = $this->applyMemeTo($file, $upper_text, $lower_text);
+    $image = $this->applyMemeToFile($file, $upper_text, $lower_text);
     return PhabricatorFile::newFromFileData(
       $image,
       array(
@@ -94,7 +94,6 @@ final class PhabricatorImageTransformer {
     }
 
     $cropped = $this->applyScaleWithImagemagick($file, $x, $scaled_y);
-
     if ($cropped != null) {
       return $cropped;
     }
@@ -104,7 +103,7 @@ final class PhabricatorImageTransformer {
       $x,
       $scaled_y);
 
-    return $this->saveImageDataInAnyFormat($img, $file->getMimeType());
+    return self::saveImageDataInAnyFormat($img, $file->getMimeType());
   }
 
   private function crasslyCropTo(PhabricatorFile $file, $top, $left, $w, $h) {
@@ -126,7 +125,7 @@ final class PhabricatorImageTransformer {
       $w, $h,
       $orig_w, $orig_h);
 
-    return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
+    return self::saveImageDataInAnyFormat($dst, $file->getMimeType());
   }
 
 
@@ -141,7 +140,7 @@ final class PhabricatorImageTransformer {
     }
 
     $dst = $this->applyScaleTo($file, $dx, $dy);
-    return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
+    return self::saveImageDataInAnyFormat($dst, $file->getMimeType());
   }
 
   private function getBlankDestinationFile($dx, $dy) {
@@ -254,14 +253,46 @@ final class PhabricatorImageTransformer {
       $sdx, $sdy,
       $x, $y);
 
-    return $this->saveImageDataInAnyFormat($dst, $file->getMimeType());
+    return self::saveImageDataInAnyFormat($dst, $file->getMimeType());
   }
 
-  private function applyMemeTo(
+  private function applyMemeToFile(
     PhabricatorFile $file,
     $upper_text,
     $lower_text) {
     $data = $file->loadFileData();
+
+    $img_type = $file->getMimeType();
+    $imagemagick = PhabricatorEnv::getEnvConfig('files.enable-imagemagick');
+
+    if ($img_type != 'image/gif' || $imagemagick == false) {
+      return $this->applyMemeTo(
+        $data, $upper_text, $lower_text, $img_type);
+    }
+
+    $data = $file->loadFileData();
+    $input = new TempFile();
+    Filesystem::writeFile($input, $data);
+
+    list($out) = execx('convert %s info:', $input);
+    $split = phutil_split_lines($out);
+    if (count($split) > 1) {
+      return $this->applyMemeWithImagemagick(
+        $input,
+        $upper_text,
+        $lower_text,
+        count($split),
+        $img_type);
+    } else {
+      return $this->applyMemeTo($data, $upper_text, $lower_text, $img_type);
+    }
+  }
+
+  private function applyMemeTo(
+    $data,
+    $upper_text,
+    $lower_text,
+    $mime_type) {
     $img = imagecreatefromstring($data);
     $phabricator_root = dirname(phutil_get_library_root('phabricator'));
     $font_root = $phabricator_root.'/resources/font/';
@@ -314,7 +345,7 @@ final class PhabricatorImageTransformer {
         break;
       }
     }
-    return $this->saveImageDataInAnyFormat($img, $file->getMimeType());
+    return self::saveImageDataInAnyFormat($img, $mime_type);
   }
 
   private function makeImageWithTextBorder($img, $font_size, $x, $y,
@@ -352,13 +383,17 @@ final class PhabricatorImageTransformer {
     );
   }
 
-  private function saveImageDataInAnyFormat($data, $preferred_mime = '') {
+  public static function saveImageDataInAnyFormat($data, $preferred_mime = '') {
     switch ($preferred_mime) {
       case 'image/gif': // Gif doesn't support true color
+        ob_start();
+        imagegif($data);
+        return ob_get_clean();
+        break;
       case 'image/png':
         if (function_exists('imagepng')) {
           ob_start();
-          imagepng($data);
+          imagepng($data, null, 9);
           return ob_get_clean();
         }
         break;
@@ -372,7 +407,7 @@ final class PhabricatorImageTransformer {
       $img = ob_get_clean();
     } else if (function_exists('imagepng')) {
       ob_start();
-      imagepng($data);
+      imagepng($data, null, 9);
       $img = ob_get_clean();
     } else if (function_exists('imagegif')) {
       ob_start();
@@ -421,6 +456,37 @@ final class PhabricatorImageTransformer {
       return null;
     }
 
+  }
+
+  private function applyMemeWithImagemagick(
+    $input,
+    $above,
+    $below,
+    $count,
+    $img_type) {
+
+    $output = new TempFile();
+
+    execx('convert %s -coalesce +adjoin %s_%%09d',
+      $input,
+      $input);
+
+    for ($ii = 0; $ii < $count; $ii++) {
+      $frame_name = sprintf('%s_%09d', $input, $ii);
+      $output_name = sprintf('%s_%09d', $output, $ii);
+
+      $frame_data = Filesystem::readFile($frame_name);
+      $memed_frame_data = $this->applyMemeTo(
+        $frame_data,
+        $above,
+        $below,
+        $img_type);
+      Filesystem::writeFile($output_name, $memed_frame_data);
+    }
+
+    execx('convert -loop 0 %s_* %s', $output, $output);
+
+    return Filesystem::readFile($output);
   }
 
 }

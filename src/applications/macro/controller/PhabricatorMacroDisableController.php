@@ -10,6 +10,10 @@ final class PhabricatorMacroDisableController
   }
 
   public function processRequest() {
+
+    $this->requireApplicationCapability(
+      PhabricatorMacroCapabilityManage::CAPABILITY);
+
     $request = $this->getRequest();
     $user = $request->getUser();
 
@@ -35,12 +39,7 @@ final class PhabricatorMacroDisableController
 
       $editor = id(new PhabricatorMacroEditor())
         ->setActor($user)
-        ->setContentSource(
-          PhabricatorContentSource::newForSource(
-            PhabricatorContentSource::SOURCE_WEB,
-            array(
-              'ip' => $request->getRemoteAddr(),
-            )));
+        ->setContentSourceFromRequest($request);
 
       $xactions = $editor->applyTransactions($macro, array($xaction));
 

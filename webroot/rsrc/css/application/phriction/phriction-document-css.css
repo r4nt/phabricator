@@ -14,58 +14,37 @@
 }
 
 .phriction-header h1 {
-  margin: .25em 0;
-}
-
-.phriction-content {
-  max-width: 960px;
-  margin: 1em;
-}
-
-.phriction-byline {
-  padding: .25em 0 1em;
-  color: #444444;
-}
-
-.phriction-content .phriction-link {
-  font-weight: bold;
+  margin: 4px 0;
 }
 
 .phriction-breadcrumbs {
   font-size: 12px;
-  color: #666666;
+  color: {$greytext};
 }
 
 .phriction-document-crumbs a {
   font-weight: bold;
 }
 
-.phriction-children {
-  padding: 1em 2em;
-  background: #eeeeee;
-  border-top: 1px solid #dddddd;
-}
-
 .phriction-children ul {
-  margin-left: 2.5em;
+  margin-left: 30px;
+  padding-bottom: 10px;
   list-style: circle;
-  color: #999999;
+  color: {$lightgreytext};
 }
 
 .phriction-children-header {
-  padding: 0 0 .5em 0;
-  margin: 0;
+  background: {$lightgreybackground};
+  padding: 8px 0 8px 16px;
   font-weight: bold;
+  margin-bottom: 15px;
+  border-bottom: 1px solid {$lightblueborder};
+  color: {$bluetext};
+  text-shadow: 0 1px 2px #fff;
 }
 
-.phriction-document-preview-header {
-  color: #666666;
-  margin-bottom: 1em;
-  font-size: 11px;
-}
-
-.phriction-document-history-diff {
-  padding: 0 2em 2em;
+.phriction-document-history-diff .phui-object-item-list-view {
+  padding: 0 16px;
 }
 
 .phriction-revert-table {
@@ -75,18 +54,30 @@
 .phriction-revert-table td {
   text-align: center;
   width: 50%;
-  padding: .5em 0;
+  padding: 8px 0;
+  margin: 0 16px;
+  background-color: {$lightbluebackground};
+  border-top: 1px solid {$lightblueborder};
 }
 
 .phriction-history-nav-table {
   width: 100%;
+  margin-bottom: 20px;
 }
 
 .phriction-history-nav-table td {
   width: 50%;
-  color: #444444;
+  color: {$darkgreytext};
+}
+
+.phriction-history-nav-table td {
+  padding: 8px 16px;
 }
 
 .phriction-history-nav-table td.nav-next {
   text-align: right;
+}
+
+.phui-document-content .phriction-link {
+  font-weight: bold;
 }

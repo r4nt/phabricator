@@ -11,6 +11,25 @@ final class AphrontDialogView extends AphrontView {
   private $class;
   private $renderAsForm = true;
   private $formID;
+  private $headerColor = PhabricatorActionHeaderView::HEADER_LIGHTBLUE;
+  private $footers = array();
+  private $isStandalone;
+  private $method = 'POST';
+
+
+  public function setMethod($method) {
+    $this->method = $method;
+    return $this;
+  }
+
+  public function setIsStandalone($is_standalone) {
+    $this->isStandalone = $is_standalone;
+    return $this;
+  }
+
+  public function getIsStandalone() {
+    return $this->isStandalone;
+  }
 
   private $width      = 'default';
   const WIDTH_DEFAULT = 'default';
@@ -50,6 +69,11 @@ final class AphrontDialogView extends AphrontView {
     return $this;
   }
 
+  public function addFooter($footer) {
+    $this->footers[] = $footer;
+    return $this;
+  }
+
   public function addHiddenInput($key, $value) {
     if (is_array($value)) {
       foreach ($value as $hidden_key => $hidden_value) {
@@ -79,6 +103,11 @@ final class AphrontDialogView extends AphrontView {
 
   public function setWidth($width) {
     $this->width = $width;
+    return $this;
+  }
+
+  public function setHeaderColor($color) {
+    $this->headerColor = $color;
     return $this;
   }
 
@@ -126,6 +155,10 @@ final class AphrontDialogView extends AphrontView {
         throw new Exception("Unknown dialog width '{$this->width}'!");
     }
 
+    if ($this->isStandalone) {
+      $more .= ' aphront-dialog-view-standalone';
+    }
+
     $attributes = array(
       'class'   => 'aphront-dialog-view '.$more,
       'sigil'   => 'jx-dialog',
@@ -133,7 +166,7 @@ final class AphrontDialogView extends AphrontView {
 
     $form_attributes = array(
       'action'  => $this->submitURI,
-      'method'  => 'post',
+      'method'  => $this->method,
       'id'      => $this->formID,
     );
 
@@ -165,14 +198,44 @@ final class AphrontDialogView extends AphrontView {
         array_merge($hidden_inputs, $buttons)));
     }
 
-    $buttons[] = phutil_tag('div', array('style' => 'clear: both;'), '');
     $children = $this->renderChildren();
 
-    $content = hsprintf(
-      '%s%s%s',
-      phutil_tag('div', array('class' => 'aphront-dialog-head'), $this->title),
-      phutil_tag('div', array('class' => 'aphront-dialog-body'), $children),
-      phutil_tag('div', array('class' => 'aphront-dialog-tail'), $buttons));
+    $header = new PhabricatorActionHeaderView();
+    $header->setHeaderTitle($this->title);
+    $header->setHeaderColor($this->headerColor);
+
+    $footer = null;
+    if ($this->footers) {
+      $footer = phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-dialog-foot',
+        ),
+        $this->footers);
+    }
+
+    $content = array(
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-dialog-head',
+        ),
+        $header),
+      phutil_tag('div',
+        array(
+          'class' => 'aphront-dialog-body grouped',
+        ),
+        $children),
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-dialog-tail grouped',
+        ),
+        array(
+          $buttons,
+          $footer,
+        )),
+    );
 
     if ($this->renderAsForm) {
       return phabricator_form(

@@ -16,7 +16,7 @@
 .phabricator-notification-menu-loading {
   text-align: center;
   padding: 10px 0;
-  color: #888888;
+  color: {$lightgreytext};
 }
 
 .device-desktop .phabricator-notification-menu,
@@ -41,8 +41,8 @@
   cursor: pointer;
 }
 
-.device-desktop .phabricator-notification:hover {
-  background: #f4f6f9;
+.device-desktop .phabricator-notification-menu .phabricator-notification:hover {
+  background: #e6ebf5;
 }
 
 .phabricator-notification + .phabricator-notification {
@@ -50,7 +50,7 @@
 }
 
 .no-notifications {
-  color: #999999;
+  color: {$lightgreytext};
 }
 
 .phabricator-notification-list {
@@ -59,7 +59,8 @@
 
 .phabricator-notification-list .phabricator-notification-unread,
 .phabricator-notification-menu .phabricator-notification-unread {
-  background: #aacfef;
+  background: #eceff5;
+  border-color: #e3e8f0;
 }
 
 .phabricator-notification-header {

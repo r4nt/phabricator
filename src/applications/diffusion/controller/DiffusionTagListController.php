@@ -2,10 +2,14 @@
 
 final class DiffusionTagListController extends DiffusionController {
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function processRequest() {
     $drequest = $this->getDiffusionRequest();
     $request = $this->getRequest();
-    $user = $request->getUser();
+    $viewer = $request->getUser();
 
     $repository = $drequest->getRepository();
 
@@ -13,45 +17,47 @@ final class DiffusionTagListController extends DiffusionController {
     $pager->setURI($request->getRequestURI(), 'offset');
     $pager->setOffset($request->getInt('offset'));
 
+    $params = array(
+      'limit' => $pager->getPageSize() + 1,
+      'offset' => $pager->getOffset());
     if ($drequest->getRawCommit()) {
       $is_commit = true;
-
-      $query = DiffusionCommitTagsQuery::newFromDiffusionRequest($drequest);
-      $query->setOffset($pager->getOffset());
-      $query->setLimit($pager->getPageSize() + 1);
-      $tags = $query->loadTags();
+      $params['commit'] = $drequest->getRawCommit();
     } else {
       $is_commit = false;
-
-      $query = DiffusionTagListQuery::newFromDiffusionRequest($drequest);
-      $query->setOffset($pager->getOffset());
-      $query->setLimit($pager->getPageSize() + 1);
-      $tags = $query->loadTags();
     }
 
+    $tags = array();
+    try {
+      $conduit_result = $this->callConduitWithDiffusionRequest(
+        'diffusion.tagsquery',
+        $params);
+      $tags = DiffusionRepositoryTag::newFromConduit($conduit_result);
+    } catch (ConduitException $ex) {
+      if ($ex->getMessage() != 'ERR-UNSUPPORTED-VCS') {
+        throw $ex;
+      }
+    }
     $tags = $pager->sliceResults($tags);
 
     $content = null;
     if (!$tags) {
-      $content = new AphrontErrorView();
-      $content->setTitle('No Tags');
-      if ($is_commit) {
-        $content->appendChild('This commit has no tags.');
-      } else {
-        $content->appendChild('This repository has no tags.');
-      }
-      $content->setSeverity(AphrontErrorView::SEVERITY_NODATA);
+      $content = $this->renderStatusMessage(
+        pht('No Tags'),
+        $is_commit
+          ? pht('This commit has no tags.')
+          : pht('This repository has no tags.'));
     } else {
-      $commits = id(new PhabricatorAuditCommitQuery())
-        ->withIdentifiers(
-          $drequest->getRepository()->getID(),
-          mpull($tags, 'getCommitIdentifier'))
+      $commits = id(new DiffusionCommitQuery())
+        ->setViewer($viewer)
+        ->withRepository($repository)
+        ->withIdentifiers(mpull($tags, 'getCommitIdentifier'))
         ->needCommitData(true)
         ->execute();
 
       $view = id(new DiffusionTagListView())
         ->setTags($tags)
-        ->setUser($user)
+        ->setUser($viewer)
         ->setCommits($commits)
         ->setDiffusionRequest($drequest);
 
@@ -60,25 +66,27 @@ final class DiffusionTagListController extends DiffusionController {
       $view->setHandles($handles);
 
       $panel = id(new AphrontPanelView())
-        ->setHeader('Tags')
+        ->setNoBackground(true)
         ->appendChild($view)
         ->appendChild($pager);
 
       $content = $panel;
     }
 
-    return $this->buildStandardPageResponse(
+    $crumbs = $this->buildCrumbs(
       array(
-        $this->buildCrumbs(
-          array(
-            'tags'    => true,
-            'commit'  => $drequest->getRawCommit(),
-          )),
+        'tags' => true,
+        'commit' => $drequest->getRawCommit(),
+      ));
+
+    return $this->buildApplicationPage(
+      array(
+        $crumbs,
         $content,
       ),
       array(
         'title' => array(
-          'Tags',
+          pht('Tags'),
           $repository->getCallsign().' Repository',
         ),
       ));

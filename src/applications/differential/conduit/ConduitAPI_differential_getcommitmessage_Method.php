@@ -30,17 +30,23 @@ final class ConduitAPI_differential_getcommitmessage_Method
 
   protected function execute(ConduitAPIRequest $request) {
     $id = $request->getValue('revision_id');
+    $viewer = $request->getUser();
 
     if ($id) {
-      $revision = id(new DifferentialRevision())->load($id);
+      $revision = id(new DifferentialRevisionQuery())
+        ->withIDs(array($id))
+        ->setViewer($viewer)
+        ->needRelationships(true)
+        ->needReviewerStatus(true)
+        ->executeOne();
+
       if (!$revision) {
         throw new ConduitException('ERR_NOT_FOUND');
       }
     } else {
-      $revision = new DifferentialRevision();
+      $revision = DifferentialRevision::initializeNewRevision($viewer);
     }
 
-    $revision->loadRelationships();
 
     $is_edit = $request->getValue('edit');
     $is_create = ($is_edit == 'create');
@@ -51,7 +57,7 @@ final class ConduitAPI_differential_getcommitmessage_Method
     $pro_tips = array();
 
     foreach ($aux_fields as $key => $aux_field) {
-      $aux_field->setUser($request->getUser());
+      $aux_field->setUser($viewer);
       $aux_field->setRevision($revision);
       $pro_tips[] = $aux_field->getCommitMessageTips();
       if (!$aux_field->shouldAppearOnCommitMessage()) {
@@ -91,9 +97,10 @@ final class ConduitAPI_differential_getcommitmessage_Method
       $aux_phids[$field_key] = $field->getRequiredHandlePHIDsForCommitMessage();
     }
     $phids = array_unique(array_mergev($aux_phids));
-    $handles = id(new PhabricatorObjectHandleData($phids))
+    $handles = id(new PhabricatorHandleQuery())
       ->setViewer($request->getUser())
-      ->loadHandles();
+      ->withPHIDs($phids)
+      ->execute();
     foreach ($aux_fields as $field_key => $field) {
       $field->setHandles(array_select_keys($handles, $aux_phids[$field_key]));
     }

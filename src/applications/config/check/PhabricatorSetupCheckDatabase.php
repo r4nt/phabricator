@@ -12,19 +12,21 @@ final class PhabricatorSetupCheckDatabase extends PhabricatorSetupCheck {
     $conn_user = $conf->getUser();
     $conn_pass = $conf->getPassword();
     $conn_host = $conf->getHost();
+    $conn_port = $conf->getPort();
 
     ini_set('mysql.connect_timeout', 2);
 
+    $config = array(
+      'user'      => $conn_user,
+      'pass'      => $conn_pass,
+      'host'      => $conn_host,
+      'port'      => $conn_port,
+      'database'  => null,
+    );
+
     $conn_raw = PhabricatorEnv::newObjectFromConfig(
       'mysql.implementation',
-      array(
-        array(
-          'user'      => $conn_user,
-          'pass'      => $conn_pass,
-          'host'      => $conn_host,
-          'database'  => null,
-        ),
-      ));
+      array($config));
 
     try {
       queryfx($conn_raw, 'SELECT 1');
@@ -39,9 +41,10 @@ final class PhabricatorSetupCheckDatabase extends PhabricatorSetupCheck {
         ->setName(pht('Can Not Connect to MySQL'))
         ->setMessage($message)
         ->setIsFatal(true)
-        ->addPhabricatorConfig('mysql.host')
-        ->addPhabricatorConfig('mysql.user')
-        ->addPhabricatorConfig('mysql.pass');
+        ->addRelatedPhabricatorConfig('mysql.host')
+        ->addRelatedPhabricatorConfig('mysql.port')
+        ->addRelatedPhabricatorConfig('mysql.user')
+        ->addRelatedPhabricatorConfig('mysql.pass');
       return;
     }
 
@@ -80,6 +83,60 @@ final class PhabricatorSetupCheckDatabase extends PhabricatorSetupCheck {
         ->setMessage($message)
         ->setIsFatal(true)
         ->addCommand(hsprintf('<tt>phabricator/ $</tt> ./bin/storage upgrade'));
+    } else {
+
+      $config['database'] = $namespace.'_meta_data';
+      $conn_meta = PhabricatorEnv::newObjectFromConfig(
+        'mysql.implementation',
+        array($config));
+
+      $applied = queryfx_all($conn_meta, 'SELECT patch FROM patch_status');
+      $applied = ipull($applied, 'patch', 'patch');
+
+      $all = PhabricatorSQLPatchList::buildAllPatches();
+      $diff = array_diff_key($all, $applied);
+
+      if ($diff) {
+        $this->newIssue('storage.patch')
+          ->setName(pht('Upgrade MySQL Schema'))
+          ->setMessage(pht(
+            "Run the storage upgrade script to upgrade Phabricator's database ".
+              "schema. Missing patches:<br />%s<br />",
+            phutil_implode_html(phutil_tag('br'), array_keys($diff))))
+          ->addCommand(
+            hsprintf('<tt>phabricator/ $</tt> ./bin/storage upgrade'));
+      }
     }
+
+
+    $host = PhabricatorEnv::getEnvConfig('mysql.host');
+    $matches = null;
+    if (preg_match('/^([^:]+):(\d+)$/', $host, $matches)) {
+      $host = $matches[1];
+      $port = $matches[2];
+
+      $this->newIssue('storage.mysql.hostport')
+        ->setName(pht('Deprecated mysql.host Format'))
+        ->setSummary(
+          pht(
+            'Move port information from `mysql.host` to `mysql.port` in your '.
+            'config.'))
+        ->setMessage(
+          pht(
+            'Your `mysql.host` configuration contains a port number, but '.
+            'this usage is deprecated. Instead, put the port number in '.
+            '`mysql.port`.'))
+        ->addPhabricatorConfig('mysql.host')
+        ->addPhabricatorConfig('mysql.port')
+        ->addCommand(
+          hsprintf(
+            '<tt>phabricator/ $</tt> ./bin/config set mysql.host %s',
+            $host))
+        ->addCommand(
+          hsprintf(
+            '<tt>phabricator/ $</tt> ./bin/config set mysql.port %s',
+            $port));
+    }
+
   }
 }

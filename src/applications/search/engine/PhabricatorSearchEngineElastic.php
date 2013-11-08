@@ -25,9 +25,10 @@ final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
 
     $type = $doc->getDocumentType();
     $phid = $doc->getPHID();
-    $handle = PhabricatorObjectHandleData::loadOneHandle(
-      $phid,
-      PhabricatorUser::getOmnipotentUser());
+    $handle = id(new PhabricatorHandleQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($phid))
+      ->executeOne();
 
     // URL is not used internally but it can be useful externally.
     $spec = array(
@@ -97,7 +98,7 @@ final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
     $spec = array();
     $filter = array();
 
-    if ($query->getQuery()) {
+    if ($query->getQuery() != '') {
       $spec[] = array(
         'field' => array(
           'field.corpus' => $query->getQuery(),
@@ -156,15 +157,14 @@ final class PhabricatorSearchEngineElastic extends PhabricatorSearchEngine {
 
     if ($filter) {
       $filter = array('filter' => array('and' => $filter));
-      if ($spec) {
-        $spec = array(
-          'query' => array(
-            'filtered' => $spec + $filter,
-          ),
-        );
-      } else {
-        $spec = $filter;
+      if (!$spec) {
+        $spec = array('query' => array('match_all' => new stdClass()));
       }
+      $spec = array(
+        'query' => array(
+          'filtered' => $spec + $filter,
+        ),
+      );
     }
 
     if (!$query->getQuery()) {

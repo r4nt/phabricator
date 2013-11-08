@@ -3,6 +3,10 @@
 final class ReleephReasonFieldSpecification
   extends ReleephFieldSpecification {
 
+  public function getFieldKey() {
+    return 'reason';
+  }
+
   public function getName() {
     return 'Reason';
   }
@@ -16,19 +20,12 @@ final class ReleephReasonFieldSpecification
   }
 
   public function renderValueForHeaderView() {
-    $reason = $this->getValue();
-    if (!$reason) {
-      return '';
-    }
-
-    $engine = PhabricatorMarkupEngine::newDifferentialMarkupEngine();
-    $engine->setConfig('viewer', $this->getUser());
     $markup = phutil_tag(
       'div',
       array(
         'class' => 'phabricator-remarkup',
       ),
-      $engine->markupText($reason));
+      $this->getMarkupEngineOutput());
 
     return id(new AphrontNoteView())
       ->setTitle('Reason')
@@ -38,13 +35,12 @@ final class ReleephReasonFieldSpecification
 
   private $error = true;
 
-  public function renderEditControl(AphrontRequest $request) {
-    $reason = $request->getStr('reason', $this->getValue());
+  public function renderEditControl() {
     return id(new AphrontFormTextAreaControl())
       ->setLabel('Reason')
       ->setName('reason')
       ->setError($this->error)
-      ->setValue($reason);
+      ->setValue($this->getValue());
   }
 
   public function validate($reason) {
@@ -73,6 +69,19 @@ final class ReleephReasonFieldSpecification
 
   public function renderValueForCommitMessage() {
     return $this->getValue();
+  }
+
+  public function shouldMarkup() {
+    return true;
+  }
+
+  public function getMarkupText($field) {
+    $reason = $this->getValue();
+    if ($reason) {
+      return $reason;
+    } else {
+      return '';
+    }
   }
 
 }

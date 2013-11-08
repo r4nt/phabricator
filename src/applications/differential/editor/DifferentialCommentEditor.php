@@ -99,7 +99,18 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
   }
 
   public function save() {
-    $actor              = $this->requireActor();
+    $actor = $this->requireActor();
+
+    // Reload the revision to pick up reviewer status, until we can lift this
+    // out of here.
+    $this->revision = id(new DifferentialRevisionQuery())
+      ->setViewer($actor)
+      ->withIDs(array($this->revision->getID()))
+      ->needRelationships(true)
+      ->needReviewerStatus(true)
+      ->needReviewerAuthority(true)
+      ->executeOne();
+
     $revision           = $this->revision;
     $action             = $this->action;
     $actor_phid         = $actor->getPHID();
@@ -111,8 +122,8 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
     $allow_reopen = PhabricatorEnv::getEnvConfig(
       'differential.allow-reopen');
     $revision_status    = $revision->getStatus();
+    $update_accepted_status = false;
 
-    $revision->loadRelationships();
     $reviewer_phids = $revision->getReviewers();
     if ($reviewer_phids) {
       $reviewer_phids = array_fuse($reviewer_phids);
@@ -122,10 +133,9 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
 
     $inline_comments = array();
     if ($this->attachInlineComments) {
-      $inline_comments = id(new DifferentialInlineComment())->loadAllWhere(
-        'authorPHID = %s AND revisionID = %d AND commentID IS NULL',
-        $actor_phid,
-        $revision->getID());
+      $inline_comments = id(new DifferentialInlineCommentQuery())
+        ->withDraftComments($actor_phid, $revision->getID())
+        ->execute();
     } elseif ($this->attachSpecificInlineComments) {
       $inline_comments = $this->attachSpecificInlineComments;
     }
@@ -137,6 +147,27 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
             "You are submitting an empty comment with no action: ".
             "you must act on the revision or post a comment.");
         }
+
+        // If the actor is a reviewer, and their status is "added" (that is,
+        // they haven't accepted or requested changes to the revision),
+        // upgrade their status to "commented". If they have a stronger status
+        // already, don't overwrite it.
+        if (isset($reviewer_phids[$actor_phid])) {
+          $status_added = DifferentialReviewerStatus::STATUS_ADDED;
+          $reviewer_status = $revision->getReviewerStatus();
+          foreach ($reviewer_status as $reviewer) {
+            if ($reviewer->getReviewerPHID() == $actor_phid) {
+              if ($reviewer->getStatus() == $status_added) {
+                DifferentialRevisionEditor::updateReviewerStatus(
+                  $revision,
+                  $actor,
+                  $actor_phid,
+                  DifferentialReviewerStatus::STATUS_COMMENTED);
+              }
+            }
+          }
+        }
+
         break;
 
       case DifferentialAction::ACTION_RESIGN:
@@ -148,12 +179,29 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
             "You can not resign from this revision because you are not ".
             "a reviewer.");
         }
-        DifferentialRevisionEditor::alterReviewers(
+
+        list($added_reviewers, $ignored) = $this->alterReviewers();
+        if ($added_reviewers) {
+          $key = DifferentialComment::METADATA_ADDED_REVIEWERS;
+          $metadata[$key] = $added_reviewers;
+        }
+
+        DifferentialRevisionEditor::updateReviewers(
           $revision,
-          $reviewer_phids,
-          $rem = array($actor_phid),
-          $add = array(),
-          $actor_phid);
+          $actor,
+          array(),
+          array($actor_phid));
+
+        // If you are a blocking reviewer, your presence as a reviewer may be
+        // the only thing keeping a revision from transitioning to "accepted".
+        // Recalculate state after removing the resigning reviewer.
+        switch ($revision_status) {
+          case ArcanistDifferentialRevisionStatus::NEEDS_REVISION:
+          case ArcanistDifferentialRevisionStatus::NEEDS_REVIEW:
+            $update_accepted_status = true;
+            break;
+        }
+
         break;
 
       case DifferentialAction::ACTION_ABANDON:
@@ -180,41 +228,49 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
         if ($actor_is_author && !$allow_self_accept) {
           throw new Exception('You can not accept your own revision.');
         }
-        if (($revision_status !=
-             ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) &&
-            ($revision_status !=
-             ArcanistDifferentialRevisionStatus::NEEDS_REVISION)) {
 
-          switch ($revision_status) {
-            case ArcanistDifferentialRevisionStatus::ACCEPTED:
-              throw new DifferentialActionHasNoEffectException(
-                "You can not accept this revision because someone else ".
-                "already accepted it.");
-            case ArcanistDifferentialRevisionStatus::ABANDONED:
-              throw new DifferentialActionHasNoEffectException(
-                "You can not accept this revision because it has been ".
-                "abandoned.");
-            case ArcanistDifferentialRevisionStatus::CLOSED:
-              throw new DifferentialActionHasNoEffectException(
-                "You can not accept this revision because it has already ".
-                "been closed.");
-            default:
-              throw new Exception(
-                "Unexpected revision state '{$revision_status}'!");
+        switch ($revision_status) {
+          case ArcanistDifferentialRevisionStatus::ABANDONED:
+            throw new DifferentialActionHasNoEffectException(
+              "You can not accept this revision because it has been ".
+              "abandoned.");
+          case ArcanistDifferentialRevisionStatus::CLOSED:
+            throw new DifferentialActionHasNoEffectException(
+              "You can not accept this revision because it has already ".
+              "been closed.");
+          case ArcanistDifferentialRevisionStatus::NEEDS_REVIEW:
+          case ArcanistDifferentialRevisionStatus::NEEDS_REVISION:
+          case ArcanistDifferentialRevisionStatus::ACCEPTED:
+            // We expect "Accept" from these states.
+            break;
+          default:
+            throw new Exception(
+              "Unexpected revision state '{$revision_status}'!");
+        }
+
+        $was_reviewer_already = false;
+        foreach ($revision->getReviewerStatus() as $reviewer) {
+          if ($reviewer->hasAuthority($actor)) {
+            DifferentialRevisionEditor::updateReviewerStatus(
+              $revision,
+              $actor,
+              $reviewer->getReviewerPHID(),
+              DifferentialReviewerStatus::STATUS_ACCEPTED);
+            if ($reviewer->getReviewerPHID() == $actor_phid) {
+              $was_reviewer_already = true;
+            }
           }
         }
 
-        $revision
-          ->setStatus(ArcanistDifferentialRevisionStatus::ACCEPTED);
-
-        if (!isset($reviewer_phids[$actor_phid])) {
-          DifferentialRevisionEditor::alterReviewers(
+        if (!$was_reviewer_already) {
+          DifferentialRevisionEditor::updateReviewerStatus(
             $revision,
-            $reviewer_phids,
-            $rem = array(),
-            $add = array($actor_phid),
-            $actor_phid);
+            $actor,
+            $actor_phid,
+            DifferentialReviewerStatus::STATUS_ACCEPTED);
         }
+
+        $update_accepted_status = true;
         break;
 
       case DifferentialAction::ACTION_REQUEST:
@@ -263,9 +319,7 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
           case ArcanistDifferentialRevisionStatus::ACCEPTED:
           case ArcanistDifferentialRevisionStatus::NEEDS_REVISION:
           case ArcanistDifferentialRevisionStatus::NEEDS_REVIEW:
-            // NOTE: We allow you to reject an already-rejected revision
-            // because it doesn't create any ambiguity and avoids a rather
-            // needless dialog.
+            // We expect rejects from these states.
             break;
           case ArcanistDifferentialRevisionStatus::ABANDONED:
             throw new DifferentialActionHasNoEffectException(
@@ -280,14 +334,11 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
               "Unexpected revision state '{$revision_status}'!");
         }
 
-        if (!isset($reviewer_phids[$actor_phid])) {
-          DifferentialRevisionEditor::alterReviewers(
-            $revision,
-            $reviewer_phids,
-            $rem = array(),
-            $add = array($actor_phid),
-            $actor_phid);
-        }
+        DifferentialRevisionEditor::updateReviewerStatus(
+          $revision,
+          $actor,
+          $actor_phid,
+          DifferentialReviewerStatus::STATUS_REJECTED);
 
         $revision
           ->setStatus(ArcanistDifferentialRevisionStatus::NEEDS_REVISION);
@@ -303,6 +354,7 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
           case ArcanistDifferentialRevisionStatus::ACCEPTED:
           case ArcanistDifferentialRevisionStatus::NEEDS_REVISION:
           case ArcanistDifferentialRevisionStatus::NEEDS_REVIEW:
+            // We expect accepts from these states.
             break;
           case ArcanistDifferentialRevisionStatus::ABANDONED:
             throw new DifferentialActionHasNoEffectException(
@@ -334,6 +386,8 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
 
         $revision
           ->setStatus(ArcanistDifferentialRevisionStatus::NEEDS_REVIEW);
+
+        $update_accepted_status = true;
         break;
 
       case DifferentialAction::ACTION_CLOSE:
@@ -493,6 +547,12 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
     // top of the action list.
     $revision->save();
 
+    if ($update_accepted_status) {
+      $revision = DifferentialRevisionEditor::updateAcceptedStatus(
+        $actor,
+        $revision);
+    }
+
     if ($action != DifferentialAction::ACTION_RESIGN) {
       DifferentialRevisionEditor::addCC(
         $revision,
@@ -500,9 +560,21 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
         $actor_phid);
     }
 
+    $is_new = !$revision->getID();
+
+    $event = new PhabricatorEvent(
+      PhabricatorEventType::TYPE_DIFFERENTIAL_WILLEDITREVISION,
+        array(
+          'revision'      => $revision,
+          'new'           => $is_new,
+        ));
+
+    $event->setUser($actor);
+    PhutilEventEngine::dispatchEvent($event);
+
     $comment = id(new DifferentialComment())
       ->setAuthorPHID($actor_phid)
-      ->setRevisionID($revision->getID())
+      ->setRevision($revision)
       ->setAction($action)
       ->setContent((string)$this->message)
       ->setMetadata($metadata);
@@ -554,15 +626,25 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
 
         $comment->setMetadata($metadata);
         $comment->save();
+
+        $event = new PhabricatorEvent(
+          PhabricatorEventType::TYPE_DIFFERENTIAL_DIDEDITREVISION,
+            array(
+              'revision'      => $revision,
+              'new'           => $is_new,
+            ));
+        $event->setUser($actor);
+        PhutilEventEngine::dispatchEvent($event);
       }
     }
 
     $revision->saveTransaction();
 
     $phids = array($actor_phid);
-    $handles = id(new PhabricatorObjectHandleData($phids))
-      ->setViewer($this->getActor())
-      ->loadHandles();
+    $handles = id(new PhabricatorHandleQuery())
+      ->setViewer($actor)
+      ->withPHIDs($phids)
+      ->execute();
     $actor_handle = $handles[$actor_phid];
 
     $xherald_header = HeraldTranscript::loadXHeraldRulesHeader(
@@ -576,7 +658,7 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
         $comment,
         $changesets,
         $inline_comments))
-        ->setActor($this->getActor())
+        ->setActor($actor)
         ->setExcludeMailRecipientPHIDs($this->getExcludeMailRecipientPHIDs())
         ->setToPHIDs(
           array_merge(
@@ -599,11 +681,11 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
       'action'               => $comment->getAction(),
       'feedback_content'     => $comment->getContent(),
       'actor_phid'           => $actor_phid,
-    );
 
-    // TODO: Get rid of this
-    id(new PhabricatorTimelineEvent('difx', $event_data))
-      ->recordEvent();
+      // NOTE: Don't use this, it will be removed after ApplicationTransactions.
+      // For now, it powers inline comment rendering over the Asana brdige.
+      'temporaryCommentID'   => $comment->getID(),
+    );
 
     id(new PhabricatorFeedStoryPublisher())
       ->setStoryType('PhabricatorFeedStoryDifferential')
@@ -684,12 +766,11 @@ final class DifferentialCommentEditor extends PhabricatorEditor {
     $removed_reviewers = array_unique($removed_reviewers);
 
     if ($added_reviewers) {
-      DifferentialRevisionEditor::alterReviewers(
+      DifferentialRevisionEditor::updateReviewers(
         $revision,
-        $reviewer_phids,
-        $removed_reviewers,
+        $this->getActor(),
         $added_reviewers,
-        $actor_phid);
+        $removed_reviewers);
     }
 
     return array($added_reviewers, $removed_reviewers);

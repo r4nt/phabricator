@@ -1,111 +1,51 @@
 <?php
 
-final class DiffusionBrowseController extends DiffusionController {
+abstract class DiffusionBrowseController extends DiffusionController {
 
-  public function processRequest() {
-    $drequest = $this->diffusionRequest;
-
-    if ($this->getRequest()->getStr('before')) {
-      $results = array();
-      $is_file = true;
-    } else {
-      $browse_query = DiffusionBrowseQuery::newFromDiffusionRequest($drequest);
-      $browse_query->setViewer($this->getRequest()->getUser());
-      $results = $browse_query->loadPaths();
-      $reason = $browse_query->getReasonForEmptyResultSet();
-      $is_file = ($reason == DiffusionBrowseQuery::REASON_IS_FILE);
-    }
-
-    $content = array();
-
-    if ($drequest->getTagContent()) {
-      $title = 'Tag: '.$drequest->getSymbolicCommit();
-
-      $tag_view = new AphrontPanelView();
-      $tag_view->setHeader($title);
-      $tag_view->appendChild(
-        $this->markupText($drequest->getTagContent()));
-
-      $content[] = $tag_view;
-    }
-
-    if (!$results) {
-
-      if ($is_file) {
-        $controller = new DiffusionBrowseFileController($this->getRequest());
-        $controller->setDiffusionRequest($drequest);
-        $controller->setCurrentApplication($this->getCurrentApplication());
-        return $this->delegateToController($controller);
-      }
-
-      $empty_result = new DiffusionEmptyResultView();
-      $empty_result->setDiffusionRequest($drequest);
-      $empty_result->setBrowseQuery($browse_query);
-      $empty_result->setView($this->getRequest()->getStr('view'));
-      $content[] = $empty_result;
-
-    } else {
-
-      $phids = array();
-      foreach ($results as $result) {
-        $data = $result->getLastCommitData();
-        if ($data) {
-          if ($data->getCommitDetail('authorPHID')) {
-            $phids[$data->getCommitDetail('authorPHID')] = true;
-          }
-        }
-      }
-
-      $phids = array_keys($phids);
-      $handles = $this->loadViewerHandles($phids);
-
-      $browse_table = new DiffusionBrowseTableView();
-      $browse_table->setDiffusionRequest($drequest);
-      $browse_table->setHandles($handles);
-      $browse_table->setPaths($results);
-      $browse_table->setUser($this->getRequest()->getUser());
-
-      $browse_panel = new AphrontPanelView();
-      $browse_panel->appendChild($browse_table);
-      $browse_panel->setNoBackground();
-
-      $content[] = $browse_panel;
-    }
-
-    $content[] = $this->buildOpenRevisions();
-
-    $readme_content = $browse_query->renderReadme($results);
-    if ($readme_content) {
-      $readme_panel = new AphrontPanelView();
-      $readme_panel->setHeader('README');
-      $readme_panel->appendChild($readme_content);
-
-      $content[] = $readme_panel;
-    }
-
-
-    $nav = $this->buildSideNav('browse', false);
-    $nav->appendChild($content);
-
-    $crumbs = $this->buildCrumbs(
-      array(
-        'branch' => true,
-        'path'   => true,
-        'view'   => 'browse',
-      ));
-    $nav->setCrumbs($crumbs);
-
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => array(
-          nonempty(basename($drequest->getPath()), '/'),
-          $drequest->getRepository()->getCallsign().' Repository',
-        ),
-      ));
+  public function shouldAllowPublic() {
+    return true;
   }
 
-  private function markupText($text) {
+  protected function renderSearchForm($collapsed) {
+    $drequest = $this->getDiffusionRequest();
+    $form = id(new AphrontFormView())
+      ->setUser($this->getRequest()->getUser())
+      ->setMethod('GET');
+
+    switch ($drequest->getRepository()->getVersionControlSystem()) {
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+        $form->appendChild(pht('Search is not available in Subversion.'));
+        break;
+
+      default:
+        $form
+          ->appendChild(
+            id(new AphrontFormTextControl())
+              ->setLabel(pht('Search Here'))
+              ->setName('grep')
+              ->setValue($this->getRequest()->getStr('grep'))
+              ->setCaption(pht('Enter a regular expression.')))
+          ->appendChild(
+            id(new AphrontFormSubmitControl())
+              ->setValue(pht('Search File Content')));
+        break;
+    }
+
+    $filter = new AphrontListFilterView();
+    $filter->appendChild($form);
+
+    if ($collapsed) {
+      $filter->setCollapsed(
+        pht('Show Search'),
+        pht('Hide Search'),
+        pht('Search for file content in this directory.'),
+        '#');
+    }
+
+    return $filter;
+  }
+
+  protected function markupText($text) {
     $engine = PhabricatorMarkupEngine::newDiffusionMarkupEngine();
     $engine->setConfig('viewer', $this->getRequest()->getUser());
     $text = $engine->markupText($text);
@@ -118,6 +58,158 @@ final class DiffusionBrowseController extends DiffusionController {
       $text);
 
     return $text;
+  }
+
+  protected function buildHeaderView(DiffusionRequest $drequest) {
+    $viewer = $this->getRequest()->getUser();
+
+    $header = id(new PHUIHeaderView())
+      ->setUser($viewer)
+      ->setHeader($this->renderPathLinks($drequest, $mode = 'browse'))
+      ->setPolicyObject($drequest->getRepository());
+
+    return $header;
+  }
+
+  protected function buildActionView(DiffusionRequest $drequest) {
+    $viewer = $this->getRequest()->getUser();
+
+    $view = id(new PhabricatorActionListView())
+      ->setUser($viewer);
+
+    $history_uri = $drequest->generateURI(
+      array(
+        'action' => 'history',
+      ));
+
+    $view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('View History'))
+        ->setHref($history_uri)
+        ->setIcon('history'));
+
+    $behind_head = $drequest->getRawCommit();
+    $head_uri = $drequest->generateURI(
+      array(
+        'commit' => '',
+        'action' => 'browse',
+      ));
+    $view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Jump to HEAD'))
+        ->setHref($head_uri)
+        ->setIcon('home')
+        ->setDisabled(!$behind_head));
+
+    // TODO: Ideally, this should live in Owners and be event-triggered, but
+    // there's no reasonable object for it to react to right now.
+
+    $owners_uri = id(new PhutilURI('/owners/view/search/'))
+      ->setQueryParams(
+        array(
+          'repository' => $drequest->getCallsign(),
+          'path' => '/'.$drequest->getPath(),
+        ));
+
+    $view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Find Owners'))
+        ->setHref((string)$owners_uri)
+        ->setIcon('preview'));
+
+    return $view;
+  }
+
+  protected function buildPropertyView(
+    DiffusionRequest $drequest,
+    PhabricatorActionListView $actions) {
+
+    $viewer = $this->getRequest()->getUser();
+
+    $view = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setActionList($actions);
+
+    $stable_commit = $drequest->getStableCommitName();
+    $callsign = $drequest->getRepository()->getCallsign();
+
+    $view->addProperty(
+      pht('Commit'),
+      phutil_tag(
+        'a',
+        array(
+          'href' => $drequest->generateURI(
+            array(
+              'action' => 'commit',
+              'commit' => $stable_commit,
+            )),
+        ),
+        $drequest->getRepository()->formatCommitName($stable_commit)));
+
+    if ($drequest->getCommitType() == 'tag') {
+      $symbolic = $drequest->getSymbolicCommit();
+      $view->addProperty(pht('Tag'), $symbolic);
+
+      $tags = $this->callConduitWithDiffusionRequest(
+        'diffusion.tagsquery',
+        array(
+          'names' => array($symbolic),
+          'needMessages' => true,
+        ));
+      $tags = DiffusionRepositoryTag::newFromConduit($tags);
+
+      $tags = mpull($tags, null, 'getName');
+      $tag = idx($tags, $symbolic);
+
+      if ($tag && strlen($tag->getMessage())) {
+        $view->addSectionHeader(pht('Tag Content'));
+        $view->addTextContent($this->markupText($tag->getMessage()));
+      }
+    }
+
+    return $view;
+  }
+
+  protected function buildOpenRevisions() {
+    $user = $this->getRequest()->getUser();
+
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
+    $path = $drequest->getPath();
+
+    $path_map = id(new DiffusionPathIDQuery(array($path)))->loadPathIDs();
+    $path_id = idx($path_map, $path);
+    if (!$path_id) {
+      return null;
+    }
+
+    $revisions = id(new DifferentialRevisionQuery())
+      ->setViewer($user)
+      ->withPath($repository->getID(), $path_id)
+      ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
+      ->setOrder(DifferentialRevisionQuery::ORDER_PATH_MODIFIED)
+      ->setLimit(10)
+      ->needRelationships(true)
+      ->execute();
+
+    if (!$revisions) {
+      return null;
+    }
+
+    $view = id(new DifferentialRevisionListView())
+      ->setRevisions($revisions)
+      ->setFields(DifferentialRevisionListView::getDefaultFields($user))
+      ->setUser($user)
+      ->loadAssets();
+
+    $phids = $view->getRequiredHandlePHIDs();
+    $handles = $this->loadViewerHandles($phids);
+    $view->setHandles($handles);
+
+    return id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Pending Differential Revisions'))
+      ->appendChild($view);
+
   }
 
 }

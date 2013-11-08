@@ -3,6 +3,15 @@
 final class ReleephCommitFinder {
 
   private $releephProject;
+  private $user;
+
+  public function setUser(PhabricatorUser $user) {
+    $this->user = $user;
+    return $this;
+  }
+  public function getUser() {
+    return $this->user;
+  }
 
   public function setReleephProject(ReleephProject $rp) {
     $this->releephProject = $rp;
@@ -14,6 +23,7 @@ final class ReleephCommitFinder {
     $matches = array();
     if (preg_match('/^D([1-9]\d*)$/', $partial_string, $matches)) {
       $diff_id = $matches[1];
+      // TOOD: (T603) This is all slated for annihilation.
       $diff_rev = id(new DifferentialRevision())->load($diff_id);
       if (!$diff_rev) {
         throw new ReleephCommitFinderException(
@@ -55,6 +65,7 @@ final class ReleephCommitFinder {
     }
 
     try {
+      $dr_data['user'] = $this->getUser();
       $dr = DiffusionRequest::newFromDictionary($dr_data);
     } catch (Exception $ex) {
       $message = "No commit matches {$partial_string}: ".$ex->getMessage();

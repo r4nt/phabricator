@@ -8,7 +8,7 @@
  *
  * @task event
  */
-final class ConpherenceHovercardEventListener extends PhutilEventListener {
+final class ConpherenceHovercardEventListener extends PhabricatorEventListener {
 
   public function register() {
     $this->listen(PhabricatorEventType::TYPE_UI_DIDRENDERHOVERCARD);
@@ -32,7 +32,7 @@ final class ConpherenceHovercardEventListener extends PhutilEventListener {
 
     $conpherence_uri = new PhutilURI(
       '/conpherence/new/?participant='.$user->getPHID());
-    $name = pht('Start a Conpherence');
+    $name = pht('Send a Message');
     $hovercard->addAction($name, $conpherence_uri, true);
 
     $event->setValue('hovercard', $hovercard);

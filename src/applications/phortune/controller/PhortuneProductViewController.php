@@ -1,6 +1,6 @@
 <?php
 
-final class PhortuneProductViewController extends PhabricatorController {
+final class PhortuneProductViewController extends PhortuneController {
 
   private $productID;
 
@@ -23,7 +23,33 @@ final class PhortuneProductViewController extends PhabricatorController {
 
     $title = pht('Product: %s', $product->getProductName());
 
+    $header = id(new PHUIHeaderView())
+      ->setHeader($product->getProductName());
+
+    $account = $this->loadActiveAccount($user);
+
+    $edit_uri = $this->getApplicationURI('product/edit/'.$product->getID().'/');
+    $cart_uri = $this->getApplicationURI(
+      $account->getID().'/buy/'.$product->getID().'/');
+
+    $actions = id(new PhabricatorActionListView())
+      ->setUser($user)
+      ->setObjectURI($request->getRequestURI())
+      ->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('Edit Product'))
+          ->setHref($edit_uri)
+          ->setIcon('edit'))
+      ->addAction(
+        id(new PhabricatorActionView())
+          ->setUser($user)
+          ->setName(pht('Purchase'))
+          ->setHref($cart_uri)
+          ->setIcon('new')
+          ->setRenderAsForm(true));
+
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setActionList($actions);
     $crumbs->addCrumb(
       id(new PhabricatorCrumbView())
         ->setName(pht('Products'))
@@ -33,25 +59,14 @@ final class PhortuneProductViewController extends PhabricatorController {
         ->setName(pht('#%d', $product->getID()))
         ->setHref($request->getRequestURI()));
 
-    $header = id(new PhabricatorHeaderView())
-      ->setHeader($product->getProductName());
-
-    $edit_uri = $this->getApplicationURI('product/edit/'.$product->getID().'/');
-
-    $actions = id(new PhabricatorActionListView())
+    $properties = id(new PHUIPropertyListView())
       ->setUser($user)
-      ->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Edit Product'))
-          ->setHref($edit_uri)
-          ->setIcon('edit'));
-
-    $properties = id(new PhabricatorPropertyListView())
-      ->setUser($user)
+      ->setActionList($actions)
       ->addProperty(pht('Type'), $product->getTypeName())
       ->addProperty(
         pht('Price'),
-        PhortuneUtil::formatCurrency($product->getPriceInCents()));
+        PhortuneCurrency::newFromUSDCents($product->getPriceInCents())
+          ->formatForDisplay());
 
     $xactions = id(new PhortuneProductTransactionQuery())
       ->setViewer($user)
@@ -63,21 +78,23 @@ final class PhortuneProductViewController extends PhabricatorController {
 
     $xaction_view = id(new PhabricatorApplicationTransactionView())
       ->setUser($user)
+      ->setObjectPHID($product->getPHID())
       ->setTransactions($xactions)
       ->setMarkupEngine($engine);
+
+    $object_box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addPropertyList($properties);
 
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $header,
-        $actions,
-        $properties,
+        $object_box,
         $xaction_view,
       ),
       array(
         'title' => $title,
         'device' => true,
-        'dust' => true,
       ));
   }
 

@@ -4,7 +4,10 @@
  * @group phame
  */
 final class PhamePost extends PhameDAO
-  implements PhabricatorPolicyInterface, PhabricatorMarkupInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorMarkupInterface,
+    PhabricatorTokenReceiverInterface {
 
   const MARKUP_FIELD_BODY    = 'markup:body';
   const MARKUP_FIELD_SUMMARY = 'markup:summary';
@@ -12,8 +15,6 @@ final class PhamePost extends PhameDAO
   const VISIBILITY_DRAFT     = 0;
   const VISIBILITY_PUBLISHED = 1;
 
-  protected $id;
-  protected $phid;
   protected $bloggerPHID;
   protected $title;
   protected $phameTitle;
@@ -78,7 +79,7 @@ final class PhamePost extends PhameDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorPHIDConstants::PHID_TYPE_POST);
+      PhabricatorPhamePHIDTypePost::TYPECONST);
   }
 
   public static function getVisibilityOptionsForSelect() {
@@ -93,7 +94,7 @@ final class PhamePost extends PhameDAO
     $options = array();
 
     if ($current == 'facebook' ||
-        PhabricatorEnv::getEnvConfig('facebook.application-id')) {
+        PhabricatorAuthProviderOAuthFacebook::getFacebookApplicationID()) {
       $options['facebook'] = 'Facebook';
     }
     if ($current == 'disqus' ||
@@ -147,6 +148,12 @@ final class PhamePost extends PhameDAO
   }
 
 
+  public function describeAutomaticCapability($capability) {
+    return pht(
+      'The author of a blog post can always view and edit it.');
+  }
+
+
 /* -(  PhabricatorMarkupInterface Implementation  )-------------------------- */
 
 
@@ -180,6 +187,14 @@ final class PhamePost extends PhameDAO
 
   public function shouldUseMarkupCache($field) {
     return (bool)$this->getPHID();
+  }
+
+/* -(  PhabricatorTokenReceiverInterface  )---------------------------------- */
+
+  public function getUsersToNotifyOfTokenGiven() {
+    return array(
+      $this->getBloggerPHID(),
+    );
   }
 
 }

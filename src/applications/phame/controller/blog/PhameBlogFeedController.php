@@ -33,10 +33,17 @@ final class PhameBlogFeedController extends PhameController {
       ->withVisibility(PhamePost::VISIBILITY_PUBLISHED)
       ->execute();
 
+    $blog_uri = PhabricatorEnv::getProductionURI(
+      $this->getApplicationURI('blog/feed/'.$blog->getID().'/'));
     $content = array();
     $content[] = phutil_tag('title', array(), $blog->getName());
-    $content[] = phutil_tag('id', array(), PhabricatorEnv::getProductionURI(
-      '/phame/blog/view/'.$blog->getID().'/'));
+    $content[] = phutil_tag('id', array(), $blog_uri);
+    $content[] = phutil_tag('link',
+      array(
+        'rel' => 'self',
+        'type' => 'application/atom+xml',
+        'href' => $blog_uri
+      ));
 
     $updated = $blog->getDateModified();
     if ($posts) {
@@ -55,10 +62,11 @@ final class PhameBlogFeedController extends PhameController {
     }
     $engine->process();
 
-    $bloggers = mpull($posts, 'getBloggerPHID');
-    $bloggers = id(new PhabricatorObjectHandleData($bloggers))
+    $blogger_phids = mpull($posts, 'getBloggerPHID');
+    $bloggers = id(new PhabricatorHandleQuery())
       ->setViewer($user)
-      ->loadHandles();
+      ->withPHIDs($blogger_phids)
+      ->execute();
 
     foreach ($posts as $post) {
       $content[] = hsprintf('<entry>');

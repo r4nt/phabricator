@@ -20,14 +20,23 @@ final class ManiphestTaskProjectsView extends ManiphestView {
     $show = array_slice($this->handles, 0, 2);
 
     $tags = array();
-    foreach ($show as $handle) {
+    if ($show) {
+      foreach ($show as $handle) {
+        $tags[] = phutil_tag(
+          'a',
+          array(
+            'href'  => $handle->getURI(),
+            'class' => 'phabricator-project-tag',
+          ),
+          phutil_utf8_shorten($handle->getName(), 24));
+      }
+    } else {
       $tags[] = phutil_tag(
-        'a',
+        'span',
         array(
-          'href'  => $handle->getURI(),
-          'class' => 'phabricator-project-tag',
+          'class' => 'phabricator-project-tag phabricator-project-tag-grey',
         ),
-        phutil_utf8_shorten($handle->getName(), 24));
+        pht('No Project'));
     }
 
     if (count($this->handles) > 2) {

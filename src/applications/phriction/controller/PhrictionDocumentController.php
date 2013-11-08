@@ -25,42 +25,43 @@ final class PhrictionDocumentController
 
     require_celerity_resource('phriction-document-css');
 
-    $document = id(new PhrictionDocument())->loadOneWhere(
-      'slug = %s',
-      $slug);
+    $document = id(new PhrictionDocumentQuery())
+      ->setViewer($user)
+      ->withSlugs(array($slug))
+      ->executeOne();
 
     $version_note = null;
+    $core_content = '';
+    $move_notice = '';
+    $properties = null;
 
     if (!$document) {
 
       $document = new PhrictionDocument();
 
       if (PhrictionDocument::isProjectSlug($slug)) {
-        $project = id(new PhabricatorProject())->loadOneWhere(
-          'phrictionSlug = %s',
-          PhrictionDocument::getProjectSlugIdentifier($slug));
+        $project = id(new PhabricatorProjectQuery())
+          ->setViewer($user)
+          ->withPhrictionSlugs(array(
+            PhrictionDocument::getProjectSlugIdentifier($slug)))
+          ->executeOne();
         if (!$project) {
           return new Aphront404Response();
         }
       }
       $create_uri = '/phriction/edit/?slug='.$slug;
 
-      $no_content_head = pht('No content here!');
-      $no_content_body = pht(
-        'No document found at %s. You can <strong>'.
-        '<a href="%s">create a new document here</a></strong>.',
-        phutil_tag('tt', array(), $slug),
-        $create_uri);
+      $notice = new AphrontErrorView();
+      $notice->setSeverity(AphrontErrorView::SEVERITY_NODATA);
+      $notice->setTitle(pht('No content here!'));
+      $notice->appendChild(
+        pht(
+          'No document found at %s. You can <strong>'.
+            '<a href="%s">create a new document here</a></strong>.',
+          phutil_tag('tt', array(), $slug),
+          $create_uri));
+      $core_content = $notice;
 
-      $no_content_text = hsprintf(
-        '<em>%s</em><br />%s',
-        $no_content_head,
-        $no_content_body);
-
-      $page_content = phutil_tag(
-        'div',
-        array('class' => 'phriction-content'),
-        $no_content_text);
       $page_title = pht('Page Not Found');
     } else {
       $version = $request->getInt('v');
@@ -87,75 +88,8 @@ final class PhrictionDocumentController
       }
       $page_title = $content->getTitle();
 
-      $project_phid = null;
-      if (PhrictionDocument::isProjectSlug($slug)) {
-        $project = id(new PhabricatorProject())->loadOneWhere(
-          'phrictionSlug = %s',
-          PhrictionDocument::getProjectSlugIdentifier($slug));
-        if ($project) {
-          $project_phid = $project->getPHID();
-        }
-      }
-
-      $subscribers = PhabricatorSubscribersQuery::loadSubscribersForPHID(
-        $document->getPHID());
-
-      $phids = array_filter(
-        array(
-          $content->getAuthorPHID(),
-          $project_phid,
-        ));
-
-      if ($subscribers) {
-        $phids = array_merge($phids, $subscribers);
-      }
-
-      $handles = $this->loadViewerHandles($phids);
-
-      $age = time() - $content->getDateCreated();
-      $age = floor($age / (60 * 60 * 24));
-
-      if ($age < 1) {
-        $when = pht('today');
-      } else if ($age == 1) {
-        $when = pht('yesterday');
-      } else {
-        $when = pht("%d days ago", $age);
-      }
-
-
-      $project_info = null;
-      if ($project_phid) {
-        $project_info = hsprintf(
-          '<br />%s',
-          pht('This document is about the project %s.',
-            $handles[$project_phid]->renderLink()));
-      }
-
-      $subscriber_view = null;
-      if ($subscribers) {
-        $subcriber_list = array();
-        foreach ($subscribers as $subscriber) {
-          $subcriber_list[] = $handles[$subscriber];
-        }
-
-        $subcriber_list = phutil_implode_html(', ',
-          mpull($subcriber_list, 'renderLink'));
-
-        $subscriber_view = array(
-          hsprintf('<br />Subscribers: '),
-          $subcriber_list,
-        );
-      }
-
-      $byline = hsprintf(
-        '<div class="phriction-byline">%s%s%s</div>',
-        pht('Last updated %s by %s.',
-          $when,
-          $handles[$content->getAuthorPHID()]->renderLink()),
-        $project_info,
-        $subscriber_view);
-
+      $properties = $this
+        ->buildPropertyListView($document, $content, $slug);
 
       $doc_status = $document->getStatus();
       $current_status = $content->getChangeType();
@@ -210,12 +144,6 @@ final class PhrictionDocumentController
             phutil_tag('a', array('href' => $slug_uri), $slug_uri)))
           ->render();
       }
-
-      $page_content = hsprintf(
-        '<div class="phriction-content">%s%s%s</div>',
-        $byline,
-        $move_notice,
-        $core_content);
     }
 
     if ($version_note) {
@@ -224,31 +152,111 @@ final class PhrictionDocumentController
 
     $children = $this->renderDocumentChildren($slug);
 
+    $actions = $this->buildActionView($user, $document);
+
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setActionList($actions);
     $crumb_views = $this->renderBreadcrumbs($slug);
     foreach ($crumb_views as $view) {
       $crumbs->addCrumb($view);
     }
 
-    $actions = $this->buildActionView($user, $document);
-
-    $header = id(new PhabricatorHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setHeader($page_title);
+
+    $prop_list = null;
+    if ($properties) {
+      $prop_list = new PHUIPropertyGroupView();
+      $prop_list->addPropertyList($properties);
+    }
+
+    $page_content = id(new PHUIDocumentView())
+      ->setOffset(true)
+      ->setHeader($header)
+      ->appendChild(
+        array(
+          $actions,
+          $prop_list,
+          $move_notice,
+          $core_content,
+        ));
+
+    $core_page = phutil_tag(
+      'div',
+        array(
+          'class' => 'phriction-offset'
+        ),
+        array(
+          $page_content,
+          $children,
+        ));
 
     return $this->buildApplicationPage(
       array(
         $crumbs->render(),
-        $header->render(),
-        $actions->render(),
-        $version_note,
-        $page_content,
-        $children,
+        $core_page,
       ),
       array(
+        'pageObjects' => array($document->getPHID()),
         'title'   => $page_title,
         'device'  => true,
       ));
 
+  }
+
+  private function buildPropertyListView(
+    PhrictionDocument $document,
+    PhrictionContent $content,
+    $slug) {
+
+    $viewer = $this->getRequest()->getUser();
+    $view = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setObject($document);
+
+    $project_phid = null;
+    if (PhrictionDocument::isProjectSlug($slug)) {
+      $project = id(new PhabricatorProjectQuery())
+        ->setViewer($viewer)
+        ->withPhrictionSlugs(array(
+          PhrictionDocument::getProjectSlugIdentifier($slug)))
+        ->executeOne();
+      if ($project) {
+        $project_phid = $project->getPHID();
+      }
+    }
+
+    $phids = array_filter(
+      array(
+        $content->getAuthorPHID(),
+        $project_phid,
+      ));
+
+    $this->loadHandles($phids);
+
+    $project_info = null;
+    if ($project_phid) {
+      $view->addProperty(
+        pht('Project Info'),
+        $this->getHandle($project_phid)->renderLink());
+    }
+
+    $view->addProperty(
+      pht('Last Author'),
+      $this->getHandle($content->getAuthorPHID())->renderLink());
+
+    $age = time() - $content->getDateCreated();
+    $age = floor($age / (60 * 60 * 24));
+    if ($age < 1) {
+      $when = pht('Today');
+    } else if ($age == 1) {
+      $when = pht('Yesterday');
+    } else {
+      $when = pht("%d Days Ago", $age);
+    }
+    $view->addProperty(pht('Last Updated'), $when);
+
+    return $view;
   }
 
   private function buildActionView(
@@ -263,6 +271,7 @@ final class PhrictionDocumentController
 
     $action_view = id(new PhabricatorActionListView())
       ->setUser($user)
+      ->setObjectURI($this->getRequest()->getRequestURI())
       ->setObject($document);
 
     if (!$document->getID()) {
@@ -308,7 +317,7 @@ final class PhrictionDocumentController
     $content_dao = new PhrictionContent();
     $conn = $document_dao->establishConnection('r');
 
-    $limit = 50;
+    $limit = 250;
     $d_child = PhabricatorSlug::getDepth($slug) + 1;
     $d_grandchild = PhabricatorSlug::getDepth($slug) + 2;
 
@@ -409,13 +418,25 @@ final class PhrictionDocumentController
       $list[] = phutil_tag('li', array(), pht('More...'));
     }
 
-    return hsprintf(
-      '<div class="phriction-children">'.
-        '<div class="phriction-children-header">%s</div>'.
-        '%s'.
-      '</div>',
-      pht('Document Hierarchy'),
-      phutil_tag('ul', array(), $list));
+    $content = array(
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'phriction-children-header '.
+            'sprite-gradient gradient-lightblue-header',
+        ),
+        pht('Document Hierarchy')),
+      phutil_tag(
+        'div',
+        array(
+          'class' => 'phriction-children',
+        ),
+        phutil_tag('ul', array(), $list)),
+    );
+
+    return id(new PHUIDocumentView())
+      ->setOffset(true)
+      ->appendChild($content);
   }
 
   private function renderChildDocumentLink(array $info) {

@@ -69,13 +69,13 @@ final class PhamePostEditController
       $post->setConfigData($data);
 
       if ($phame_title == '/') {
-        $errors[]      = 'Phame title must be nonempty.';
-        $e_phame_title = 'Required';
+        $errors[]      = pht('Phame title must be nonempty.');
+        $e_phame_title = pht('Required');
       }
 
       if (!strlen($title)) {
-        $errors[] = 'Title must be nonempty.';
-        $e_title  = 'Required';
+        $errors[] = pht('Title must be nonempty.');
+        $e_title  = pht('Required');
       } else {
         $e_title = null;
       }
@@ -87,45 +87,45 @@ final class PhamePostEditController
           $uri = $this->getApplicationURI('/post/view/'.$post->getID().'/');
           return id(new AphrontRedirectResponse())->setURI($uri);
         } catch (AphrontQueryDuplicateKeyException $e) {
-          $e_phame_title = 'Not Unique';
-          $errors[]      = 'Another post already uses this slug. '.
-                           'Each post must have a unique slug.';
+          $e_phame_title = pht('Not Unique');
+          $errors[]      = pht('Another post already uses this slug. '.
+                           'Each post must have a unique slug.');
         }
       }
     }
 
-    $handle = PhabricatorObjectHandleData::loadOneHandle(
-      $post->getBlogPHID(),
-      $user);
+    $handle = id(new PhabricatorHandleQuery())
+      ->setViewer($user)
+      ->withPHIDs(array($post->getBlogPHID()))
+      ->executeOne();
 
     $form = id(new AphrontFormView())
       ->setUser($user)
-      ->setFlexible(true)
       ->addHiddenInput('blog', $request->getInt('blog'))
       ->appendChild(
         id(new AphrontFormMarkupControl())
-          ->setLabel('Blog')
+          ->setLabel(pht('Blog'))
           ->setValue($handle->renderLink()))
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('Title')
+        ->setLabel(pht('Title'))
         ->setName('title')
         ->setValue($post->getTitle())
         ->setID('post-title')
         ->setError($e_title))
       ->appendChild(
         id(new AphrontFormTextControl())
-        ->setLabel('Phame Title')
+        ->setLabel(pht('Phame Title'))
         ->setName('phame_title')
         ->setValue(rtrim($post->getPhameTitle(), '/'))
         ->setID('post-phame-title')
-        ->setCaption('Up to 64 alphanumeric characters '.
+        ->setCaption(pht('Up to 64 alphanumeric characters '.
                      'with underscores for spaces. '.
-                     'Formatting is enforced.')
+                     'Formatting is enforced.'))
         ->setError($e_phame_title))
       ->appendChild(
         id(new PhabricatorRemarkupControl())
-        ->setLabel('Body')
+        ->setLabel(pht('Body'))
         ->setName('body')
         ->setValue($post->getBody())
         ->setHeight(AphrontFormTextAreaControl::HEIGHT_VERY_TALL)
@@ -134,7 +134,7 @@ final class PhamePostEditController
         ->setDisableMacros(true))
       ->appendChild(
         id(new AphrontFormSelectControl())
-        ->setLabel('Comments Widget')
+        ->setLabel(pht('Comments Widget'))
         ->setName('comments_widget')
         ->setvalue($post->getCommentsWidget())
         ->setOptions($post->getCommentsWidgetOptionsForSelect()))
@@ -166,30 +166,38 @@ final class PhamePostEditController
         'uri'         => '/phame/post/preview/',
       ));
 
-    $header = id(new PhabricatorHeaderView())->setHeader($page_title);
-
     if ($errors) {
       $error_view = id(new AphrontErrorView())
-        ->setTitle('Errors saving post.')
+        ->setTitle(pht('Errors saving post.'))
         ->setErrors($errors);
     } else {
       $error_view = null;
     }
 
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($page_title)
+      ->setFormError($error_view)
+      ->setForm($form);
+
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addCrumb(
+      id(new PhabricatorCrumbView())
+        ->setName($page_title)
+        ->setHref($this->getApplicationURI('/post/view/'.$this->id.'/')));
+
     $nav = $this->renderSideNavFilterView(null);
     $nav->appendChild(
       array(
-        $header,
-        $error_view,
-        $form,
+        $crumbs,
+        $form_box,
         $preview_panel,
       ));
 
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title'   => $page_title,
-        'device'  => true,
+        'title' => $page_title,
+        'device' => true,
       ));
   }
 

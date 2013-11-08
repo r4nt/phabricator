@@ -30,12 +30,30 @@ final class PhabricatorApplicationSlowvote extends PhabricatorApplication {
     return self::GROUP_UTILITIES;
   }
 
+  public function getRemarkupRules() {
+    return array(
+      new SlowvoteRemarkupRule(),
+    );
+  }
+
   public function getRoutes() {
     return array(
       '/V(?P<id>[1-9]\d*)' => 'PhabricatorSlowvotePollController',
       '/vote/' => array(
-        '(?:view/(?P<view>\w+)/)?' => 'PhabricatorSlowvoteListController',
-        'create/' => 'PhabricatorSlowvoteCreateController',
+        '(?:query/(?P<queryKey>[^/]+)/)?'
+          => 'PhabricatorSlowvoteListController',
+        'create/' => 'PhabricatorSlowvoteEditController',
+        'edit/(?P<id>[1-9]\d*)/' => 'PhabricatorSlowvoteEditController',
+        '(?P<id>[1-9]\d*)/' => 'PhabricatorSlowvoteVoteController',
+        'comment/(?P<id>[1-9]\d*)/' => 'PhabricatorSlowvoteCommentController',
+      ),
+    );
+  }
+
+  public function getCustomCapabilities() {
+    return array(
+      PhabricatorSlowvoteCapabilityDefaultView::CAPABILITY => array(
+        'caption' => pht('Default view policy for new polls.'),
       ),
     );
   }

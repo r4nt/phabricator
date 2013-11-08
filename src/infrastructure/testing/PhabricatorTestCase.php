@@ -37,6 +37,7 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
   private static $storageFixtureReferences = 0;
   private static $storageFixture;
   private static $storageFixtureObjectSeed = 0;
+  private static $testsAreRunning = 0;
 
   protected function getPhabricatorTestCaseConfiguration() {
     return array();
@@ -68,6 +69,8 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
         self::$storageFixture = $this->newStorageFixture();
       }
     }
+
+    ++self::$testsAreRunning;
   }
 
   public function didRunTestCases(array $test_cases) {
@@ -77,6 +80,8 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
         self::$storageFixture = null;
       }
     }
+
+    --self::$testsAreRunning;
   }
 
   protected function willRunTests() {
@@ -87,6 +92,21 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
     }
 
     $this->env = PhabricatorEnv::beginScopedEnv();
+
+    // NOTE: While running unit tests, we act as though all applications are
+    // installed, regardless of the install's configuration. Tests which need
+    // to uninstall applications are responsible for adjusting state themselves
+    // (such tests are exceedingly rare).
+
+    $this->env->overrideEnvConfig(
+      'phabricator.uninstalled-applications',
+      array());
+    $this->env->overrideEnvConfig(
+      'phabricator.show-beta-applications',
+      true);
+
+    // TODO: Remove this when we remove "releeph.installed".
+    $this->env->overrideEnvConfig('releeph.installed', true);
   }
 
   protected function didRunTests() {
@@ -168,5 +188,22 @@ abstract class PhabricatorTestCase extends ArcanistPhutilTestCase {
 
     return $user;
   }
+
+
+  /**
+   * Throws unless tests are currently executing. This method can be used to
+   * guard code which is specific to unit tests and should not normally be
+   * reachable.
+   *
+   * If tests aren't currently being executed, throws an exception.
+   */
+  public static function assertExecutingUnitTests() {
+    if (!self::$testsAreRunning) {
+      throw new Exception(
+        "Executing test code outside of test execution! This code path can ".
+        "only be run during unit tests.");
+    }
+  }
+
 
 }

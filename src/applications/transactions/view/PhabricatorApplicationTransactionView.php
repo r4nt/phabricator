@@ -10,6 +10,22 @@ class PhabricatorApplicationTransactionView extends AphrontView {
   private $anchorOffset = 1;
   private $showEditActions = true;
   private $isPreview;
+  private $objectPHID;
+  private $isDetailView;
+
+  public function setIsDetailView($is_detail_view) {
+    $this->isDetailView = $is_detail_view;
+    return $this;
+  }
+
+  public function setObjectPHID($object_phid) {
+    $this->objectPHID = $object_phid;
+    return $this;
+  }
+
+  public function getObjectPHID() {
+    return $this->objectPHID;
+  }
 
   public function setIsPreview($is_preview) {
     $this->isPreview = $is_preview;
@@ -79,10 +95,15 @@ class PhabricatorApplicationTransactionView extends AphrontView {
 
       $title = $xaction->getTitle();
       if ($xaction->hasChangeDetails()) {
+        if ($this->isPreview || $this->isDetailView) {
+          $details = $this->buildChangeDetails($xaction);
+        } else {
+          $details = $this->buildChangeDetailsLink($xaction);
+        }
         $title = array(
           $title,
           ' ',
-          $this->buildChangeDetails($xaction),
+          $details,
         );
       }
       $event->setTitle($title);
@@ -131,6 +152,10 @@ class PhabricatorApplicationTransactionView extends AphrontView {
   }
 
   public function render() {
+    if (!$this->getObjectPHID()) {
+      throw new Exception("Call setObjectPHID() before render()!");
+    }
+
     $view = new PhabricatorTimelineView();
     $events = $this->buildEvents();
     foreach ($events as $event) {
@@ -146,13 +171,13 @@ class PhabricatorApplicationTransactionView extends AphrontView {
         'phabricator-transaction-list',
         array(
           'listID'      => $list_id,
+          'objectPHID'  => $this->getObjectPHID(),
           'nextAnchor'  => $this->anchorOffset + count($events),
         ));
     }
 
     return $view->render();
   }
-
 
   protected function getOrBuildEngine() {
     if ($this->engine) {
@@ -190,6 +215,7 @@ class PhabricatorApplicationTransactionView extends AphrontView {
         'sigil' => 'reveal-content',
         'mustcapture' => true,
         'id' => $show_id,
+        'style' => 'display: none',
         'meta' => array(
           'hideIDs' => array($show_id),
           'showIDs' => array($hide_id, $content_id),
@@ -204,7 +230,6 @@ class PhabricatorApplicationTransactionView extends AphrontView {
         'sigil' => 'reveal-content',
         'mustcapture' => true,
         'id' => $hide_id,
-        'style' => 'display: none',
         'meta' => array(
           'hideIDs' => array($hide_id, $content_id),
           'showIDs' => array($show_id),
@@ -216,7 +241,6 @@ class PhabricatorApplicationTransactionView extends AphrontView {
       'div',
       array(
         'id'    => $content_id,
-        'style' => 'display: none',
         'class' => 'phabricator-timeline-change-details',
       ),
       $xaction->renderChangeDetails($this->getUser()));
@@ -226,6 +250,22 @@ class PhabricatorApplicationTransactionView extends AphrontView {
       $hide_more,
       $content,
     );
+  }
+
+  private function buildChangeDetailsLink(
+    PhabricatorApplicationTransaction $xaction) {
+
+    return javelin_tag(
+      'a',
+      array(
+        'href' => '/transactions/detail/'.$xaction->getPHID().'/',
+        'sigil' => 'transaction-detail',
+        'mustcapture' => true,
+        'meta' => array(
+          'anchor' => $this->anchorOffset,
+        ),
+      ),
+      pht('(Show Details)'));
   }
 
   protected function shouldGroupTransactions(
@@ -241,7 +281,7 @@ class PhabricatorApplicationTransactionView extends AphrontView {
     $engine = $this->getOrBuildEngine();
     $comment = $xaction->getComment();
 
-    if ($comment) {
+    if ($xaction->hasComment()) {
       if ($comment->getIsDeleted()) {
         return phutil_tag(
           'em',

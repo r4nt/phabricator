@@ -54,7 +54,7 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
         'corpus' => $message,
         'partial' => true,
       ));
-    $call->setUser($user);
+    $call->setUser(PhabricatorUser::getOmnipotentUser());
     $result = $call->execute();
 
     $field_values = $result['fields'];
@@ -65,9 +65,27 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
         reset($field_values['reviewedByPHIDs']));
     }
 
+    $revision_id = idx($field_values, 'revisionID');
+    if (!$revision_id) {
+      $hashes = $this->getCommitHashes(
+        $repository,
+        $commit);
+      if ($hashes) {
+        $revisions = id(new DifferentialRevisionQuery())
+          ->setViewer(PhabricatorUser::getOmnipotentUser())
+          ->withCommitHashes($hashes)
+          ->execute();
+
+        if (!empty($revisions)) {
+          $revision = $this->identifyBestRevision($revisions);
+          $revision_id = $revision->getID();
+        }
+      }
+    }
+
     $data->setCommitDetail(
       'differential.revisionID',
-      idx($field_values, 'revisionID'));
+      $revision_id);
 
     $committer_phid = $this->lookupUser(
       $commit,
@@ -94,35 +112,26 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
 
     $revision = null;
     $should_autoclose = $repository->shouldAutocloseCommit($commit, $data);
-    $revision_id = $data->getCommitDetail('differential.revisionID');
-    if (!$revision_id) {
-      $hashes = $this->getCommitHashes(
-        $this->repository,
-        $this->commit);
-      if ($hashes) {
-
-        $query = new DifferentialRevisionQuery();
-        $query->withCommitHashes($hashes);
-        $revisions = $query->execute();
-
-        if (!empty($revisions)) {
-          $revision = $this->identifyBestRevision($revisions);
-          $revision_id = $revision->getID();
-        }
-      }
-    }
 
     if ($revision_id) {
       $lock = PhabricatorGlobalLock::newLock(get_class($this).':'.$revision_id);
       $lock->lock(5 * 60);
 
-      $revision = id(new DifferentialRevision())->load($revision_id);
-      if ($revision) {
-        $data->setCommitDetail(
-          'differential.revisionPHID',
-          $revision->getPHID());
+      // TODO: Check if a more restrictive viewer could be set here
+      $revision = id(new DifferentialRevisionQuery())
+        ->withIDs(array($revision_id))
+        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->needRelationships(true)
+        ->needReviewerStatus(true)
+        ->executeOne();
 
-        $revision->loadRelationships();
+      if ($revision) {
+        $commit_drev = PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV;
+        id(new PhabricatorEdgeEditor())
+          ->setActor($user)
+          ->addEdge($commit->getPHID(), $commit_drev, $revision->getPHID())
+          ->save();
+
         queryfx(
           $conn_w,
           'INSERT IGNORE INTO %T (revisionID, commitPHID) VALUES (%d, %s)',
@@ -211,15 +220,20 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     }
 
     $data->save();
+
+    $commit->writeImportStatusFlag(
+      PhabricatorRepositoryCommit::IMPORTED_MESSAGE);
   }
 
   private function loadUserName($user_phid, $default, PhabricatorUser $actor) {
     if (!$user_phid) {
       return $default;
     }
-    $handle = PhabricatorObjectHandleData::loadOneHandle(
-      $user_phid,
-      $actor);
+    $handle = id(new PhabricatorHandleQuery())
+      ->setViewer($actor)
+      ->withPHIDs(array($user_phid))
+      ->executeOne();
+
     return '@'.$handle->getName();
   }
 
@@ -228,6 +242,8 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
     $actor_phid) {
 
     $drequest = DiffusionRequest::newFromDictionary(array(
+      'user' => PhabricatorUser::getOmnipotentUser(),
+      'initFromConduit' => false,
       'repository' => $this->repository,
       'commit' => $this->commit->getCommitIdentifier(),
     ));
@@ -236,7 +252,17 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
       ->loadRawDiff();
 
     // TODO: Support adds, deletes and moves under SVN.
-    $changes = id(new ArcanistDiffParser())->parseDiff($raw_diff);
+    if (strlen($raw_diff)) {
+      $changes = id(new ArcanistDiffParser())->parseDiff($raw_diff);
+    } else {
+      // This is an empty diff, maybe made with `git commit --allow-empty`.
+      // NOTE: These diffs have the same tree hash as their ancestors, so
+      // they may attach to revisions in an unexpected way. Just let this
+      // happen for now, although it might make sense to special case it
+      // eventually.
+      $changes = array();
+    }
+
     $diff = DifferentialDiff::newFromRawChanges($changes)
       ->setRevisionID($revision->getID())
       ->setAuthorPHID($actor_phid)
@@ -316,9 +342,10 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
 
     $files = array();
     if ($file_phids) {
-      $files = id(new PhabricatorFile())->loadAllWhere(
-        'phid IN (%Ls)',
-        $file_phids);
+      $files = id(new PhabricatorFileQuery())
+        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->withPHIDs($file_phids)
+        ->execute();
       $files = mpull($files, null, 'getPHID');
     }
 
@@ -331,6 +358,8 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
           return $vs_diff;
         }
         $drequest = DiffusionRequest::newFromDictionary(array(
+          'user' => PhabricatorUser::getOmnipotentUser(),
+          'initFromConduit' => false,
           'repository' => $this->repository,
           'commit' => $this->commit->getCommitIdentifier(),
           'path' => $path,

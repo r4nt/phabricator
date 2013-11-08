@@ -1,255 +1,565 @@
 {
   "version" : 1,
   "sprites" : {
-    "app-adventure-dark"    : {
-      "name" : "app-adventure-dark",
-      "rule" : ".app-adventure-dark",
-      "hash" : "fb4a520656748f4512ce1bb0c05f8e91"
+    "apps-adventure-dark"       : {
+      "name" : "apps-adventure-dark",
+      "rule" : ".apps-adventure-dark",
+      "hash" : "a28314cca031158b744be7bf71612261"
     },
-    "app-application-dark"  : {
-      "name" : "app-application-dark",
-      "rule" : ".app-application-dark",
-      "hash" : "60e228106718bf6f3ee5024400d31f24"
+    "apps-adventure-white"      : {
+      "name" : "apps-adventure-white",
+      "rule" : ".apps-adventure-white",
+      "hash" : "bd4dd76bc727638a757f392c8b1ffdeb"
     },
-    "app-audit-dark"        : {
-      "name" : "app-audit-dark",
-      "rule" : ".app-audit-dark",
-      "hash" : "38339b9cc4e39cbbbea36dcf039873bb"
+    "apps-application-dark"     : {
+      "name" : "apps-application-dark",
+      "rule" : ".apps-application-dark",
+      "hash" : "cb6533f585c2ab831916aee29ab29338"
     },
-    "app-calendar-dark"     : {
-      "name" : "app-calendar-dark",
-      "rule" : ".app-calendar-dark",
-      "hash" : "756d60566639ad1424444436a95c6a3f"
+    "apps-application-white"    : {
+      "name" : "apps-application-white",
+      "rule" : ".apps-application-white",
+      "hash" : "efe96bec30b97147c5eb4ffa818cac5a"
     },
-    "app-chatlog-dark"      : {
-      "name" : "app-chatlog-dark",
-      "rule" : ".app-chatlog-dark",
-      "hash" : "339c4ddd72761c8cd3b9f9adbe1b0e09"
+    "apps-audit-dark"           : {
+      "name" : "apps-audit-dark",
+      "rule" : ".apps-audit-dark",
+      "hash" : "1b6b4d4fc3954309e7af1c777401511d"
     },
-    "app-conduit-dark"      : {
-      "name" : "app-conduit-dark",
-      "rule" : ".app-conduit-dark",
-      "hash" : "01fba8ca32f1cfefb3516b45c9d28b40"
+    "apps-audit-white"          : {
+      "name" : "apps-audit-white",
+      "rule" : ".apps-audit-white",
+      "hash" : "8b14beee5adc284b3804d0bb99e0498f"
     },
-    "app-conpherence-dark"  : {
-      "name" : "app-conpherence-dark",
-      "rule" : ".app-conpherence-dark",
-      "hash" : "dbb6fdd5f082a604b4ef10b7eeedbfa2"
+    "apps-authentication-dark"  : {
+      "name" : "apps-authentication-dark",
+      "rule" : ".apps-authentication-dark",
+      "hash" : "5ae0f7e5d45df5da12ecc447f44bc7d9"
     },
-    "app-countdown-dark"    : {
-      "name" : "app-countdown-dark",
-      "rule" : ".app-countdown-dark",
-      "hash" : "625f2589ee491aead58aaa5b965a7451"
+    "apps-authentication-white" : {
+      "name" : "apps-authentication-white",
+      "rule" : ".apps-authentication-white",
+      "hash" : "567b1e8f11974b0817250b933b9dd3de"
     },
-    "app-daemon-dark"       : {
-      "name" : "app-daemon-dark",
-      "rule" : ".app-daemon-dark",
-      "hash" : "4472be3242150f06ea5bf7b45333c4c5"
+    "apps-calendar-dark"        : {
+      "name" : "apps-calendar-dark",
+      "rule" : ".apps-calendar-dark",
+      "hash" : "ace8540406796c442b7e821d7009a354"
     },
-    "app-differential-dark" : {
-      "name" : "app-differential-dark",
-      "rule" : ".app-differential-dark",
-      "hash" : "508401fe36d9636bdcbdcbcae253c152"
+    "apps-calendar-white"       : {
+      "name" : "apps-calendar-white",
+      "rule" : ".apps-calendar-white",
+      "hash" : "d1a6ba42bc0b5e8b595e5f3a5ecc4c07"
     },
-    "app-diffusion-dark"    : {
-      "name" : "app-diffusion-dark",
-      "rule" : ".app-diffusion-dark",
-      "hash" : "0a6f8c85079c4a325430197adb05967c"
+    "apps-chatlog-dark"         : {
+      "name" : "apps-chatlog-dark",
+      "rule" : ".apps-chatlog-dark",
+      "hash" : "a9fc7a1da24693ced95accf6646d658b"
     },
-    "app-diviner-dark"      : {
-      "name" : "app-diviner-dark",
-      "rule" : ".app-diviner-dark",
-      "hash" : "08872eb1c6bb51b9727290f6fa802633"
+    "apps-chatlog-white"        : {
+      "name" : "apps-chatlog-white",
+      "rule" : ".apps-chatlog-white",
+      "hash" : "edff1793764633464cf167e3c6c128f0"
     },
-    "app-drydock-dark"      : {
-      "name" : "app-drydock-dark",
-      "rule" : ".app-drydock-dark",
-      "hash" : "d50309da57021c676774f9bdc68c5fe7"
+    "apps-conduit-dark"         : {
+      "name" : "apps-conduit-dark",
+      "rule" : ".apps-conduit-dark",
+      "hash" : "731db33ba8fa2971e4d3d1feff1ac574"
     },
-    "app-fact-dark"         : {
-      "name" : "app-fact-dark",
-      "rule" : ".app-fact-dark",
-      "hash" : "0c1be568e1ac05fca814718600190369"
+    "apps-conduit-white"        : {
+      "name" : "apps-conduit-white",
+      "rule" : ".apps-conduit-white",
+      "hash" : "3023fb959718d9abae4eb8af770c8378"
     },
-    "app-feed-dark"         : {
-      "name" : "app-feed-dark",
-      "rule" : ".app-feed-dark",
-      "hash" : "830232709eedbe6ce7cdbcebf182c86c"
+    "apps-conpherence-dark"     : {
+      "name" : "apps-conpherence-dark",
+      "rule" : ".apps-conpherence-dark",
+      "hash" : "2dcf4de0160464abf6329350a1baae59"
     },
-    "app-files-dark"        : {
-      "name" : "app-files-dark",
-      "rule" : ".app-files-dark",
-      "hash" : "00f5ab7ea3e9367e378cf9f395400ed4"
+    "apps-conpherence-white"    : {
+      "name" : "apps-conpherence-white",
+      "rule" : ".apps-conpherence-white",
+      "hash" : "d9a2ce4d8928a81b8f02954ea179c75f"
     },
-    "app-flags-dark"        : {
-      "name" : "app-flags-dark",
-      "rule" : ".app-flags-dark",
-      "hash" : "6382f373f7b0e70522d80ce06ef62813"
+    "apps-countdown-dark"       : {
+      "name" : "apps-countdown-dark",
+      "rule" : ".apps-countdown-dark",
+      "hash" : "9db932741a6d3d64b8df7a8e28b0025e"
     },
-    "app-harbormaster-dark" : {
-      "name" : "app-harbormaster-dark",
-      "rule" : ".app-harbormaster-dark",
-      "hash" : "693886513474ea91f904d8adaa0e8e2b"
+    "apps-countdown-white"      : {
+      "name" : "apps-countdown-white",
+      "rule" : ".apps-countdown-white",
+      "hash" : "8d27e6577c033a77ce1d62417845812f"
     },
-    "app-help-dark"         : {
-      "name" : "app-help-dark",
-      "rule" : ".app-help-dark",
-      "hash" : "2299a14e27d76fdf66209ef0042cc84f"
+    "apps-daemon-dark"          : {
+      "name" : "apps-daemon-dark",
+      "rule" : ".apps-daemon-dark",
+      "hash" : "83a2aefb0e297b22bb40fbe76537dbcc"
     },
-    "app-herald-dark"       : {
-      "name" : "app-herald-dark",
-      "rule" : ".app-herald-dark",
-      "hash" : "b2193b62df3bd4cf5c8de514a07fb6c3"
+    "apps-daemon-white"         : {
+      "name" : "apps-daemon-white",
+      "rule" : ".apps-daemon-white",
+      "hash" : "c07fc293a9207edc535b2b74e7ae059b"
     },
-    "app-home-dark"         : {
-      "name" : "app-home-dark",
-      "rule" : ".app-home-dark",
-      "hash" : "88f020497fcbcf43729aa817695b174f"
+    "apps-differential-dark"    : {
+      "name" : "apps-differential-dark",
+      "rule" : ".apps-differential-dark",
+      "hash" : "47c31971aeeba0b0cf3dae7c3f34d746"
     },
-    "app-logo-dark"         : {
-      "name" : "app-logo-dark",
-      "rule" : ".app-logo-dark",
-      "hash" : "02e71ae2421f1949f2ef075c27e052c9"
+    "apps-differential-white"   : {
+      "name" : "apps-differential-white",
+      "rule" : ".apps-differential-white",
+      "hash" : "feb4e921077420f55a936a2eea300a37"
     },
-    "app-macro-dark"        : {
-      "name" : "app-macro-dark",
-      "rule" : ".app-macro-dark",
-      "hash" : "8e0e72847a8f70eb3f8e60e7fb681c06"
+    "apps-diffusion-dark"       : {
+      "name" : "apps-diffusion-dark",
+      "rule" : ".apps-diffusion-dark",
+      "hash" : "b6bf9ca076cea40ae409844669b8bcf8"
     },
-    "app-mail-dark"         : {
-      "name" : "app-mail-dark",
-      "rule" : ".app-mail-dark",
-      "hash" : "a2a792fddc44be4ae0f1a601380c8449"
+    "apps-diffusion-white"      : {
+      "name" : "apps-diffusion-white",
+      "rule" : ".apps-diffusion-white",
+      "hash" : "f6786cf8d18610621d1baa04d3b55e75"
     },
-    "app-maniphest-dark"    : {
-      "name" : "app-maniphest-dark",
-      "rule" : ".app-maniphest-dark",
-      "hash" : "ea94fc7dbb2267adc33513f78916fe90"
+    "apps-diviner-dark"         : {
+      "name" : "apps-diviner-dark",
+      "rule" : ".apps-diviner-dark",
+      "hash" : "356f063869ad2e9b881844a7ee9813ba"
     },
-    "app-metamta-dark"      : {
-      "name" : "app-metamta-dark",
-      "rule" : ".app-metamta-dark",
-      "hash" : "8abbb6e74d1697f950a01dcd6c8077be"
+    "apps-diviner-white"        : {
+      "name" : "apps-diviner-white",
+      "rule" : ".apps-diviner-white",
+      "hash" : "1fa0636256aeaea27fd6259aa9cc7003"
     },
-    "app-owners-dark"       : {
-      "name" : "app-owners-dark",
-      "rule" : ".app-owners-dark",
-      "hash" : "23b948cc1d32a0968785fbfca749dcdf"
+    "apps-drydock-dark"         : {
+      "name" : "apps-drydock-dark",
+      "rule" : ".apps-drydock-dark",
+      "hash" : "30bddd91ffd0c3dba57a0156717f28be"
     },
-    "app-paste-dark"        : {
-      "name" : "app-paste-dark",
-      "rule" : ".app-paste-dark",
-      "hash" : "9e0c1d1fe03aebcb55a4d19be051e255"
+    "apps-drydock-white"        : {
+      "name" : "apps-drydock-white",
+      "rule" : ".apps-drydock-white",
+      "hash" : "599108df7b845329cb9d8982925cf5eb"
     },
-    "app-people-dark"       : {
-      "name" : "app-people-dark",
-      "rule" : ".app-people-dark",
-      "hash" : "0b3995fcd043b506a408de6e25ad5292"
+    "apps-fact-dark"            : {
+      "name" : "apps-fact-dark",
+      "rule" : ".apps-fact-dark",
+      "hash" : "029a4b291e7ec8df75f656ad90443fd1"
     },
-    "app-phage-dark"        : {
-      "name" : "app-phage-dark",
-      "rule" : ".app-phage-dark",
-      "hash" : "9d939bbe908a1bd96e1b22f8fa007aa5"
+    "apps-fact-white"           : {
+      "name" : "apps-fact-white",
+      "rule" : ".apps-fact-white",
+      "hash" : "f387ef4101d9ae0511d975cd25e9b9aa"
     },
-    "app-phame-dark"        : {
-      "name" : "app-phame-dark",
-      "rule" : ".app-phame-dark",
-      "hash" : "24ff4d322bce13f1c156ce5361a03a07"
+    "apps-feed-dark"            : {
+      "name" : "apps-feed-dark",
+      "rule" : ".apps-feed-dark",
+      "hash" : "b1ba15483949965dc40f8afe1fed36f3"
     },
-    "app-phid-dark"         : {
-      "name" : "app-phid-dark",
-      "rule" : ".app-phid-dark",
-      "hash" : "5a0ac05bbf36a7aeb36753d093c3c9f8"
+    "apps-feed-white"           : {
+      "name" : "apps-feed-white",
+      "rule" : ".apps-feed-white",
+      "hash" : "7540dff74270975a9bf1df4bbc65b728"
     },
-    "app-phlux-dark"        : {
-      "name" : "app-phlux-dark",
-      "rule" : ".app-phlux-dark",
-      "hash" : "ee8d71e2a68b9a9704ccdc4276199d79"
+    "apps-files-dark"           : {
+      "name" : "apps-files-dark",
+      "rule" : ".apps-files-dark",
+      "hash" : "7ac5474f6c77942a4a002c7236bb02bd"
     },
-    "app-pholio-dark"       : {
-      "name" : "app-pholio-dark",
-      "rule" : ".app-pholio-dark",
-      "hash" : "7d3befd1c12dd464a5f5edbef4574a5c"
+    "apps-files-white"          : {
+      "name" : "apps-files-white",
+      "rule" : ".apps-files-white",
+      "hash" : "48235273ebb9c6ebdca82dddd64b5eaf"
     },
-    "app-phortune-dark"     : {
-      "name" : "app-phortune-dark",
-      "rule" : ".app-phortune-dark",
-      "hash" : "cdc79c02273af8491c1d6b9fed029a55"
+    "apps-flags-dark"           : {
+      "name" : "apps-flags-dark",
+      "rule" : ".apps-flags-dark",
+      "hash" : "d32b409cac006890391cbf3deaf9c66c"
     },
-    "app-phpast-dark"       : {
-      "name" : "app-phpast-dark",
-      "rule" : ".app-phpast-dark",
-      "hash" : "de1ad812c7a177c844fcff626b1abebf"
+    "apps-flags-white"          : {
+      "name" : "apps-flags-white",
+      "rule" : ".apps-flags-white",
+      "hash" : "9ce2476cff7e5f123a20a9152c79b4b0"
     },
-    "app-phrequent-dark"    : {
-      "name" : "app-phrequent-dark",
-      "rule" : ".app-phrequent-dark",
-      "hash" : "60888f4879e557a0182a84785aabad16"
+    "apps-harbormaster-dark"    : {
+      "name" : "apps-harbormaster-dark",
+      "rule" : ".apps-harbormaster-dark",
+      "hash" : "71490d2cba389b33791db899fa86ac43"
     },
-    "app-phriction-dark"    : {
-      "name" : "app-phriction-dark",
-      "rule" : ".app-phriction-dark",
-      "hash" : "8596da3f375087db6a163c98f0c968ae"
+    "apps-harbormaster-white"   : {
+      "name" : "apps-harbormaster-white",
+      "rule" : ".apps-harbormaster-white",
+      "hash" : "205912048bf6dba9d8e09835922c13ec"
     },
-    "app-ponder-dark"       : {
-      "name" : "app-ponder-dark",
-      "rule" : ".app-ponder-dark",
-      "hash" : "232577eb875f383f45cb9dbd9a4e3976"
+    "apps-help-dark"            : {
+      "name" : "apps-help-dark",
+      "rule" : ".apps-help-dark",
+      "hash" : "59c2301a521deec631bb4373b6b5932c"
     },
-    "app-power-dark"        : {
-      "name" : "app-power-dark",
-      "rule" : ".app-power-dark",
-      "hash" : "e3708b1b4bfdfc614d9cf630943e5bef"
+    "apps-help-white"           : {
+      "name" : "apps-help-white",
+      "rule" : ".apps-help-white",
+      "hash" : "a62819577284cfce49e9595760a69071"
     },
-    "app-projects-dark"     : {
-      "name" : "app-projects-dark",
-      "rule" : ".app-projects-dark",
-      "hash" : "5e799f1e95ecfd33cb67b6e4ac992043"
+    "apps-herald-dark"          : {
+      "name" : "apps-herald-dark",
+      "rule" : ".apps-herald-dark",
+      "hash" : "39dee5205e7fd0193db1249e8c58476a"
     },
-    "app-releeph-dark"      : {
-      "name" : "app-releeph-dark",
-      "rule" : ".app-releeph-dark",
-      "hash" : "2ac942c35efb43646df853feb13c9b55"
+    "apps-herald-white"         : {
+      "name" : "apps-herald-white",
+      "rule" : ".apps-herald-white",
+      "hash" : "0b962a02801a8ef892ff9dd1f325b09e"
     },
-    "app-repositories-dark" : {
-      "name" : "app-repositories-dark",
-      "rule" : ".app-repositories-dark",
-      "hash" : "736066962e96df88eacc04d734613a0e"
+    "apps-home-dark"            : {
+      "name" : "apps-home-dark",
+      "rule" : ".apps-home-dark",
+      "hash" : "4a90080e06032017e21a1cadcd6d0993"
     },
-    "app-settings-dark"     : {
-      "name" : "app-settings-dark",
-      "rule" : ".app-settings-dark",
-      "hash" : "2fadcf918fb084bd3452712f700ae1a0"
+    "apps-home-white"           : {
+      "name" : "apps-home-white",
+      "rule" : ".apps-home-white",
+      "hash" : "3b034189ce2507d5acf06a018325524d"
     },
-    "app-setup-dark"        : {
-      "name" : "app-setup-dark",
-      "rule" : ".app-setup-dark",
-      "hash" : "061b80f3555ade1c36934474b61fe76b"
+    "apps-legalpad-dark"        : {
+      "name" : "apps-legalpad-dark",
+      "rule" : ".apps-legalpad-dark",
+      "hash" : "88d540034c93583f0d0ae93493e9b17c"
     },
-    "app-slowvote-dark"     : {
-      "name" : "app-slowvote-dark",
-      "rule" : ".app-slowvote-dark",
-      "hash" : "e51cc1e6887f2deaff02d9c60aae36e0"
+    "apps-legalpad-white"       : {
+      "name" : "apps-legalpad-white",
+      "rule" : ".apps-legalpad-white",
+      "hash" : "bb0f8fa6ff6a0b4f810923751f9ebd55"
     },
-    "app-token-dark"        : {
-      "name" : "app-token-dark",
-      "rule" : ".app-token-dark",
-      "hash" : "960f497d9417746e2818b8fec0c1bf8b"
+    "apps-logo-dark"            : {
+      "name" : "apps-logo-dark",
+      "rule" : ".apps-logo-dark",
+      "hash" : "124cad7ef1ba1abb032beb50f3e4b9db"
     },
-    "app-uiexamples-dark"   : {
-      "name" : "app-uiexamples-dark",
-      "rule" : ".app-uiexamples-dark",
-      "hash" : "dd919fd2c10e7d1e0915f523ac3922ce"
+    "apps-logo-white"           : {
+      "name" : "apps-logo-white",
+      "rule" : ".apps-logo-white",
+      "hash" : "885b8ab26f2873d326e2173fad44dce7"
     },
-    "app-workphlow-dark"    : {
-      "name" : "app-workphlow-dark",
-      "rule" : ".app-workphlow-dark",
-      "hash" : "4b06ffd8686513187b70d0eac1a4d62d"
+    "apps-macro-dark"           : {
+      "name" : "apps-macro-dark",
+      "rule" : ".apps-macro-dark",
+      "hash" : "8c5b3dee46497cdecc7b21ed0e83afa4"
     },
-    "app-xhprof-dark"       : {
-      "name" : "app-xhprof-dark",
-      "rule" : ".app-xhprof-dark",
-      "hash" : "8333803b5ac7760726ad72ad098b82e7"
+    "apps-macro-white"          : {
+      "name" : "apps-macro-white",
+      "rule" : ".apps-macro-white",
+      "hash" : "81e36ce1cbf39a8c33c5d4f5b01c61dc"
+    },
+    "apps-mail-dark"            : {
+      "name" : "apps-mail-dark",
+      "rule" : ".apps-mail-dark",
+      "hash" : "73b7a7b1bd0efca32d7d57039b7515d9"
+    },
+    "apps-mail-white"           : {
+      "name" : "apps-mail-white",
+      "rule" : ".apps-mail-white",
+      "hash" : "83a336b8f0cf4fc29e8fad4418b453a5"
+    },
+    "apps-maniphest-dark"       : {
+      "name" : "apps-maniphest-dark",
+      "rule" : ".apps-maniphest-dark",
+      "hash" : "f69f9b71fba0a3cb2ad3f989b9e80aa3"
+    },
+    "apps-maniphest-white"      : {
+      "name" : "apps-maniphest-white",
+      "rule" : ".apps-maniphest-white",
+      "hash" : "246e1edc77f59f5c5847c5e99bf725f1"
+    },
+    "apps-metamta-dark"         : {
+      "name" : "apps-metamta-dark",
+      "rule" : ".apps-metamta-dark",
+      "hash" : "d7c8b12880351a5214747e5fec9a6047"
+    },
+    "apps-metamta-white"        : {
+      "name" : "apps-metamta-white",
+      "rule" : ".apps-metamta-white",
+      "hash" : "1664f51de85251cf358b9fad3623d1d5"
+    },
+    "apps-new-dark"             : {
+      "name" : "apps-new-dark",
+      "rule" : ".apps-new-dark",
+      "hash" : "39f2b8d62c4595dc653badf9f11a08d7"
+    },
+    "apps-new-white"            : {
+      "name" : "apps-new-white",
+      "rule" : ".apps-new-white",
+      "hash" : "dc5ce42c7d60e6ba37b07631b3c3280a"
+    },
+    "apps-nuance-dark"          : {
+      "name" : "apps-nuance-dark",
+      "rule" : ".apps-nuance-dark",
+      "hash" : "e20c19670e1c9b9d1f9267bf7f017aba"
+    },
+    "apps-nuance-white"         : {
+      "name" : "apps-nuance-white",
+      "rule" : ".apps-nuance-white",
+      "hash" : "368f1241b438492642520a037a1ac294"
+    },
+    "apps-owners-dark"          : {
+      "name" : "apps-owners-dark",
+      "rule" : ".apps-owners-dark",
+      "hash" : "6820f0ed3b1c2a02ee8523b7ca16bd73"
+    },
+    "apps-owners-white"         : {
+      "name" : "apps-owners-white",
+      "rule" : ".apps-owners-white",
+      "hash" : "7f409576c8ddab7a513313c301c61683"
+    },
+    "apps-paste-dark"           : {
+      "name" : "apps-paste-dark",
+      "rule" : ".apps-paste-dark",
+      "hash" : "681914299ac0a104ce669f3fca3433f0"
+    },
+    "apps-paste-white"          : {
+      "name" : "apps-paste-white",
+      "rule" : ".apps-paste-white",
+      "hash" : "ed5ec1ee39cc2a01f568f91c72141bfb"
+    },
+    "apps-people-dark"          : {
+      "name" : "apps-people-dark",
+      "rule" : ".apps-people-dark",
+      "hash" : "be18920c5e1ce28e92bef89b01196d6d"
+    },
+    "apps-people-white"         : {
+      "name" : "apps-people-white",
+      "rule" : ".apps-people-white",
+      "hash" : "64bbb2b31873a206a08a50bd14f80c3e"
+    },
+    "apps-phage-dark"           : {
+      "name" : "apps-phage-dark",
+      "rule" : ".apps-phage-dark",
+      "hash" : "7a15eec085afcc137b50b23781889526"
+    },
+    "apps-phage-white"          : {
+      "name" : "apps-phage-white",
+      "rule" : ".apps-phage-white",
+      "hash" : "19c313baea3de0f7c6ab13eb5d1931a9"
+    },
+    "apps-phame-dark"           : {
+      "name" : "apps-phame-dark",
+      "rule" : ".apps-phame-dark",
+      "hash" : "bcb80ee46f3a68c9218132537c1ad403"
+    },
+    "apps-phame-white"          : {
+      "name" : "apps-phame-white",
+      "rule" : ".apps-phame-white",
+      "hash" : "3e8c589577b39c5bb6cb416394ca995e"
+    },
+    "apps-phid-dark"            : {
+      "name" : "apps-phid-dark",
+      "rule" : ".apps-phid-dark",
+      "hash" : "30abc202bd6d191d0686ac601b4827d9"
+    },
+    "apps-phid-white"           : {
+      "name" : "apps-phid-white",
+      "rule" : ".apps-phid-white",
+      "hash" : "35cabe4468dc7ad83ca814d14584da46"
+    },
+    "apps-phlux-dark"           : {
+      "name" : "apps-phlux-dark",
+      "rule" : ".apps-phlux-dark",
+      "hash" : "67c98e15d093726c13325dfb7b130d5b"
+    },
+    "apps-phlux-white"          : {
+      "name" : "apps-phlux-white",
+      "rule" : ".apps-phlux-white",
+      "hash" : "e45320aa27d6221b513c946a43025e55"
+    },
+    "apps-pholio-dark"          : {
+      "name" : "apps-pholio-dark",
+      "rule" : ".apps-pholio-dark",
+      "hash" : "a7c0eed5e0acf244d77a40ba48605de3"
+    },
+    "apps-pholio-white"         : {
+      "name" : "apps-pholio-white",
+      "rule" : ".apps-pholio-white",
+      "hash" : "aafd79e9702c566c91345ba19eb4982b"
+    },
+    "apps-phortune-dark"        : {
+      "name" : "apps-phortune-dark",
+      "rule" : ".apps-phortune-dark",
+      "hash" : "2ddad4cb503d2b3ae7662717170684ce"
+    },
+    "apps-phortune-white"       : {
+      "name" : "apps-phortune-white",
+      "rule" : ".apps-phortune-white",
+      "hash" : "6722013edddd2b302420727a52aec7a0"
+    },
+    "apps-phpast-dark"          : {
+      "name" : "apps-phpast-dark",
+      "rule" : ".apps-phpast-dark",
+      "hash" : "c9be5edad0b04067552f15460871f608"
+    },
+    "apps-phpast-white"         : {
+      "name" : "apps-phpast-white",
+      "rule" : ".apps-phpast-white",
+      "hash" : "3c72bb3a2701584538d677e9a792837e"
+    },
+    "apps-phrequent-dark"       : {
+      "name" : "apps-phrequent-dark",
+      "rule" : ".apps-phrequent-dark",
+      "hash" : "eb16969e42515916a040014870270a04"
+    },
+    "apps-phrequent-white"      : {
+      "name" : "apps-phrequent-white",
+      "rule" : ".apps-phrequent-white",
+      "hash" : "3a5ab5724f2256b346987f478fac8ae8"
+    },
+    "apps-phriction-dark"       : {
+      "name" : "apps-phriction-dark",
+      "rule" : ".apps-phriction-dark",
+      "hash" : "8a1035b1cbc512ed0845939158d266a3"
+    },
+    "apps-phriction-white"      : {
+      "name" : "apps-phriction-white",
+      "rule" : ".apps-phriction-white",
+      "hash" : "a6717397b2e049a1eb77757ae6fcd012"
+    },
+    "apps-policy-dark"          : {
+      "name" : "apps-policy-dark",
+      "rule" : ".apps-policy-dark",
+      "hash" : "2704a7b1f48628ca89cc863d56adcdd6"
+    },
+    "apps-policy-white"         : {
+      "name" : "apps-policy-white",
+      "rule" : ".apps-policy-white",
+      "hash" : "53571de9f0025688d71f1f65aff23b00"
+    },
+    "apps-ponder-dark"          : {
+      "name" : "apps-ponder-dark",
+      "rule" : ".apps-ponder-dark",
+      "hash" : "2b38741f594a8c8501262dc5069b7ef1"
+    },
+    "apps-ponder-white"         : {
+      "name" : "apps-ponder-white",
+      "rule" : ".apps-ponder-white",
+      "hash" : "8177095a1bae6421f67395db4bc9fbd1"
+    },
+    "apps-power-dark"           : {
+      "name" : "apps-power-dark",
+      "rule" : ".apps-power-dark",
+      "hash" : "6203c8631039352f62884cb36862c53a"
+    },
+    "apps-power-white"          : {
+      "name" : "apps-power-white",
+      "rule" : ".apps-power-white",
+      "hash" : "fbc21eb5f7cd1c4b9944335cad012388"
+    },
+    "apps-projects-dark"        : {
+      "name" : "apps-projects-dark",
+      "rule" : ".apps-projects-dark",
+      "hash" : "c982e15e33f1ede39ece69f281300d52"
+    },
+    "apps-projects-white"       : {
+      "name" : "apps-projects-white",
+      "rule" : ".apps-projects-white",
+      "hash" : "84063e2f20613b2f36c232a33b633f4b"
+    },
+    "apps-releeph-dark"         : {
+      "name" : "apps-releeph-dark",
+      "rule" : ".apps-releeph-dark",
+      "hash" : "7f2ce7d637dac9200cdbdf39878e3448"
+    },
+    "apps-releeph-white"        : {
+      "name" : "apps-releeph-white",
+      "rule" : ".apps-releeph-white",
+      "hash" : "a0b09bcb3ac6f654485dc8b8c100e769"
+    },
+    "apps-repositories-dark"    : {
+      "name" : "apps-repositories-dark",
+      "rule" : ".apps-repositories-dark",
+      "hash" : "6703a039b6d3fe08a15d358c25febe91"
+    },
+    "apps-repositories-white"   : {
+      "name" : "apps-repositories-white",
+      "rule" : ".apps-repositories-white",
+      "hash" : "848bb97c36e927353a097f2e7312841d"
+    },
+    "apps-search-dark"          : {
+      "name" : "apps-search-dark",
+      "rule" : ".apps-search-dark",
+      "hash" : "c1e382d74a101b4dc40a8a498fb301e1"
+    },
+    "apps-search-white"         : {
+      "name" : "apps-search-white",
+      "rule" : ".apps-search-white",
+      "hash" : "97fed01d5d3295baa51cab8e2e6721ab"
+    },
+    "apps-settings-dark"        : {
+      "name" : "apps-settings-dark",
+      "rule" : ".apps-settings-dark",
+      "hash" : "a5ebbb89a36998a4f4a42e8ae43eedd2"
+    },
+    "apps-settings-white"       : {
+      "name" : "apps-settings-white",
+      "rule" : ".apps-settings-white",
+      "hash" : "ec11387921da7fef5a3b5e8e160a8565"
+    },
+    "apps-setup-dark"           : {
+      "name" : "apps-setup-dark",
+      "rule" : ".apps-setup-dark",
+      "hash" : "3d959dc32fab465dd68df57a19fcd64c"
+    },
+    "apps-setup-white"          : {
+      "name" : "apps-setup-white",
+      "rule" : ".apps-setup-white",
+      "hash" : "2625facb1900aee48168386418876f4f"
+    },
+    "apps-slowvote-dark"        : {
+      "name" : "apps-slowvote-dark",
+      "rule" : ".apps-slowvote-dark",
+      "hash" : "e5aeb00a1f7b70e20a41f7a494e2aad3"
+    },
+    "apps-slowvote-white"       : {
+      "name" : "apps-slowvote-white",
+      "rule" : ".apps-slowvote-white",
+      "hash" : "963b5c1bdad04d944f71a56e05f3160f"
+    },
+    "apps-token-dark"           : {
+      "name" : "apps-token-dark",
+      "rule" : ".apps-token-dark",
+      "hash" : "5a35e3577ace0fc01296aaefd77703b7"
+    },
+    "apps-token-white"          : {
+      "name" : "apps-token-white",
+      "rule" : ".apps-token-white",
+      "hash" : "f9704614e4690af63f8b2fa1bce1be88"
+    },
+    "apps-uiexamples-dark"      : {
+      "name" : "apps-uiexamples-dark",
+      "rule" : ".apps-uiexamples-dark",
+      "hash" : "78f717f6d01fcb9c636065218839d93a"
+    },
+    "apps-uiexamples-white"     : {
+      "name" : "apps-uiexamples-white",
+      "rule" : ".apps-uiexamples-white",
+      "hash" : "d1a649462c5fd374059011bb7f705d5b"
+    },
+    "apps-workphlow-dark"       : {
+      "name" : "apps-workphlow-dark",
+      "rule" : ".apps-workphlow-dark",
+      "hash" : "60df1eab180a860e4022b349c7e76a2e"
+    },
+    "apps-workphlow-white"      : {
+      "name" : "apps-workphlow-white",
+      "rule" : ".apps-workphlow-white",
+      "hash" : "5a5647193d080169b14d631e6fd6a702"
+    },
+    "apps-xhprof-dark"          : {
+      "name" : "apps-xhprof-dark",
+      "rule" : ".apps-xhprof-dark",
+      "hash" : "02b12b5beeb1a044699046247d065dc3"
+    },
+    "apps-xhprof-white"         : {
+      "name" : "apps-xhprof-white",
+      "rule" : ".apps-xhprof-white",
+      "hash" : "e2381887939895b4473a2a7d1423cdb6"
     }
   },
   "scales"  : [

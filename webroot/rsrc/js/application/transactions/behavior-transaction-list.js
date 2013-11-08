@@ -75,13 +75,35 @@ JX.behavior('phabricator-transaction-list', function(config) {
     e.kill();
   });
 
+  JX.DOM.listen(list, 'click', 'transaction-detail', function(e) {
+    if (!e.isNormalClick()) {
+      return;
+    }
+
+    JX.Workflow.newFromLink(e.getTarget())
+      .setData({anchor: e.getData('anchor')})
+      .setHandler(ontransactions)
+      .start();
+
+    e.kill();
+  });
+
   JX.Stratcom.listen(
     ['submit', 'didSyntheticSubmit'],
     'transaction-append',
     function(e) {
       var form = e.getTarget();
+      if (JX.Stratcom.getData(form).objectPHID != config.objectPHID) {
+        // This indicates there are several forms on the page, and the user
+        // submitted a different one than the one we're in control of.
+        return;
+      }
 
-      JX.Workflow.newFromForm(form, {anchor: next_anchor})
+      e.kill();
+
+      JX.DOM.invoke(form, 'willSubmit');
+
+      JX.Workflow.newFromForm(form, { anchor : next_anchor })
         .setHandler(function(response) {
           ontransactions(response);
 
@@ -92,7 +114,6 @@ JX.behavior('phabricator-transaction-list', function(config) {
         })
         .start();
 
-      e.kill();
     });
 
 });

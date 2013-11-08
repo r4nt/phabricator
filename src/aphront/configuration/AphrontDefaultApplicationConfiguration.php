@@ -24,30 +24,6 @@ class AphrontDefaultApplicationConfiguration
           => 'PhabricatorTypeaheadCommonDatasourceController',
       ),
 
-      '/login/' => array(
-        '' => 'PhabricatorLoginController',
-        'email/' => 'PhabricatorEmailLoginController',
-        'etoken/(?P<token>\w+)/' => 'PhabricatorEmailTokenController',
-        'refresh/' => 'PhabricatorRefreshCSRFController',
-        'validate/' => 'PhabricatorLoginValidateController',
-        'mustverify/' => 'PhabricatorMustVerifyEmailController',
-      ),
-
-      '/logout/' => 'PhabricatorLogoutController',
-
-      '/oauth/' => array(
-        '(?P<provider>\w+)/' => array(
-          'login/'     => 'PhabricatorOAuthLoginController',
-          'diagnose/'  => 'PhabricatorOAuthDiagnosticsController',
-          'unlink/'    => 'PhabricatorOAuthUnlinkController',
-        ),
-      ),
-
-      '/ldap/' => array(
-        'login/' => 'PhabricatorLDAPLoginController',
-        'unlink/'    => 'PhabricatorLDAPUnlinkController',
-      ),
-
       '/oauthserver/' => array(
         'auth/'          => 'PhabricatorOAuthServerAuthController',
         'test/'          => 'PhabricatorOAuthServerTestController',
@@ -71,18 +47,6 @@ class AphrontDefaultApplicationConfiguration
       '/~/' => array(
         '' => 'DarkConsoleController',
         'data/(?P<key>[^/]+)/' => 'DarkConsoleDataController',
-      ),
-
-      '/search/' => array(
-        '' => 'PhabricatorSearchController',
-        '(?P<key>[^/]+)/' => 'PhabricatorSearchController',
-        'attach/(?P<phid>[^/]+)/(?P<type>\w+)/(?:(?P<action>\w+)/)?'
-          => 'PhabricatorSearchAttachController',
-        'select/(?P<type>\w+)/'
-          => 'PhabricatorSearchSelectController',
-        'index/(?P<phid>[^/]+)/' => 'PhabricatorSearchIndexController',
-        'hovercard/(?P<mode>retrieve|test)/' =>
-          'PhabricatorSearchHovercardController',
       ),
 
       '/status/' => 'PhabricatorStatusController',
@@ -117,10 +81,36 @@ class AphrontDefaultApplicationConfiguration
     );
   }
 
+  /**
+   * @phutil-external-symbol class PhabricatorStartup
+   */
   public function buildRequest() {
+    $parser = new PhutilQueryStringParser();
+    $data   = array();
+
+    // If the request has "multipart/form-data" content, we can't use
+    // PhutilQueryStringParser to parse it, and the raw data supposedly is not
+    // available anyway (according to the PHP documentation, "php://input" is
+    // not available for "multipart/form-data" requests). However, it is
+    // available at least some of the time (see T3673), so double check that
+    // we aren't trying to parse data we won't be able to parse correctly by
+    // examining the Content-Type header.
+    $content_type = idx($_SERVER, 'CONTENT_TYPE');
+    $is_form_data = preg_match('@^multipart/form-data@i', $content_type);
+
+    $raw_input = PhabricatorStartup::getRawInput();
+    if (strlen($raw_input) && !$is_form_data) {
+      $data += $parser->parseQueryString($raw_input);
+    } else if ($_POST) {
+      $data += $_POST;
+    }
+
+    $data += $parser->parseQueryString(idx($_SERVER, 'QUERY_STRING', ''));
+
     $request = new AphrontRequest($this->getHost(), $this->getPath());
-    $request->setRequestData($_GET + $_POST);
+    $request->setRequestData($data);
     $request->setApplicationConfiguration($this);
+
     return $request;
   }
 
@@ -140,6 +130,10 @@ class AphrontDefaultApplicationConfiguration
 
     // For non-workflow requests, return a Ajax response.
     if ($request->isAjax() && !$request->isJavelinWorkflow()) {
+      // Log these; they don't get shown on the client and can be difficult
+      // to debug.
+      phlog($ex);
+
       $response = new AphrontAjaxResponse();
       $response->setError(
         array(
@@ -166,20 +160,42 @@ class AphrontDefaultApplicationConfiguration
         //
         // Possibly we should add a header here like "you need to login to see
         // the thing you are trying to look at".
-        $login_controller = new PhabricatorLoginController($request);
+        $login_controller = new PhabricatorAuthStartController($request);
+
+        $auth_app_class = 'PhabricatorApplicationAuth';
+        $auth_app = PhabricatorApplication::getByClass($auth_app_class);
+        $login_controller->setCurrentApplication($auth_app);
+
         return $login_controller->processRequest();
       }
 
-      $content = hsprintf(
-        '<div class="aphront-policy-exception">%s</div>',
-        $ex->getMessage());
+      $list = $ex->getMoreInfo();
+      foreach ($list as $key => $item) {
+        $list[$key] = phutil_tag('li', array(), $item);
+      }
+      if ($list) {
+        $list = phutil_tag('ul', array(), $list);
+      }
+
+      $content = array(
+        phutil_tag(
+          'div',
+          array(
+            'class' => 'aphront-policy-rejection',
+          ),
+          $ex->getRejection()),
+        phutil_tag(
+          'div',
+          array(
+            'class' => 'aphront-capability-details',
+          ),
+          pht('Users with the "%s" capability:', $ex->getCapabilityName())),
+        $list,
+      );
 
       $dialog = new AphrontDialogView();
       $dialog
-        ->setTitle(
-            $is_serious
-              ? 'Access Denied'
-              : "You Shall Not Pass")
+        ->setTitle($ex->getTitle())
         ->setClass('aphront-access-dialog')
         ->setUser($user)
         ->appendChild($content);
@@ -206,6 +222,7 @@ class AphrontDefaultApplicationConfiguration
 
       $response = new AphrontWebpageResponse();
       $response->setContent($view->render());
+      $response->setHTTPResponseCode(500);
 
       return $response;
     }
@@ -252,6 +269,7 @@ class AphrontDefaultApplicationConfiguration
 
     $response = new AphrontDialogResponse();
     $response->setDialog($dialog);
+    $response->setHTTPResponseCode(500);
 
     return $response;
   }

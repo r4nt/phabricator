@@ -25,7 +25,7 @@ final class PhabricatorSettingsPanelPassword
 
     // ...or this install doesn't support password authentication at all.
 
-    if (!PhabricatorEnv::getEnvConfig('auth.password-auth-enabled')) {
+    if (!PhabricatorAuthProviderPassword::getPasswordProvider()) {
       return false;
     }
 
@@ -159,14 +159,13 @@ final class PhabricatorSettingsPanelPassword
         id(new AphrontFormSubmitControl())
           ->setValue(pht('Save')));
 
-    $panel = new AphrontPanelView();
-    $panel->setHeader(pht('Change Password'));
-    $panel->appendChild($form);
-    $panel->setNoBackground();
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Change Password'))
+      ->setFormError($notice)
+      ->setForm($form);
 
     return array(
-      $notice,
-      $panel,
+      $form_box,
     );
   }
 }
