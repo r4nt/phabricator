@@ -120,9 +120,9 @@ final class DifferentialCommentMail extends DifferentialMail {
 
   protected function nestCommentHistory($inline) {
     $nested = array();
-    $previous_inlines = id(new DifferentialInlineComment())->loadAllWhere(
-      "changesetID = %d AND lineNumber = %d AND id < %d AND ".
-      "commentID IS NOT NULL ORDER BY id ASC",
+    $previous_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
+      "changesetID = %d AND lineNumber = %d AND id < %d ".
+      "ORDER BY id ASC",
       $inline->getChangesetID(), $inline->getLineNumber(), $inline->getID());
     foreach ($previous_inlines as $previous_inline) {
       $nested = $this->indentForMail(
