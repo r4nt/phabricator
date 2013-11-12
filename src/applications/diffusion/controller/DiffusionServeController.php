@@ -172,18 +172,53 @@ final class DiffusionServeController extends DiffusionController {
           pht('This repository is not available over HTTP.'));
     }
 
-    switch ($repository->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-        $result = $this->serveGitRequest($repository, $viewer);
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        $result = $this->serveMercurialRequest($repository, $viewer);
-        break;
-      default:
-        $result = new PhabricatorVCSResponse(
-          999,
-          pht('TODO: Implement meaningful responses.'));
-        break;
+    $vcs_type = $repository->getVersionControlSystem();
+    $req_type = $this->isVCSRequest($request);
+
+    if ($vcs_type != $req_type) {
+      switch ($req_type) {
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
+          $result = new PhabricatorVCSResponse(
+            500,
+            pht('This is not a Git repository.'));
+          break;
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
+          $result = new PhabricatorVCSResponse(
+            500,
+            pht('This is not a Mercurial repository.'));
+          break;
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+          $result = new PhabricatorVCSResponse(
+            500,
+            pht('This is not a Subversion repository.'));
+          break;
+        default:
+          $result = new PhabricatorVCSResponse(
+            500,
+            pht('Unknown request type.'));
+          break;
+      }
+    } else {
+      switch ($vcs_type) {
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
+          $result = $this->serveGitRequest($repository, $viewer);
+          break;
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
+          $result = $this->serveMercurialRequest($repository, $viewer);
+          break;
+        case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+          $result = new PhabricatorVCSResponse(
+            500,
+            pht(
+              'Phabricator does not support HTTP access to Subversion '.
+              'repositories.'));
+          break;
+        default:
+          $result = new PhabricatorVCSResponse(
+            500,
+            pht('Unknown version control system.'));
+          break;
+      }
     }
 
     $code = $result->getHTTPResponseCode();
@@ -228,43 +263,11 @@ final class DiffusionServeController extends DiffusionController {
       case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
         $cmd = $request->getStr('cmd');
         if ($cmd == 'batch') {
-          // For "batch" we get a "cmds" argument like
-          //
-          //   heads ;known nodes=
-          //
-          // We need to examine the commands (here, "heads" and "known") to
-          // make sure they're all read-only.
-
-          $args = $this->getMercurialArguments();
-          $cmds = idx($args, 'cmds');
-          if ($cmds) {
-
-            // NOTE: Mercurial has some code to escape semicolons, but it does
-            // not actually function for command separation. For example, these
-            // two batch commands will produce completely different results (the
-            // former will run the lookup; the latter will fail with a parser
-            // error):
-            //
-            //  lookup key=a:xb;lookup key=z* 0
-            //  lookup key=a:;b;lookup key=z* 0
-            //               ^
-            //               |
-            //               +-- Note semicolon.
-            //
-            // So just split unconditionally.
-
-            $cmds = explode(';', $cmds);
-            foreach ($cmds as $sub_cmd) {
-              $name = head(explode(' ', $sub_cmd, 2));
-              if (!DiffusionMercurialWireProtocol::isReadOnlyCommand($name)) {
-                return false;
-              }
-            }
-            return true;
-          }
+          $cmds = idx($this->getMercurialArguments(), 'cmds');
+          return DiffusionMercurialWireProtocol::isReadOnlyBatchCommand($cmds);
         }
         return DiffusionMercurialWireProtocol::isReadOnlyCommand($cmd);
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SUBVERSION:
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
         break;
     }
 
@@ -327,6 +330,14 @@ final class DiffusionServeController extends DiffusionController {
       ->setEnv($env, true)
       ->write($input)
       ->resolve();
+
+    if ($err) {
+      if ($this->isValidGitShallowCloneResponse($stdout, $stderr)) {
+        // Ignore the error if the response passes this special check for
+        // validity.
+        $err = 0;
+      }
+    }
 
     if ($err) {
       return new PhabricatorVCSResponse(
@@ -512,5 +523,27 @@ final class DiffusionServeController extends DiffusionController {
     return implode('', $out);
   }
 
+  private function isValidGitShallowCloneResponse($stdout, $stderr) {
+    // If you execute `git clone --depth N ...`, git sends a request which
+    // `git-http-backend` responds to by emitting valid output and then exiting
+    // with a failure code and an error message. If we ignore this error,
+    // everything works.
+
+    // This is a pretty funky fix: it would be nice to more precisely detect
+    // that a request is a `--depth N` clone request, but we don't have any code
+    // to decode protocol frames yet. Instead, look for reasonable evidence
+    // in the error and output that we're looking at a `--depth` clone.
+
+    // For evidence this isn't completely crazy, see:
+    // https://github.com/schacon/grack/pull/7
+
+    $stdout_regexp = '(^Content-Type: application/x-git-upload-pack-result)m';
+    $stderr_regexp = '(The remote end hung up unexpectedly)';
+
+    $has_pack = preg_match($stdout_regexp, $stdout);
+    $is_hangup = preg_match($stderr_regexp, $stderr);
+
+    return $has_pack && $is_hangup;
+  }
 }
 
