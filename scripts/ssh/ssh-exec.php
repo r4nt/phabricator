@@ -38,8 +38,8 @@ try {
     throw new Exception("Invalid username.");
   }
 
-  if ($user->getIsDisabled()) {
-    throw new Exception("You have been exiled.");
+  if (!$user->isUserActivated()) {
+    throw new Exception(pht("Your account is not activated."));
   }
 
   if ($args->getArg('ssh-command')) {
@@ -99,6 +99,7 @@ try {
   $workflow->setErrorChannel($error_channel);
 
   $err = $workflow->execute($original_args);
+
 
   $metrics_channel->flush();
   $error_channel->flush();
