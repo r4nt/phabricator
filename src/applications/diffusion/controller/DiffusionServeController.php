@@ -322,7 +322,7 @@ final class DiffusionServeController extends DiffusionController {
       // TODO: Set these correctly.
       // GIT_COMMITTER_NAME
       // GIT_COMMITTER_EMAIL
-    );
+    ) + $this->getCommonEnvironment($viewer);
 
     $input = PhabricatorStartup::getRawInput();
 
@@ -405,7 +405,9 @@ final class DiffusionServeController extends DiffusionController {
     return $user;
   }
 
-  private function serveMercurialRequest(PhabricatorRepository $repository) {
+  private function serveMercurialRequest(
+    PhabricatorRepository $repository,
+    PhabricatorUser $viewer) {
     $request = $this->getRequest();
 
     $bin = Filesystem::resolveBinary('hg');
@@ -413,7 +415,7 @@ final class DiffusionServeController extends DiffusionController {
       throw new Exception("Unable to find `hg` in PATH!");
     }
 
-    $env = array();
+    $env = $this->getCommonEnvironment($viewer);
     $input = PhabricatorStartup::getRawInput();
 
     $cmd = $request->getStr('cmd');
@@ -550,6 +552,16 @@ final class DiffusionServeController extends DiffusionController {
     $is_hangup = preg_match($stderr_regexp, $stderr);
 
     return $has_pack && $is_hangup;
+  }
+
+  private function getCommonEnvironment(PhabricatorUser $viewer) {
+    $remote_addr = $this->getRequest()->getRemoteAddr();
+
+    return array(
+      DiffusionCommitHookEngine::ENV_USER => $viewer->getUsername(),
+      DiffusionCommitHookEngine::ENV_REMOTE_ADDRESS => $remote_addr,
+      DiffusionCommitHookEngine::ENV_REMOTE_PROTOCOL => 'http',
+    );
   }
 
 }

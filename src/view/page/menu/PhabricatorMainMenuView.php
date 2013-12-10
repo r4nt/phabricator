@@ -37,6 +37,7 @@ final class PhabricatorMainMenuView extends AphrontView {
     $user = $this->user;
 
     require_celerity_resource('phabricator-main-menu-view');
+    require_celerity_resource('sprite-main-header-css');
 
     $header_id = celerity_generate_unique_node_id();
     $menus = array();
@@ -64,11 +65,15 @@ final class PhabricatorMainMenuView extends AphrontView {
     }
 
     $application_menu = $this->renderApplicationMenu();
+    $classes = array();
+    $classes[] = 'phabricator-main-menu';
+    $classes[] = 'sprite-main-header';
+    $classes[] = 'main-header-'.PhabricatorEnv::getEnvConfig('ui.header-color');
 
     return phutil_tag(
       'div',
       array(
-        'class' => 'phabricator-main-menu',
+        'class' => implode(' ', $classes),
         'id'    => $header_id,
       ),
       array(
@@ -227,6 +232,8 @@ final class PhabricatorMainMenuView extends AphrontView {
   }
 
   private function renderPhabricatorLogo() {
+    $class = 'phabricator-main-menu-logo-image';
+
     return phutil_tag(
       'a',
       array(
@@ -236,7 +243,7 @@ final class PhabricatorMainMenuView extends AphrontView {
       phutil_tag(
         'span',
         array(
-          'class' => 'sprite-menu phabricator-main-menu-logo-image',
+          'class' => 'sprite-menu menu-logo-image '.$class,
         ),
         ''));
   }

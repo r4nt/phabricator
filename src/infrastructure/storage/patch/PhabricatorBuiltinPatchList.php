@@ -216,6 +216,10 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
         'type' => 'db',
         'name' => 'passphrase',
       ),
+      'db.phragment' => array(
+        'type' => 'db',
+        'name' => 'phragment',
+      ),
       '0000.legacy.sql' => array(
         'type'    => 'sql',
         'name'    => $this->getPatchPath('0000.legacy.sql'),
@@ -1787,6 +1791,42 @@ final class PhabricatorBuiltinPatchList extends PhabricatorSQLPatchList {
       '20131122.repomirror.sql' => array(
         'type' => 'sql',
         'name' => $this->getPatchPath('20131122.repomirror.sql'),
+      ),
+      '20131123.drydockblueprintpolicy.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131123.drydockblueprintpolicy.sql'),
+      ),
+      '20131129.drydockresourceblueprint.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131129.drydockresourceblueprint.sql'),
+      ),
+      '20131205.buildtargets.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131205.buildtargets.sql'),
+      ),
+      '20131204.pushlog.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131204.pushlog.sql'),
+      ),
+      '20131205.buildsteporder.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131205.buildsteporder.sql'),
+      ),
+      '20131205.buildstepordermig.php' => array(
+        'type' => 'php',
+        'name' => $this->getPatchPath('20131205.buildstepordermig.php'),
+      ),
+      '20131206.phragment.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131206.phragment.sql'),
+      ),
+      '20131206.phragmentnull.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131206.phragmentnull.sql'),
+      ),
+      '20131208.phragmentsnapshot.sql' => array(
+        'type' => 'sql',
+        'name' => $this->getPatchPath('20131208.phragmentsnapshot.sql'),
       ),
     );
   }

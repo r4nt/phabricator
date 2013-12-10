@@ -17,6 +17,22 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
     return $this->args;
   }
 
+  public function getEnvironment() {
+    $env = array(
+      DiffusionCommitHookEngine::ENV_USER => $this->getUser()->getUsername(),
+      DiffusionCommitHookEngine::ENV_REMOTE_PROTOCOL => 'ssh',
+    );
+
+    $ssh_client = getenv('SSH_CLIENT');
+    if ($ssh_client) {
+      // This has the format "<ip> <remote-port> <local-port>". Grab the IP.
+      $remote_address = head(explode(' ', $ssh_client));
+      $env[DiffusionCommitHookEngine::ENV_REMOTE_ADDRESS] = $remote_address;
+    }
+
+    return $env;
+  }
+
   abstract protected function executeRepositoryOperations();
 
   protected function writeError($message) {
