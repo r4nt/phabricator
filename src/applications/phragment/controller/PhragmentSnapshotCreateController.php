@@ -21,6 +21,11 @@ final class PhragmentSnapshotCreateController extends PhragmentController {
       return new Aphront404Response();
     }
 
+    PhabricatorPolicyFilter::requireCapability(
+      $viewer,
+      $fragment,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
     $children = id(new PhragmentFragmentQuery())
       ->setViewer($viewer)
       ->needLatestVersion(true)
@@ -149,9 +154,7 @@ final class PhragmentSnapshotCreateController extends PhragmentController {
       ->appendInstructions($container);
 
     $crumbs = $this->buildApplicationCrumbsWithPath($parents);
-    $crumbs->addCrumb(
-      id(new PhabricatorCrumbView())
-        ->setName(pht('Create Snapshot')));
+    $crumbs->addTextCrumb(pht('Create Snapshot'));
 
     $box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Create Snapshot of %s', $fragment->getName()))
@@ -161,6 +164,7 @@ final class PhragmentSnapshotCreateController extends PhragmentController {
     return $this->buildApplicationPage(
       array(
         $crumbs,
+        $this->renderConfigurationWarningIfRequired(),
         $box),
       array(
         'title' => pht('Create Fragment'),

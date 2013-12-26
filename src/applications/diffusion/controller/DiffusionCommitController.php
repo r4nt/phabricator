@@ -102,6 +102,14 @@ final class DiffusionCommitController extends DiffusionController {
         'diffusion.commitparentsquery',
         array('commit' => $drequest->getCommit()));
 
+      if ($parents) {
+        $parents = id(new DiffusionCommitQuery())
+          ->setViewer($user)
+          ->withRepository($repository)
+          ->withIdentifiers($parents)
+          ->execute();
+      }
+
       $headsup_view = id(new PHUIHeaderView())
         ->setHeader(nonempty($commit->getSummary(), pht('Commit Detail')));
 
@@ -552,7 +560,7 @@ final class DiffusionCommitController extends DiffusionController {
       $committed_info->setTarget($author_name);
     }
 
-    $props['Comitted'] = id(new PHUIStatusListView())
+    $props['Committed'] = id(new PHUIStatusListView())
       ->addItem($committed_info);
 
     if ($push_logs) {
