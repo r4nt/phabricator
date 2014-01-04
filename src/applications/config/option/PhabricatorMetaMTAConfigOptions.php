@@ -204,6 +204,18 @@ EODOC
         'phabricator.example.com')
         ->setDescription(pht('Domain used to generate Message-IDs.')),
       $this->newOption(
+          'minimal-email',
+          'bool',
+          false)
+          ->setBoolOptions(
+            array(
+              pht("Minimal e-mail content, plus some goodies"),
+              pht("Normal phabricator mails"),
+            ))
+          ->setSummary(
+            pht(""))
+          ->setDescription(""),
+      $this->newOption(
         'metamta.mail-adapter',
         'class',
         'PhabricatorMailImplementationPHPMailerLiteAdapter')
