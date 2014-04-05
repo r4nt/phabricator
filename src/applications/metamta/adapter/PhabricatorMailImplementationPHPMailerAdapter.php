@@ -12,6 +12,7 @@ final class PhabricatorMailImplementationPHPMailerAdapter
     require_once $root.'/externals/phpmailer/class.phpmailer.php';
     $this->mailer = new PHPMailer($use_exceptions = true);
     $this->mailer->CharSet = 'utf-8';
+    $this->mailer->Encoding = 'quoted-printable';
 
     // By default, PHPMailer sends one mail per recipient. We handle
     // multiplexing higher in the stack, so tell it to send mail exactly
