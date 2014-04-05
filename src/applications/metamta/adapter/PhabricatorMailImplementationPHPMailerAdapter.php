@@ -100,6 +100,11 @@ final class PhabricatorMailImplementationPHPMailerAdapter
     return $this;
   }
 
+  public function setSender($sender) {
+    $this->addHeader('List-Id', $sender);
+  }
+ 
+
   public function setIsHTML($is_html) {
     $this->mailer->IsHTML($is_html);
     return $this;
