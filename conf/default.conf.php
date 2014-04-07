@@ -223,10 +223,10 @@ return array(
   // clicking "Send New Message", and then composing a message.
 
   // Default address to send mail "From".
-  'metamta.default-address'     => 'reviews@llvm-reviews.chandlerc.com',
+  'metamta.default-address'     => 'noreply@example.com',
 
   // Domain used to generate Message-IDs.
-  'metamta.domain'              => 'llvm-reviews.chandlerc.com',
+  'metamta.domain'              => 'example.com',
 
   // When a message is sent to multiple recipients (for example, several
   // reviewers on a code review), Phabricator can either deliver one email to
@@ -257,7 +257,7 @@ return array(
   //
   // In the code, splitting one outbound email into one-per-recipient is
   // sometimes referred to as "multiplexing".
-  'metamta.one-mail-per-recipient'  => false,
+  'metamta.one-mail-per-recipient'  => true,
 
   // When sending a message that has no To recipient (i.e. all recipients
   // are CC'd, for example when multiplexing mail), set the To field to the
@@ -284,7 +284,7 @@ return array(
   //    - If your install is anything else, you're much safer leaving this
   //      off since the risk in turning it on is that your outgoing mail will
   //      mostly never arrive.
-  'metamta.can-send-as-user'    => true,
+  'metamta.can-send-as-user'    => false,
 
   // Limit the maximum size of the body of an email generated for a diff
   // (in bytes).
@@ -312,7 +312,7 @@ return array(
   //  - 'real'  - 'George Washington <gwashington@example.com>'
   //  - 'full' - 'gwashington (George Washington) <gwashington@example.com>'
   // The default is 'full'.
-  'metamta.user-address-format' => 'real',
+  'metamta.user-address-format' => 'full',
 
   // If you're using PHPMailer to send email, provide the mailer and options
   // here. PHPMailer is much more enormous than PHPMailerLite, and provides more
@@ -381,7 +381,7 @@ return array(
   // Set this to the left part of the email address and it well get
   // prepended to all outgoing mail. If you want to use e.g.
   // 'phabricator@example.com' this should be set to 'phabricator'.
-  'metamta.single-reply-handler-prefix' => 'reviews',
+  'metamta.single-reply-handler-prefix' => null,
 
   // Prefix prepended to mail sent by Maniphest. You can change this to
   // distinguish between testing and development installs, for example.
@@ -403,25 +403,25 @@ return array(
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Differential.
-  'metamta.differential.reply-handler-domain' => 'llvm-reviews.chandlerc.com',
+  'metamta.differential.reply-handler-domain' => null,
 
   // See 'metamta.maniphest.reply-handler'. This does the same thing, but
   // affects Differential.
   'metamta.differential.reply-handler' => 'DifferentialReplyHandler',
 
   // Prefix prepended to mail sent by Differential.
-  'metamta.differential.subject-prefix' => '[PATCH]',
+  'metamta.differential.subject-prefix' => '[Differential]',
 
   // Set this to true if you want patches to be attached to mail from
   // Differential. This won't work if you are using SendGrid as your mail
   // adapter.
-  'metamta.differential.attach-patches' => true,
+  'metamta.differential.attach-patches' => false,
 
   // To include patches in email bodies, set this to a positive integer. Patches
   // will be inlined if they are at most that many lines. For instance, a value
   // of 100 means "inline patches if they are no longer than 100 lines". By
   // default, patches are not inlined.
-  'metamta.differential.inline-patches' => 200,
+  'metamta.differential.inline-patches' => 0,
 
   // If you enable either of the options above, you can choose what format
   // patches are sent in. Valid options are 'unified' (like diff -u) or 'git'.
@@ -432,14 +432,14 @@ return array(
   // will give enough context for people who are only viewing the
   // reviews in email to understand what is going on. The context will
   // be created based on the range of the comment.
-  'metamta.differential.unified-comment-context' => true,
+  'metamta.differential.unified-comment-context' => false,
 
   // Prefix prepended to mail sent by Diffusion.
   'metamta.diffusion.subject-prefix' => '[Diffusion]',
 
   // See 'metamta.maniphest.reply-handler-domain'. This does the same thing,
   // but allows email replies via Diffusion.
-  'metamta.diffusion.reply-handler-domain' => 'llvm-reviews.chandlerc.com',
+  'metamta.diffusion.reply-handler-domain' => null,
 
   // See 'metamta.maniphest.reply-handler'. This does the same thing, but
   // affects Diffusion.
@@ -447,12 +447,12 @@ return array(
 
   // Set this to true if you want patches to be attached to commit notifications
   // from Diffusion. This won't work with SendGrid.
-  'metamta.diffusion.attach-patches' => true,
+  'metamta.diffusion.attach-patches' => false,
 
   // To include patches in Diffusion email bodies, set this to a positive
   // integer. Patches will be inlined if they are at most that many lines.
   // By default, patches are not inlined.
-  'metamta.diffusion.inline-patches' => 200,
+  'metamta.diffusion.inline-patches' => 0,
 
   // If you've enabled attached patches or inline patches for commit emails, you
   // can establish a hard byte limit on their size. You should generally set
@@ -482,7 +482,7 @@ return array(
   // a little bit of security for convenience, but it's reasonable in many
   // installs. Object interactions are still protected using hashes in the
   // single public email address, so objects can not be replied to blindly.
-  'metamta.public-replies' => true,
+  'metamta.public-replies' => false,
 
   // You can configure an email address like "bugs@phabricator.example.com"
   // which will automatically create Maniphest tasks when users send email
@@ -539,16 +539,14 @@ return array(
   // "Re:" to the subject line of all mail which is expected to thread. If
   // you've set 'metamta.one-mail-per-recipient', users can override this
   // setting in their preferences.
-  'metamta.re-prefix' => true,
+  'metamta.re-prefix' => false,
 
   // If true, allow MetaMTA to change mail subjects to put text like
   // '[Accepted]' and '[Commented]' in them. This makes subjects more useful,
   // but might break threading on some clients. If you've set
   // 'metamta.one-mail-per-recipient', users can override this setting in their
   // preferences.
-  'metamta.vary-subjects' => false,
-
-  'minimal-email' => true,
+  'metamta.vary-subjects' => true,
 
 // -- Auth ------------------------------------------------------------------ //
 
@@ -601,164 +599,6 @@ return array(
   // When users set or reset a password, it must have at least this many
   // characters.
   'account.minimum-password-length'  => 8,
-
-
-// -- Facebook OAuth -------------------------------------------------------- //
-
-  // Can users use Facebook credentials to login to Phabricator?
-  'facebook.auth-enabled'       => false,
-
-  // Can users use Facebook credentials to create new Phabricator accounts?
-  'facebook.registration-enabled' => true,
-
-  // Are Facebook accounts permanently linked to Phabricator accounts, or can
-  // the user unlink them?
-  'facebook.auth-permanent'     => false,
-
-  // The Facebook "Application ID" to use for Facebook API access.
-  'facebook.application-id'     => null,
-
-  // The Facebook "Application Secret" to use for Facebook API access.
-  'facebook.application-secret' => null,
-
-  // Should Phabricator reject requests made by users with
-  // Secure Browsing disabled?
-  'facebook.require-https-auth' => false,
-
-// -- GitHub OAuth ---------------------------------------------------------- //
-
-  // Can users use GitHub credentials to login to Phabricator?
-  'github.auth-enabled'         => true,
-
-  // Can users use GitHub credentials to create new Phabricator accounts?
-  'github.registration-enabled' => true,
-
-  // Are GitHub accounts permanently linked to Phabricator accounts, or can
-  // the user unlink them?
-  'github.auth-permanent'       => false,
-
-  // The GitHub "Client ID" to use for GitHub API access.
-  'github.application-id'       => 'db47b40406179e8deefa',
-
-  // The GitHub "Secret" to use for GitHub API access.
-  'github.application-secret'   => '8336c0d6e9c5b2bebededb3657cd9186deac87ea',
-
-
-// -- Google OAuth ---------------------------------------------------------- //
-
-  // Can users use Google credentials to login to Phabricator?
-  'google.auth-enabled'         => true,
-
-  // Can users use Google credentials to create new Phabricator accounts?
-  'google.registration-enabled' => true,
-
-  // Are Google accounts permanently linked to Phabricator accounts, or can
-  // the user unlink them?
-  'google.auth-permanent'       => false,
-
-  // The Google "Client ID" to use for Google API access.
-  // 'google.application-id'       => '506219160378.apps.googleusercontent.com',
-  'google.application-id'	=> '872983807341.apps.googleusercontent.com',
-
-  // The Google "Client Secret" to use for Google API access.
-  // 'google.application-secret'   => '5Iu4KtZ9LRYPGlQHhat_IjK5',
-  'google.application-secret'	=> 'gEUkt3oRDeb2Uu6YJ6zw0-E4',
-
-// -- LDAP Auth ----------------------------------------------------- //
-  // Enable ldap auth
-  'ldap.auth-enabled'         => false,
-
-  // The LDAP server hostname
-  'ldap.hostname' => null,
-
-  // The LDAP server port
-  'ldap.port' => 389,
-
-  // The LDAP base domain name
-  'ldap.base_dn' => null,
-
-  // The attribute to be regarded as 'username'. Has to be unique
-  'ldap.search_attribute' => null,
-
-  // Perform a search to find a user
-  // Many LDAP installations do not have the username in the dn, if this is
-  // true for you set this to true and configure the username_attribute below
-  'ldap.search-first'         => false,
-
-  // The attribute to search for if you have to search for a user
-  'ldap.username-attribute' => null,
-
-  // The attribute(s) to be regarded as 'real name'.
-  // If more then one attribute is supplied the values of the attributes in
-  // the array will be joined
-  'ldap.real_name_attributes' => array(),
-
-  // A domain name to use when authenticating against Active Directory
-  // (e.g. 'example.com')
-  'ldap.activedirectory_domain' => null,
-
-  // The LDAP version
-  'ldap.version' => 3,
-
-  // LDAP Referrals Option
-  // Whether referrals should be followed by the client
-  // Should be set to 0 if you use Windows 2003 AD
-  'ldap.referrals' => true,
-
-  // The anonymous user name to use before searching a user.
-  // Many LDAP installations require login even before searching a user, set
-  // this option to enable it.
-  'ldap.anonymous-user-name'     => null,
-
-  // The password of the LDAP anonymous user.
-  'ldap.anonymous-user-password' => null,
-
-  // Whether to use STARTTLS
-  'ldap.start-tls' => false,
-
-
-// -- Disqus OAuth ---------------------------------------------------------- //
-
-  // Can users use Disqus credentials to login to Phabricator?
-  'disqus.auth-enabled'         => false,
-
-  // Can users use Disqus credentials to create new Phabricator accounts?
-  'disqus.registration-enabled' => true,
-
-  // Are Disqus accounts permanently linked to Phabricator accounts, or can
-  // the user unlink them?
-  'disqus.auth-permanent'       => false,
-
-  // The Disqus "Client ID" to use for Disqus API access.
-  'disqus.application-id'       => null,
-
-  // The Disqus "Client Secret" to use for Disqus API access.
-  'disqus.application-secret'   => null,
-
-
-// -- Phabricator OAuth ----------------------------------------------------- //
-
-  // Meta-town -- Phabricator is itself an OAuth Provider
-  // TODO -- T887 -- make this support multiple Phabricator instances!
-
-  // The URI of the Phabricator instance to use as an OAuth server.
-  'phabricator.oauth-uri'            => null,
-
-  // Can users use Phabricator credentials to login to Phabricator?
-  'phabricator.auth-enabled'         => false,
-
-  // Can users use Phabricator credentials to create new Phabricator accounts?
-  'phabricator.registration-enabled' => true,
-
-  // Are Phabricator accounts permanently linked to Phabricator accounts, or can
-  // the user unlink them?
-  'phabricator.auth-permanent'       => false,
-
-  // The Phabricator "Client ID" to use for Phabricator API access.
-  'phabricator.application-id'       => null,
-
-  // The Phabricator "Client Secret" to use for Phabricator API access.
-  'phabricator.application-secret'   => null,
 
 
 // -- Recaptcha ------------------------------------------------------------- //
@@ -1001,24 +841,19 @@ return array(
   // their changes when sending code for review. If you'd prefer not to use
   // this field, you can disable it here. You can also make it optional
   // (instead of required) below.
-  'differential.show-test-plan-field' => false,
+  'differential.show-test-plan-field' => true,
 
   // Differential has a required "Test Plan" field by default. You can make it
   // optional by setting this to false. You can also completely remove it above,
   // if you prefer.
-  'differential.require-test-plan-field' => false,
+  'differential.require-test-plan-field' => true,
 
   // If you set this to true, users can "!accept" revisions via email (normally,
   // they can take other actions but can not "!accept"). This action is disabled
   // by default because email authentication can be configured to be very weak,
   // and, socially, email "!accept" is kind of sketchy and implies revisions may
   // not actually be receiving thorough review.
-  'differential.enable-email-accept' => true,
-
-  // If you set this to true, users won't need to login to view differential
-  // revisions.  Anonymous users will have read-only access and won't be able to
-  // interact with the revisions.
-  'differential.anonymous-access' => true,
+  'differential.enable-email-accept' => false,
 
   // List of file regexps that should be treated as if they are generated by
   // an automatic process, and thus get hidden by default in differential.
@@ -1031,14 +866,14 @@ return array(
   // is disabled by default because it's most likely not a behavior you want,
   // but it proves useful if you are working alone on a project and want to make
   // use of all of differential's features.
-  'differential.allow-self-accept' => true,
+  'differential.allow-self-accept' => false,
 
   // If you set this to true, any user can close any revision so long as it has
   // been accepted. This can be useful depending on your development model. For
   // example, github-style pull requests where the reviewer is often the
   // actual committer can benefit from turning this option to true. If false,
   // only the submitter can close a revision.
-  'differential.always-allow-close' => true,
+  'differential.always-allow-close' => false,
 
   // If you set this to true, any user can reopen a revision so long as it has
   // been closed.  This can be useful if a revision is accidentally closed or
@@ -1070,24 +905,10 @@ return array(
 
 // -- Maniphest ------------------------------------------------------------- //
 
-  'maniphest.enabled' => false,
-
-  // Array of custom fields for Maniphest tasks. For details on adding custom
-  // fields to Maniphest, see "Maniphest User Guide: Adding Custom Fields".
-  'maniphest.custom-fields' => array(),
-
-  // Class which drives custom field construction. See "Maniphest User Guide:
-  // Adding Custom Fields" in the documentation for more information.
-  'maniphest.custom-task-extensions-class' => 'ManiphestDefaultTaskExtensions',
-
   // What should the default task priority be in create flows?
   // See the constants in @{class:ManiphestTaskPriority} for valid values.
   // Defaults to "needs triage".
   'maniphest.default-priority' => 90,
-
-// -- Phriction ------------------------------------------------------------- //
-
-  'phriction.enabled' => false,
 
 // -- Phame ----------------------------------------------------------------- //
 
@@ -1228,7 +1049,7 @@ return array(
   // If you want syntax highlighting for other languages than PHP then you can
   // install the python package 'Pygments', make sure the 'pygmentize' script is
   //  available in the $PATH of the webserver, and then enable this.
-  'pygments.enabled'            => true,
+  'pygments.enabled'            => false,
 
   // In places that we display a dropdown to syntax-highlight code,
   // this is where that list is defined.
