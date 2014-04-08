@@ -1098,8 +1098,13 @@ final class DifferentialTransactionEditor
 
     $original_title = $object->getOriginalTitle();
 
-    $subject = "D{$id}: {$title}";
-    $thread_topic = "D{$id}: {$original_title}";
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $subject = "D{$id}: {$title}";
+      $thread_topic = "D{$id}: {$original_title}";
+    } else {
+      $subject = "{$title}";
+      $thread_topic = "{$original_title}";
+    }
 
     return id(new PhabricatorMetaMTAMail())
       ->setSubject($subject)
@@ -1122,21 +1127,24 @@ final class DifferentialTransactionEditor
     }
 
     $changed_uri = $this->getChangedPriorToCommitURI();
-    if ($changed_uri) {
-      $body->addTextSection(
-        pht('CHANGED PRIOR TO COMMIT'),
-        $changed_uri);
-    }
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      if ($changed_uri) {
+        $body->addTextSection(
+          pht('CHANGED PRIOR TO COMMIT'),
+          $changed_uri);
+      }
 
-    if ($inlines) {
-      $body->addTextSection(
-        pht('INLINE COMMENTS'),
-        $this->renderInlineCommentsForMail($object, $inlines));
-    }
+      if ($inlines) {
+        $body->addTextSection(
+          pht('INLINE COMMENTS'),
+          $this->renderInlineCommentsForMail($object, $inlines));
+      }
 
-    $body->addTextSection(
-      pht('REVISION DETAIL'),
-      PhabricatorEnv::getProductionURI('/D'.$object->getID()));
+      $body->addTextSection(
+        pht('REVISION DETAIL'),
+        PhabricatorEnv::getProductionURI('/D'.$object->getID()));
+
+    }
 
     $update_xaction = null;
     foreach ($xactions as $xaction) {
@@ -1147,12 +1155,32 @@ final class DifferentialTransactionEditor
       }
     }
 
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      if ($inlines) {
+        $body->addRawSection(
+          $this->renderInlineCommentsForMail($object, $inlines));
+      }
+
+      if ($update_xaction || trim($body->render()) != "") {
+        $body->addRawSection(
+          PhabricatorEnv::getProductionURI('/D'.$object->getID()));
+      } else {
+        return null;
+      }
+    }
+
     if ($update_xaction) {
       $diff = $this->requireDiff($update_xaction->getNewValue(), true);
 
-      $body->addTextSection(
-        pht('AFFECTED FILES'),
-        $this->renderAffectedFilesForMail($diff));
+      if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+        $body->addTextSection(
+          pht('AFFECTED FILES'),
+          $this->renderAffectedFilesForMail($diff));
+      } else {
+        $body->addTextSection(
+          pht('Files:'),
+          $this->renderAffectedFilesForMail($diff));
+      }
 
       $config_key_inline = 'metamta.differential.inline-patches';
       $config_inline = PhabricatorEnv::getEnvConfig($config_key_inline);
@@ -1165,9 +1193,13 @@ final class DifferentialTransactionEditor
         $lines = count(phutil_split_lines($patch));
 
         if ($config_inline && ($lines <= $config_inline)) {
-          $body->addTextSection(
-            pht('CHANGE DETAILS'),
-            $patch);
+          if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+            $body->addTextSection(
+              pht('CHANGE DETAILS'),
+              $patch);
+          } else {
+            $body->addRawSection($patch);
+          }
         }
 
         if ($config_attach) {

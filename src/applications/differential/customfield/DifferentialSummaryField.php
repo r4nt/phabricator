@@ -165,7 +165,11 @@ final class DifferentialSummaryField
       return;
     }
 
-    $body->addTextSection(pht('REVISION SUMMARY'), $summary);
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $body->addTextSection(pht('REVISION SUMMARY'), $summary);
+    } else {
+      $body->addRawSection($summary);
+    }
   }
 
 }

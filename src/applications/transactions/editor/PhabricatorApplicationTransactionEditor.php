@@ -1717,6 +1717,9 @@ abstract class PhabricatorApplicationTransactionEditor
 
     $template = $this->buildMailTemplate($object);
     $body = $this->buildMailBody($object, $xactions);
+    if (!$body) {
+      return null;
+    }
 
     $mail_tags = $this->getMailTags($object, $xactions);
     $action = $this->getMailAction($object, $xactions);
@@ -1886,7 +1889,9 @@ abstract class PhabricatorApplicationTransactionEditor
     }
 
     $body = new PhabricatorMetaMTAMailBody();
-    $body->addRawSection(implode("\n", $headers));
+    if (!PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $body->addRawSection(implode("\n", $headers));
+    }
 
     foreach ($comments as $comment) {
       $body->addRawSection($comment);
