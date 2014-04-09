@@ -472,7 +472,7 @@ final class PhabricatorMetaMTAMail extends PhabricatorMetaMTADAO {
                   $add_re);
               }
 
-              if ($add_re) {
+              if ($add_re && !$is_first) {
                 $subject[] = 'Re:';
               }
             }
