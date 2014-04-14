@@ -30,6 +30,10 @@ final class PhabricatorMetaMTAMailBody {
     return $this;
   }
 
+  public function addGreeting($text) {
+    array_unshift($this->sections, $text);
+    return $this;
+  }
 
   /**
    * Add a block of text with a section header. This is rendered like this:

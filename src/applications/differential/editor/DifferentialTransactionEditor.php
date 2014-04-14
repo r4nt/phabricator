@@ -1117,6 +1117,27 @@ final class DifferentialTransactionEditor
 
     $body = parent::buildMailBody($object, $xactions);
 
+    if ($this->getIsNewObject() &&
+        PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      $phids = array();
+      foreach ($object->getReviewerStatus() as $reviewer) {
+        if ($reviewer->isUser()) {
+          $phids[] = $reviewer->getReviewerPHID();
+        }
+      }
+      $handles = id(new PhabricatorHandleQuery())
+        ->withPHIDs($phids)
+        ->setViewer($this->getActor())
+        ->execute();
+      $names = array();
+      foreach ($handles as $handle) {
+        $names[] = $handle->getName();
+      }
+      if (!empty($names)) {
+        $body->addGreeting('Hi ' . join(', ', $names) . ',');
+      }
+    }
+
     $type_inline = DifferentialTransaction::TYPE_INLINE;
 
     $inlines = array();
