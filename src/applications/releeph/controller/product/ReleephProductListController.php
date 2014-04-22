@@ -37,7 +37,7 @@ final class ReleephProductListController extends ReleephController
 
       $item = id(new PHUIObjectItemView())
         ->setHeader($product->getName())
-        ->setHref($this->getApplicationURI("project/{$id}/"));
+        ->setHref($this->getApplicationURI("product/{$id}/"));
 
       if (!$product->getIsActive()) {
         $item->setDisabled(true);
@@ -53,7 +53,7 @@ final class ReleephProductListController extends ReleephController
           ),
           'r'.$repo->getCallsign()));
 
-      $arc = $product->loadArcanistProject();
+      $arc = $product->getArcanistProject();
       if ($arc) {
         $item->addAttribute($arc->getName());
       }
@@ -70,7 +70,7 @@ final class ReleephProductListController extends ReleephController
     $crumbs->addAction(
       id(new PHUIListItemView())
         ->setName(pht('Create Product'))
-        ->setHref($this->getApplicationURI('project/create/'))
+        ->setHref($this->getApplicationURI('product/create/'))
         ->setIcon('create'));
 
     return $crumbs;

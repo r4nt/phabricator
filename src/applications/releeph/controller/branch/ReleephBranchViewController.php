@@ -44,20 +44,40 @@ final class ReleephBranchViewController extends ReleephBranchController
     assert_instances_of($requests, 'ReleephRequest');
     $viewer = $this->getRequest()->getUser();
 
-    $branch = $this->getBranch();
+    // TODO: This is generally a bit sketchy, but we don't do this kind of
+    // thing elsewhere at the moment. For the moment it shouldn't be hugely
+    // costly, and we can batch things later. Generally, this commits fewer
+    // sins than the old code did.
 
-    // TODO: Really really gross.
-    $branch->populateReleephRequestHandles(
-      $viewer,
-      $requests);
+    $engine = id(new PhabricatorMarkupEngine())
+      ->setViewer($viewer);
 
-    $list = id(new ReleephRequestHeaderListView())
-      ->setOriginType('branch')
-      ->setUser($viewer)
-      ->setAphrontRequest($this->getRequest())
-      ->setReleephProject($branch->getProduct())
-      ->setReleephBranch($branch)
-      ->setReleephRequests($requests);
+    $list = array();
+    foreach ($requests as $pull) {
+      $field_list = PhabricatorCustomField::getObjectFields(
+        $pull,
+        PhabricatorCustomField::ROLE_VIEW);
+
+      $field_list
+        ->setViewer($viewer)
+        ->readFieldsFromStorage($pull);
+
+      foreach ($field_list->getFields() as $field) {
+        if ($field->shouldMarkup()) {
+          $field->setMarkupEngine($engine);
+        }
+      }
+
+      $list[] = id(new ReleephRequestView())
+        ->setUser($viewer)
+        ->setCustomFields($field_list)
+        ->setPullRequest($pull)
+        ->setIsListView(true);
+    }
+
+    // This is quite sketchy, but the list has not actually rendered yet, so
+    // this still allows us to batch the markup rendering.
+    $engine->process();
 
     return $list;
   }
@@ -87,13 +107,15 @@ final class ReleephBranchViewController extends ReleephBranchController
     $crumbs = parent::buildApplicationCrumbs();
 
     $branch = $this->getBranch();
-    $create_uri = $branch->getURI('request/');
-    $crumbs->addAction(
-      id(new PHUIListItemView())
-        ->setHref($create_uri)
-        ->setName(pht('New Pull Request'))
-        ->setIcon('create')
-        ->setDisabled(!$branch->isActive()));
+    if ($branch) {
+      $pull_uri = $this->getApplicationURI('branch/pull/'.$branch->getID().'/');
+      $crumbs->addAction(
+        id(new PHUIListItemView())
+          ->setHref($pull_uri)
+          ->setName(pht('New Pull Request'))
+          ->setIcon('create')
+          ->setDisabled(!$branch->isActive()));
+    }
 
     return $crumbs;
   }

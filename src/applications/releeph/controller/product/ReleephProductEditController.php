@@ -12,9 +12,10 @@ final class ReleephProductEditController extends ReleephProductController {
     $request = $this->getRequest();
     $viewer = $request->getUser();
 
-    $product = id(new ReleephProjectQuery())
+    $product = id(new ReleephProductQuery())
       ->setViewer($viewer)
       ->withIDs(array($this->productID))
+      ->needArcanistProjects(true)
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
@@ -138,14 +139,12 @@ final class ReleephProductEditController extends ReleephProductController {
         id(new AphrontFormStaticControl())
           ->setLabel(pht('Repository'))
           ->setValue(
-            $product
-              ->loadPhabricatorRepository()
-              ->getName()))
+            $product->getRepository()->getName()))
       ->appendChild(
         id(new AphrontFormStaticControl())
           ->setLabel(pht('Arc Project'))
           ->setValue(
-            $product->loadArcanistProject()->getName()))
+            $product->getArcanistProject()->getName()))
       ->appendChild(
         id(new AphrontFormStaticControl())
           ->setLabel(pht('Releeph Project PHID'))
@@ -204,7 +203,7 @@ final class ReleephProductEditController extends ReleephProductController {
     $form
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->addCancelButton('/releeph/project/')
+          ->addCancelButton('/releeph/product/')
           ->setValue(pht('Save')));
 
     $box = id(new PHUIObjectBoxView())

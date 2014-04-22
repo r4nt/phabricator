@@ -1,13 +1,14 @@
 <?php
 
-final class ReleephProjectQuery
+final class ReleephProductQuery
   extends PhabricatorCursorPagedPolicyAwareQuery {
 
   private $active;
   private $ids;
   private $phids;
+  private $repositoryPHIDs;
 
-  private $needRepositories;
+  private $needArcanistProjects;
 
   private $order    = 'order-id';
   const ORDER_ID    = 'order-id';
@@ -30,6 +31,16 @@ final class ReleephProjectQuery
 
   public function withPHIDs(array $phids) {
     $this->phids = $phids;
+    return $this;
+  }
+
+  public function withRepositoryPHIDs(array $repository_phids) {
+    $this->repositoryPHIDs = $repository_phids;
+    return $this;
+  }
+
+  public function needArcanistProjects($need) {
+    $this->needArcanistProjects = $need;
     return $this;
   }
 
@@ -71,6 +82,29 @@ final class ReleephProjectQuery
     return $projects;
   }
 
+  public function didFilterPage(array $products) {
+
+    if ($this->needArcanistProjects) {
+      $project_ids = array_filter(mpull($products, 'getArcanistProjectID'));
+      if ($project_ids) {
+        $projects = id(new PhabricatorRepositoryArcanistProject())
+          ->loadAllWhere('id IN (%Ld)', $project_ids);
+        $projects = mpull($projects, null, 'getID');
+      } else {
+        $projects = array();
+      }
+
+      foreach ($products as $product) {
+        $project_id = $product->getArcanistProjectID();
+        $project = idx($projects, $project_id);
+        $product->attachArcanistProject($project);
+      }
+    }
+
+    return $products;
+  }
+
+
   private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
@@ -81,18 +115,25 @@ final class ReleephProjectQuery
         (int)$this->active);
     }
 
-    if ($this->ids) {
+    if ($this->ids !== null) {
       $where[] = qsprintf(
         $conn_r,
         'id IN (%Ls)',
         $this->ids);
     }
 
-    if ($this->phids) {
+    if ($this->phids !== null) {
       $where[] = qsprintf(
         $conn_r,
         'phid IN (%Ls)',
         $this->phids);
+    }
+
+    if ($this->repositoryPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn_r,
+        'repositoryPHID IN (%Ls)',
+        $this->repositoryPHIDs);
     }
 
     $where[] = $this->buildPagingClause($conn_r);
