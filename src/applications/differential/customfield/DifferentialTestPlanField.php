@@ -186,6 +186,10 @@ final class DifferentialTestPlanField
     PhabricatorApplicationTransactionEditor $editor,
     array $xactions) {
 
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      return;
+    }
+
     if (!$editor->getIsNewObject()) {
       return;
     }

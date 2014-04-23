@@ -24,6 +24,10 @@ final class DifferentialChangesSinceLastUpdateField
     PhabricatorApplicationTransactionEditor $editor,
     array $xactions) {
 
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      return;
+    }
+
     if ($editor->getIsNewObject()) {
       return;
     }

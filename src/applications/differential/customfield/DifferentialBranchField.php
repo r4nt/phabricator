@@ -59,6 +59,10 @@ final class DifferentialBranchField
     PhabricatorApplicationTransactionEditor $editor,
     array $xactions) {
 
+    if (PhabricatorEnv::getEnvConfig('minimal-email', false)) {
+      return;
+    }
+
     $status_accepted = ArcanistDifferentialRevisionStatus::ACCEPTED;
 
     // Show the "BRANCH" section only if there's a new diff or the revision
