@@ -3,6 +3,8 @@
 final class PhabricatorRepositoryCommitHeraldWorker
   extends PhabricatorRepositoryCommitParserWorker {
 
+  const MAX_FILES_SHOWN_IN_EMAIL = 1000;
+
   public function getRequiredLeaseTime() {
     // Herald rules may take a long time to process.
     return phutil_units('4 hours in seconds');
@@ -138,8 +140,14 @@ final class PhabricatorRepositoryCommitHeraldWorker
       ? PhabricatorEnv::getProductionURI('/D'.$revision->getID())
       : 'No revision.';
 
+    $limit = self::MAX_FILES_SHOWN_IN_EMAIL;
     $files = $adapter->loadAffectedPaths();
     sort($files);
+    if (count($files) > $limit) {
+      array_splice($files, $limit);
+      $files[] = '(This commit affected more than '.$limit.' files. '.
+        'Only '.$limit.' are shown here and additional ones are truncated.)';
+    }
     $files = implode("\n", $files);
 
     $xscript_id = $xscript->getID();

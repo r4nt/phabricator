@@ -1,7 +1,6 @@
 <?php
 
-final class HeraldTranscriptListController extends HeraldController
-  implements PhabricatorApplicationSearchResultsControllerInterface {
+final class HeraldTranscriptListController extends HeraldController {
 
   private $queryKey;
 
@@ -45,69 +44,6 @@ final class HeraldTranscriptListController extends HeraldController
       ->setNavigation($this->buildSideNavView());
 
     return $this->delegateToController($controller);
-  }
-
-
-  public function renderResultsList(
-    array $transcripts,
-    PhabricatorSavedQuery $query) {
-    assert_instances_of($transcripts, 'HeraldTranscript');
-
-    $viewer = $this->getRequest()->getUser();
-
-    // Render the table.
-    $handles = array();
-    if ($transcripts) {
-      $phids = mpull($transcripts, 'getObjectPHID', 'getObjectPHID');
-      $handles = $this->loadViewerHandles($phids);
-    }
-
-    $rows = array();
-    foreach ($transcripts as $xscript) {
-      $rows[] = array(
-        phabricator_date($xscript->getTime(), $viewer),
-        phabricator_time($xscript->getTime(), $viewer),
-        $handles[$xscript->getObjectPHID()]->renderLink(),
-        $xscript->getDryRun() ? pht('Yes') : '',
-        number_format((int)(1000 * $xscript->getDuration())).' ms',
-        phutil_tag(
-          'a',
-          array(
-            'href' => '/herald/transcript/'.$xscript->getID().'/',
-            'class' => 'button small grey',
-          ),
-          pht('View Transcript')),
-      );
-    }
-
-    $table = new AphrontTableView($rows);
-    $table->setHeaders(
-      array(
-        pht('Date'),
-        pht('Time'),
-        pht('Object'),
-        pht('Dry Run'),
-        pht('Duration'),
-        pht('View'),
-      ));
-    $table->setColumnClasses(
-      array(
-        '',
-        'right',
-        'wide wrap',
-        '',
-        '',
-        'action',
-      ));
-
-    // Render the whole page.
-    $panel = new AphrontPanelView();
-    $panel->setHeader(pht('Herald Transcripts'));
-    $panel->appendChild($table);
-    $panel->setNoBackground();
-
-    return $panel;
-
   }
 
 }

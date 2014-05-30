@@ -374,6 +374,11 @@ final class PhabricatorMarkupEngine {
         $engine = self::newMarkupEngine(array());
         $engine->setConfig('preserve-linebreaks', false);
         break;
+      case 'diffusion-readme':
+        $engine = self::newMarkupEngine(array());
+        $engine->setConfig('preserve-linebreaks', false);
+        $engine->setConfig('header.generate-toc', true);
+        break;
       case 'diviner':
         $engine = self::newMarkupEngine(array());
         $engine->setConfig('preserve-linebreaks', false);
@@ -470,6 +475,7 @@ final class PhabricatorMarkupEngine {
 
     $blocks = array();
     $blocks[] = new PhutilRemarkupEngineRemarkupQuotesBlockRule();
+    $blocks[] = new PhutilRemarkupEngineRemarkupReplyBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupLiteralBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupHeaderBlockRule();
     $blocks[] = new PhutilRemarkupEngineRemarkupHorizontalRuleBlockRule();
@@ -494,11 +500,14 @@ final class PhabricatorMarkupEngine {
     return $engine;
   }
 
-  public static function extractPHIDsFromMentions(array $content_blocks) {
+  public static function extractPHIDsFromMentions(
+    PhabricatorUser $viewer,
+    array $content_blocks) {
+
     $mentions = array();
 
     $engine = self::newDifferentialMarkupEngine();
-    $engine->setConfig('viewer', PhabricatorUser::getOmnipotentUser());
+    $engine->setConfig('viewer', $viewer);
 
     foreach ($content_blocks as $content_block) {
       $engine->markupText($content_block);
@@ -512,11 +521,12 @@ final class PhabricatorMarkupEngine {
   }
 
   public static function extractFilePHIDsFromEmbeddedFiles(
+    PhabricatorUser $viewer,
     array $content_blocks) {
     $files = array();
 
     $engine = self::newDifferentialMarkupEngine();
-    $engine->setConfig('viewer', PhabricatorUser::getOmnipotentUser());
+    $engine->setConfig('viewer', $viewer);
 
     foreach ($content_blocks as $content_block) {
       $engine->markupText($content_block);

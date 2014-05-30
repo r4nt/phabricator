@@ -381,6 +381,89 @@ final class PHUIIconExample extends PhabricatorUIExample {
       'fa-vimeo-square',
       'fa-try',
       'fa-plus-square-o',
+      'fa-space-shuttle',
+      'fa-slack',
+      'fa-envelope-square',
+      'fa-wordpress',
+      'fa-openid',
+      'fa-institution',
+      'fa-bank',
+      'fa-university',
+      'fa-mortar-board',
+      'fa-graduation-cap',
+      'fa-yahoo',
+      'fa-google',
+      'fa-reddit',
+      'fa-reddit-square',
+      'fa-stumbleupon-circle',
+      'fa-stumbleupon',
+      'fa-delicious',
+      'fa-digg',
+      'fa-pied-piper-square',
+      'fa-pied-piper',
+      'fa-pied-piper-alt',
+      'fa-drupal',
+      'fa-joomla',
+      'fa-language',
+      'fa-fax',
+      'fa-building',
+      'fa-child',
+      'fa-paw',
+      'fa-spoon',
+      'fa-cube',
+      'fa-cubes',
+      'fa-behance',
+      'fa-behance-square',
+      'fa-steam',
+      'fa-steam-square',
+      'fa-recycle',
+      'fa-automobile',
+      'fa-car',
+      'fa-cab',
+      'fa-tree',
+      'fa-spotify',
+      'fa-deviantart',
+      'fa-soundcloud',
+      'fa-database',
+      'fa-file-pdf-o',
+      'fa-file-word-o',
+      'fa-file-excel-o',
+      'fa-file-powerpoint-o',
+      'fa-file-photo-o',
+      'fa-file-picture-o',
+      'fa-file-image-o',
+      'fa-file-zip-o',
+      'fa-file-archive-o',
+      'fa-file-sound-o',
+      'fa-file-movie-o',
+      'fa-file-code-o',
+      'fa-vine',
+      'fa-codepen',
+      'fa-jsfiddle',
+      'fa-life-bouy',
+      'fa-support',
+      'fa-life-ring',
+      'fa-circle-o-notch',
+      'fa-rebel',
+      'fa-empire',
+      'fa-git-square',
+      'fa-git',
+      'fa-hacker-news',
+      'fa-tencent-weibo',
+      'fa-qq',
+      'fa-wechat',
+      'fa-send',
+      'fa-paper-plane',
+      'fa-send-o',
+      'fa-paper-plane-o',
+      'fa-history',
+      'fa-circle-thin',
+      'fa-header',
+      'fa-paragraph',
+      'fa-sliders',
+      'fa-share-alt',
+      'fa-share-alt-square',
+      'fa-bomb',
     );
   }
 
@@ -423,15 +506,15 @@ final class PHUIIconExample extends PhabricatorUIExample {
     foreach ($colors as $color) {
       $cicons[] = id(new PHUIIconView())
         ->addClass('phui-example-icon-transform')
-        ->setFontAwesome('fa-tag '.$color)
+        ->setIconFont('fa-tag '.$color)
         ->setText(pht('fa-tag %s', $color));
     }
     $ficons = array();
+    sort($fas);
     foreach ($fas as $fa) {
-
       $ficons[] = id(new PHUIIconView())
         ->addClass('phui-example-icon-name')
-        ->setFontAwesome($fa)
+        ->setIconFont($fa)
         ->setText($fa);
     }
 
@@ -495,21 +578,6 @@ final class PHUIIconExample extends PhabricatorUIExample {
       ->setSpriteSheet(PHUIIconView::SPRITE_PAYMENTS)
       ->setSpriteIcon('googlecheckout');
 
-    $actions = array(
-      'settings-grey',
-      'heart-grey',
-      'tag-grey',
-      'new-grey',
-      'search-grey',
-      'move-grey');
-    $actionview = array();
-    foreach ($actions as $action) {
-      $actionview[] = id(new PHUIIconView())
-        ->setSpriteSheet(PHUIIconView::SPRITE_ACTIONS)
-        ->setSpriteIcon($action)
-        ->setHref('#');
-    }
-
     $tokens = array(
       'like-1',
       'like-2',
@@ -545,10 +613,6 @@ final class PHUIIconExample extends PhabricatorUIExample {
       ->appendChild($ficons)
       ->addMargin(PHUI::MARGIN_LARGE);
 
-    $layout1 = id(new PHUIBoxView())
-      ->appendChild($actionview)
-      ->addMargin(PHUI::MARGIN_MEDIUM);
-
     $layout2 = id(new PHUIBoxView())
       ->appendChild(array($person1, $person2, $person3))
       ->addMargin(PHUI::MARGIN_MEDIUM);
@@ -569,17 +633,21 @@ final class PHUIIconExample extends PhabricatorUIExample {
       ->appendChild($loginview)
       ->addMargin(PHUI::MARGIN_MEDIUM);
 
+    $fa_link = phutil_tag(
+      'a',
+      array(
+        'href' => 'http://fontawesome.io'
+      ),
+      'http://fontawesome.io');
+    $fa_text = pht('Font Awesome by Dave Gandy - %s', $fa_link);
+
     $fontawesome = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Font Awesome'))
+      ->setHeaderText($fa_text)
       ->appendChild($layout_fa);
 
     $transforms = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Colors and Transforms'))
       ->appendChild($layout_cicons);
-
-    $wrap1 = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Action Icons!'))
-      ->appendChild($layout1);
 
     $wrap2 = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('People!'))
@@ -605,7 +673,6 @@ final class PHUIIconExample extends PhabricatorUIExample {
         array(
           $fontawesome,
           $transforms,
-          $wrap1,
           $wrap2,
           $wrap3,
           $wrap4,

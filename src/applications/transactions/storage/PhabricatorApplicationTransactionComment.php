@@ -2,7 +2,10 @@
 
 abstract class PhabricatorApplicationTransactionComment
   extends PhabricatorLiskDAO
-  implements PhabricatorMarkupInterface, PhabricatorPolicyInterface {
+  implements
+    PhabricatorMarkupInterface,
+    PhabricatorPolicyInterface,
+    PhabricatorDestructableInterface {
 
   const MARKUP_FIELD_COMMENT  = 'markup:comment';
 
@@ -54,6 +57,19 @@ abstract class PhabricatorApplicationTransactionComment
 
   public function getContentSource() {
     return PhabricatorContentSource::newFromSerialized($this->contentSource);
+  }
+
+  public function getIsRemoved() {
+    return ($this->getIsDeleted() == 2);
+  }
+
+  public function setIsRemoved($removed) {
+    if ($removed) {
+      $this->setIsDeleted(2);
+    } else {
+      $this->setIsDeleted(0);
+    }
+    return $this;
   }
 
 
@@ -116,6 +132,16 @@ abstract class PhabricatorApplicationTransactionComment
   public function describeAutomaticCapability($capability) {
     // TODO: (T603) Policies are murky.
     return null;
+  }
+
+
+/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+    $this->openTransaction();
+      $this->delete();
+    $this->saveTransaction();
   }
 
 }

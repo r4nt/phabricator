@@ -136,8 +136,7 @@ final class PhabricatorSettingsPanelEmailAddresses
 
     if ($editable) {
       $icon = id(new PHUIIconView())
-        ->setSpriteSheet(PHUIIconView::SPRITE_ICONS)
-        ->setSpriteIcon('new');
+        ->setIconFont('fa-plus');
 
       $button = new PHUIButtonView();
       $button->setText(pht('Add New Address'));
@@ -329,6 +328,11 @@ final class PhabricatorSettingsPanelEmailAddresses
     $email_id) {
 
     $user = $request->getUser();
+
+    $token = id(new PhabricatorAuthSessionEngine())->requireHighSecuritySession(
+      $user,
+      $request,
+      $this->getPanelURI());
 
     // NOTE: You can only make your own verified addresses primary.
     $email = id(new PhabricatorUserEmail())->loadOneWhere(

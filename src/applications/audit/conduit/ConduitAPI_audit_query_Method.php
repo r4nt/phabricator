@@ -10,11 +10,16 @@ final class ConduitAPI_audit_query_Method extends ConduitAPI_audit_Method {
   }
 
   public function defineParamTypes() {
+    $statuses = array(
+      'status-any',
+      'status-open',
+    );
+    $status_const = $this->formatStringConstants($statuses);
+
     return array(
       'auditorPHIDs'  => 'optional list<phid>',
       'commitPHIDs'   => 'optional list<phid>',
-      'status'        => 'optional enum<"status-any", "status-open"> '.
-                         '(default = "status-any")',
+      'status'        => 'optional '.$status_const.' (default = "status-any")',
       'offset'        => 'optional int',
       'limit'         => 'optional int (default = 100)',
     );
@@ -31,7 +36,8 @@ final class ConduitAPI_audit_query_Method extends ConduitAPI_audit_Method {
 
   protected function execute(ConduitAPIRequest $request) {
 
-    $query = new PhabricatorAuditQuery();
+    $query = id(new DiffusionCommitQuery())
+      ->setViewer($request->getUser());
 
     $auditor_phids = $request->getValue('auditorPHIDs', array());
     if ($auditor_phids) {
@@ -40,26 +46,31 @@ final class ConduitAPI_audit_query_Method extends ConduitAPI_audit_Method {
 
     $commit_phids = $request->getValue('commitPHIDs', array());
     if ($commit_phids) {
-      $query->withCommitPHIDs($commit_phids);
+      $query->withPHIDs($commit_phids);
     }
 
-    $status = $request->getValue('status', PhabricatorAuditQuery::STATUS_ANY);
-    $query->withStatus($status);
+    $status = $request->getValue(
+      'status',
+      DiffusionCommitQuery::AUDIT_STATUS_ANY);
+    $query->withAuditStatus($status);
 
     $query->setOffset($request->getValue('offset', 0));
     $query->setLimit($request->getValue('limit', 100));
 
-    $requests = $query->execute();
+    $commits = $query->execute();
 
     $results = array();
-    foreach ($requests as $request) {
-      $results[] = array(
-        'id'              => $request->getID(),
-        'commitPHID'      => $request->getCommitPHID(),
-        'auditorPHID'     => $request->getAuditorPHID(),
-        'reasons'         => $request->getAuditReasons(),
-        'status'          => $request->getAuditStatus(),
-      );
+    foreach ($commits as $commit) {
+      $requests = $commit->getAudits();
+      foreach ($requests as $request) {
+        $results[] = array(
+          'id'              => $request->getID(),
+          'commitPHID'      => $request->getCommitPHID(),
+          'auditorPHID'     => $request->getAuditorPHID(),
+          'reasons'         => $request->getAuditReasons(),
+          'status'          => $request->getAuditStatus(),
+        );
+      }
     }
 
     return $results;

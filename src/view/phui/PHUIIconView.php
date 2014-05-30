@@ -3,13 +3,10 @@
 final class PHUIIconView extends AphrontTagView {
 
   const SPRITE_MINICONS = 'minicons';
-  const SPRITE_ACTIONS = 'actions';
   const SPRITE_APPS = 'apps';
   const SPRITE_TOKENS = 'tokens';
   const SPRITE_PAYMENTS = 'payments';
-  const SPRITE_ICONS = 'icons';
   const SPRITE_LOGIN = 'login';
-  const SPRITE_STATUS = 'status';
   const SPRITE_PROJECTS = 'projects';
   const SPRITE_BUTTONBAR = 'buttonbar';
 
@@ -23,7 +20,7 @@ final class PHUIIconView extends AphrontTagView {
 
   private $spriteIcon;
   private $spriteSheet;
-  private $fontAwesome;
+  private $iconFont;
 
   public function setHref($href) {
     $this->href = $href;
@@ -55,8 +52,8 @@ final class PHUIIconView extends AphrontTagView {
     return $this;
   }
 
-  public function setFontAwesome($fa) {
-    $this->fontAwesome = $fa;
+  public function setIconFont($icon) {
+    $this->iconFont = $icon;
     return $this;
   }
 
@@ -80,11 +77,11 @@ final class PHUIIconView extends AphrontTagView {
       $classes[] = 'sprite-'.$this->spriteSheet;
       $classes[] = $this->spriteSheet.'-'.$this->spriteIcon;
 
-    } elseif ($this->fontAwesome) {
+    } elseif ($this->iconFont) {
       require_celerity_resource('phui-font-icon-base-css');
       require_celerity_resource('font-fontawesome');
       $classes[] = 'phui-font-fa';
-      $classes[] = $this->fontAwesome;
+      $classes[] = $this->iconFont;
 
     } else {
       if ($this->headSize) {
@@ -101,6 +98,7 @@ final class PHUIIconView extends AphrontTagView {
     return array(
       'href' => $this->href,
       'style' => $style,
+      'aural' => false,
       'class' => $classes,
     );
   }

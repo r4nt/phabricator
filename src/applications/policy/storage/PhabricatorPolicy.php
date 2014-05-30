@@ -11,6 +11,7 @@ final class PhabricatorPolicy
   private $shortName;
   private $type;
   private $href;
+  private $workflow;
   private $icon;
 
   protected $rules = array();
@@ -132,25 +133,34 @@ final class PhabricatorPolicy
     return $this->href;
   }
 
+  public function setWorkflow($workflow) {
+    $this->workflow = $workflow;
+    return $this;
+  }
+
+  public function getWorkflow() {
+    return $this->workflow;
+  }
+
   public function getIcon() {
     switch ($this->getType()) {
       case PhabricatorPolicyType::TYPE_GLOBAL:
         static $map = array(
-          PhabricatorPolicies::POLICY_PUBLIC  => 'policy-public',
-          PhabricatorPolicies::POLICY_USER    => 'policy-all',
-          PhabricatorPolicies::POLICY_ADMIN   => 'policy-admin',
-          PhabricatorPolicies::POLICY_NOONE   => 'policy-noone',
+          PhabricatorPolicies::POLICY_PUBLIC  => 'fa-globe',
+          PhabricatorPolicies::POLICY_USER    => 'fa-users',
+          PhabricatorPolicies::POLICY_ADMIN   => 'fa-eye',
+          PhabricatorPolicies::POLICY_NOONE   => 'fa-ban',
         );
-        return idx($map, $this->getPHID(), 'policy-unknown');
+        return idx($map, $this->getPHID(), 'fa-question-circle');
       case PhabricatorPolicyType::TYPE_USER:
-        return 'policy-user';
+        return 'fa-user';
       case PhabricatorPolicyType::TYPE_PROJECT:
-        return 'policy-project';
+        return 'fa-briefcase';
       case PhabricatorPolicyType::TYPE_CUSTOM:
       case PhabricatorPolicyType::TYPE_MASKED:
-        return 'policy-custom';
+        return 'fa-certificate';
       default:
-        return 'policy-unknown';
+        return 'fa-question-circle';
     }
   }
 
@@ -229,16 +239,16 @@ final class PhabricatorPolicy
     $img = null;
     if ($icon) {
       $img = id(new PHUIIconView())
-        ->setSpriteSheet(PHUIIconView::SPRITE_STATUS)
-        ->setSpriteIcon($this->getIcon());
+        ->setIconFont($this->getIcon());
     }
 
     if ($this->getHref()) {
-      $desc = phutil_tag(
+      $desc = javelin_tag(
         'a',
         array(
           'href' => $this->getHref(),
           'class' => 'policy-link',
+          'sigil' => $this->getWorkflow() ? 'workflow' : null,
         ),
         array(
           $img,
@@ -256,7 +266,7 @@ final class PhabricatorPolicy
       case PhabricatorPolicyType::TYPE_PROJECT:
         return pht('%s (Project)', $desc);
       case PhabricatorPolicyType::TYPE_CUSTOM:
-        return pht('Custom Policy');
+        return $desc;
       case PhabricatorPolicyType::TYPE_MASKED:
         return pht(
           '%s (You do not have permission to view policy details.)',

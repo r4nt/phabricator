@@ -335,6 +335,7 @@
   font-size: 15px;
   min-height: 30px;
   line-height: 28px;
+  background: #000;
 }
 
 .device .phui-list-item-type-link
@@ -348,6 +349,10 @@
 
 .device-desktop .phabricator-application-menu .phui-list-item-view,
 .device-desktop .phabricator-application-menu .phui-list-item-name  {
+  display: none;
+}
+
+.phabricator-application-menu .phui-list-item-icon {
   display: none;
 }
 

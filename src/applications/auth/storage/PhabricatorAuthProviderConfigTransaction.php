@@ -7,6 +7,7 @@ final class PhabricatorAuthProviderConfigTransaction
   const TYPE_REGISTRATION   = 'config:registration';
   const TYPE_LINK           = 'config:link';
   const TYPE_UNLINK         = 'config:unlink';
+  const TYPE_TRUST_EMAILS   = "config:trustEmails";
   const TYPE_PROPERTY       = 'config:property';
 
   const PROPERTY_KEY        = 'auth:property';
@@ -41,9 +42,9 @@ final class PhabricatorAuthProviderConfigTransaction
     switch ($this->getTransactionType()) {
       case self::TYPE_ENABLE:
         if ($new) {
-          return 'new';
+          return 'fa-play';
         } else {
-          return 'delete';
+          return 'fa-pause';
         }
     }
 
@@ -118,6 +119,17 @@ final class PhabricatorAuthProviderConfigTransaction
         } else {
           return pht(
             '%s disabled account unlinking.',
+            $this->renderHandleLink($author_phid));
+        }
+        break;
+      case self::TYPE_TRUST_EMAILS:
+        if ($new) {
+          return pht(
+            '%s enabled email trust.',
+            $this->renderHandleLink($author_phid));
+        } else {
+          return pht(
+            '%s disabled email trust.',
             $this->renderHandleLink($author_phid));
         }
         break;

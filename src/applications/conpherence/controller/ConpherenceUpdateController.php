@@ -32,7 +32,7 @@ final class ConpherenceUpdateController
 
     $action = $request->getStr('action', ConpherenceUpdateActions::METADATA);
     $latest_transaction_id = null;
-    $response_mode = 'ajax';
+    $response_mode = $request->isAjax() ? 'ajax' : 'redirect';
     $error_view = null;
     $e_file = array();
     $errors = array();
@@ -55,6 +55,7 @@ final class ConpherenceUpdateController
         case ConpherenceUpdateActions::MESSAGE:
           $message = $request->getStr('text');
           $xactions = $editor->generateTransactionsFromText(
+            $user,
             $conpherence,
             $message);
           $delete_draft = true;

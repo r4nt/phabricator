@@ -14,6 +14,10 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
     return 'authentication';
   }
 
+  public function getShortDescription() {
+    return pht('Configure Login and Registration');
+  }
+
   public function getHelpURI() {
     // NOTE: Although reasonable help exists for this in "Configuring Accounts
     // and Registration", specifying a help URI here means we get the menu
@@ -40,6 +44,7 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
         ->setWorkflow(true)
         ->setHref('/logout/')
         ->setSelected(($controller instanceof PhabricatorLogoutController))
+        ->setAural(pht('Log Out'))
         ->setOrder(900);
       $items[] = $item;
     } else {
@@ -53,6 +58,7 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
           // TODO: Login icon?
           ->setIcon('power')
           ->setHref('/auth/start/')
+          ->setAural(pht('Log In'))
           ->setOrder(900);
         $items[] = $item;
       }
@@ -81,6 +87,7 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
         'register/(?:(?P<akey>[^/]+)/)?' => 'PhabricatorAuthRegisterController',
         'start/' => 'PhabricatorAuthStartController',
         'validate/' => 'PhabricatorAuthValidateController',
+        'finish/' => 'PhabricatorAuthFinishController',
         'unlink/(?P<pkey>[^/]+)/' => 'PhabricatorAuthUnlinkController',
         '(?P<action>link|refresh)/(?P<pkey>[^/]+)/'
           => 'PhabricatorAuthLinkController',
@@ -88,6 +95,8 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
           => 'PhabricatorAuthConfirmLinkController',
         'session/terminate/(?P<id>[^/]+)/'
           => 'PhabricatorAuthTerminateSessionController',
+        'session/downgrade/'
+          => 'PhabricatorAuthDowngradeSessionController',
       ),
 
       '/oauth/(?P<provider>\w+)/login/'
@@ -96,7 +105,11 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
       '/login/' => array(
         '' => 'PhabricatorAuthStartController',
         'email/' => 'PhabricatorEmailLoginController',
-        'etoken/(?P<token>\w+)/' => 'PhabricatorEmailTokenController',
+        'once/'.
+          '(?P<type>[^/]+)/'.
+          '(?P<id>\d+)/'.
+          '(?P<key>[^/]+)/'.
+          '(?:(?P<emailID>\d+)/)?' => 'PhabricatorAuthOneTimeLoginController',
         'refresh/' => 'PhabricatorRefreshCSRFController',
         'mustverify/' => 'PhabricatorMustVerifyEmailController',
       ),

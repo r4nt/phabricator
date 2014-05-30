@@ -10,7 +10,7 @@ final class PhabricatorApplicationConpherence extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Messaging');
+    return pht('Send Messages');
   }
 
   public function getIconName() {
@@ -51,7 +51,7 @@ final class PhabricatorApplicationConpherence extends PhabricatorApplication {
 
     $item = id(new PHUIListItemView())
       ->setName(pht('Conpherence Thread'))
-      ->setAppIcon('conpherence-dark')
+      ->setIcon('fa-comments')
       ->setWorkflow(true)
       ->setHref($this->getBaseURI().'new/');
     $items[] = $item;

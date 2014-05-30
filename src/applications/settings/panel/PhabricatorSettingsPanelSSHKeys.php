@@ -38,6 +38,11 @@ final class PhabricatorSettingsPanelSSHKeys
       return $this->renderKeyListView($request);
     }
 
+    $token = id(new PhabricatorAuthSessionEngine())->requireHighSecuritySession(
+      $viewer,
+      $request,
+      $this->getPanelURI());
+
     $id = nonempty($edit, $delete);
 
     if ($id && is_numeric($id)) {
@@ -201,8 +206,7 @@ final class PhabricatorSettingsPanelSSHKeys
     $header = new PHUIHeaderView();
 
     $upload_icon = id(new PHUIIconView())
-      ->setSpriteSheet(PHUIIconView::SPRITE_ICONS)
-      ->setSpriteIcon('upload');
+      ->setIconFont('fa-upload');
     $upload_button = id(new PHUIButtonView())
       ->setText(pht('Upload Public Key'))
       ->setHref($this->getPanelURI('?edit=true'))
@@ -217,8 +221,7 @@ final class PhabricatorSettingsPanelSSHKeys
     }
 
     $generate_icon = id(new PHUIIconView())
-      ->setSpriteSheet(PHUIIconView::SPRITE_ICONS)
-      ->setSpriteIcon('lock');
+      ->setIconFont('fa-lock');
     $generate_button = id(new PHUIButtonView())
       ->setText(pht('Generate Keypair'))
       ->setHref($this->getPanelURI('?generate=true'))
@@ -270,6 +273,12 @@ final class PhabricatorSettingsPanelSSHKeys
   private function processGenerate(AphrontRequest $request) {
     $user = $this->getUser();
     $viewer = $request->getUser();
+
+    $token = id(new PhabricatorAuthSessionEngine())->requireHighSecuritySession(
+      $viewer,
+      $request,
+      $this->getPanelURI());
+
 
     $is_self = ($user->getPHID() == $viewer->getPHID());
 

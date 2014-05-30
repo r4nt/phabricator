@@ -25,6 +25,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   const TABLE_SUMMARY = 'repository_summary';
   const TABLE_BADCOMMIT = 'repository_badcommit';
   const TABLE_LINTMESSAGE = 'repository_lintmessage';
+  const TABLE_PARENTS = 'repository_parents';
 
   const SERVE_OFF = 'off';
   const SERVE_READONLY = 'readonly';
@@ -1188,6 +1189,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $default_path = PhabricatorEnv::getEnvConfig(
       'repository.default-local-path');
     return Filesystem::isDescendant($this->getLocalPath(), $default_path);
+  }
+
+  public function canUsePathTree() {
+    return !$this->isSVN();
   }
 
   public function canMirror() {

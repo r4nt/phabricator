@@ -3,7 +3,7 @@
 final class PhabricatorApplicationDiffusion extends PhabricatorApplication {
 
   public function getShortDescription() {
-    return pht('Repository Browser');
+    return pht('Host and Browse Repositories');
   }
 
   public function getBaseURI() {
@@ -85,6 +85,7 @@ final class PhabricatorApplicationDiffusion extends PhabricatorApplication {
             'hosting/' => 'DiffusionRepositoryEditHostingController',
             '(?P<serve>serve)/' => 'DiffusionRepositoryEditHostingController',
           ),
+          'pathtree/(?P<dblob>.*)' => 'DiffusionPathTreeController',
           'mirror/' => array(
             'edit/(?:(?P<id>\d+)/)?' => 'DiffusionMirrorEditController',
             'delete/(?P<id>\d+)/' => 'DiffusionMirrorDeleteController',

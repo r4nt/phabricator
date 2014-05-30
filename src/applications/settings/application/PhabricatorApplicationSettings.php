@@ -7,7 +7,7 @@ final class PhabricatorApplicationSettings extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'User Preferences';
+    return pht('User Preferences');
   }
 
   public function getIconName() {
@@ -15,6 +15,10 @@ final class PhabricatorApplicationSettings extends PhabricatorApplication {
   }
 
   public function canUninstall() {
+    return false;
+  }
+
+  public function shouldAppearInLaunchView() {
     return false;
   }
 
@@ -46,6 +50,7 @@ final class PhabricatorApplicationSettings extends PhabricatorApplication {
         ->addClass('core-menu-item')
         ->setSelected($selected)
         ->setHref('/settings/')
+        ->setAural(pht('Settings'))
         ->setOrder(400);
       $items[] = $item;
     }

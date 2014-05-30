@@ -442,7 +442,7 @@ final class ManiphestReportController extends ManiphestController {
           }
         }
 
-        $base_link = '/maniphest/?allProjects[]=';
+        $base_link = '/maniphest/?allProjects=';
         $leftover_name = phutil_tag('em', array(), pht('(No Project)'));
         $col_header = pht('Project');
         $header = pht('Open Tasks by Project and Priority (%s)', $date);
@@ -663,13 +663,14 @@ final class ManiphestReportController extends ManiphestController {
     $tasks = queryfx_all(
       $conn_r,
       'SELECT t.* FROM %T t JOIN %T x ON x.objectPHID = t.phid
-        WHERE t.status != 0
+        WHERE t.status NOT IN (%Ls)
         AND x.oldValue IN (null, %Ls)
         AND x.newValue NOT IN (%Ls)
         AND t.dateModified >= %d
         AND x.dateCreated >= %d',
       $table->getTableName(),
       $xtable->getTableName(),
+      ManiphestTaskStatus::getOpenStatusConstants(),
       $open_status_list,
       $open_status_list,
       $window_epoch,

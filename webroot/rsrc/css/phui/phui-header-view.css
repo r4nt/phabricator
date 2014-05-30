@@ -50,6 +50,11 @@ body .phui-header-shell.phui-bleed-header
 
 .phui-header-view .phui-header-action-links {
   position: absolute;
+  top: 24px;
+  right: 12px;
+}
+
+.phui-object-box .phui-header-view .phui-header-action-links {
   top: 5px;
   right: 0;
 }
@@ -101,7 +106,7 @@ body.device-phone .phui-header-view {
   margin-top: 4px;
 }
 
-.phui-header-subheader .sprite-status {
+.phui-header-subheader .phui-icon-view {
   display: inline-block;
   margin: -2px 4px -2px 0;
 }

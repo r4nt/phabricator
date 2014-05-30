@@ -1,13 +1,111 @@
 <?php
 
 /**
- * @task setup  Setup Cache
+ * @task immutable  Immutable Cache
+ * @task setup      Setup Cache
  */
 final class PhabricatorCaches {
 
   public static function getNamespace() {
     return PhabricatorEnv::getEnvConfig('phabricator.cache-namespace');
   }
+
+  private static function newStackFromCaches(array $caches) {
+    $caches = self::addNamespaceToCaches($caches);
+    $caches = self::addProfilerToCaches($caches);
+    return id(new PhutilKeyValueCacheStack())
+      ->setCaches($caches);
+  }
+
+
+/* -(  Local Cache  )-------------------------------------------------------- */
+
+
+  /**
+   * Gets an immutable cache stack.
+   *
+   * This stack trades mutability away for improved performance. Normally, it is
+   * APC + DB.
+   *
+   * In the general case with multiple web frontends, this stack can not be
+   * cleared, so it is only appropriate for use if the value of a given key is
+   * permanent and immutable.
+   *
+   * @return PhutilKeyValueCacheStack Best immutable stack available.
+   * @task immutable
+   */
+  public static function getImmutableCache() {
+    static $cache;
+    if (!$cache) {
+      $caches = self::buildImmutableCaches();
+      $cache = self::newStackFromCaches($caches);
+    }
+    return $cache;
+  }
+
+
+  /**
+   * Build the immutable cache stack.
+   *
+   * @return list<PhutilKeyValueCache> List of caches.
+   * @task immutable
+   */
+  private static function buildImmutableCaches() {
+    $caches = array();
+
+    $apc = new PhutilKeyValueCacheAPC();
+    if ($apc->isAvailable()) {
+      $caches[] = $apc;
+    }
+
+    $caches[] = new PhabricatorKeyValueDatabaseCache();
+
+    return $caches;
+  }
+
+
+/* -(  Repository Graph Cache  )--------------------------------------------- */
+
+
+  public static function getRepositoryGraphL1Cache() {
+    static $cache;
+    if (!$cache) {
+      $caches = self::buildRepositoryGraphL1Caches();
+      $cache = self::newStackFromCaches($caches);
+    }
+    return $cache;
+  }
+
+  private static function buildRepositoryGraphL1Caches() {
+    $caches = array();
+
+    $request = new PhutilKeyValueCacheInRequest();
+    $request->setLimit(32);
+    $caches[] = $request;
+
+    $apc = new PhutilKeyValueCacheAPC();
+    if ($apc->isAvailable()) {
+      $caches[] = $apc;
+    }
+
+    return $caches;
+  }
+
+  public static function getRepositoryGraphL2Cache() {
+    static $cache;
+    if (!$cache) {
+      $caches = self::buildRepositoryGraphL2Caches();
+      $cache = self::newStackFromCaches($caches);
+    }
+    return $cache;
+  }
+
+  private static function buildRepositoryGraphL2Caches() {
+    $caches = array();
+    $caches[] = new PhabricatorKeyValueDatabaseCache();
+    return $caches;
+  }
+
 
 /* -(  Setup Cache  )-------------------------------------------------------- */
 
@@ -30,10 +128,7 @@ final class PhabricatorCaches {
     static $cache;
     if (!$cache) {
       $caches = self::buildSetupCaches();
-      $caches = self::addNamespaceToCaches($caches);
-      $caches = self::addProfilerToCaches($caches);
-      $cache = id(new PhutilKeyValueCacheStack())
-        ->setCaches($caches);
+      $cache = self::newStackFromCaches($caches);
     }
     return $cache;
   }

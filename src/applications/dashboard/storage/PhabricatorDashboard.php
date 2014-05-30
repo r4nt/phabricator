@@ -9,23 +9,61 @@ final class PhabricatorDashboard extends PhabricatorDashboardDAO
   protected $name;
   protected $viewPolicy;
   protected $editPolicy;
+  protected $layoutConfig = array();
+
+  private $panelPHIDs = self::ATTACHABLE;
+  private $panels = self::ATTACHABLE;
 
   public static function initializeNewDashboard(PhabricatorUser $actor) {
     return id(new PhabricatorDashboard())
       ->setName('')
       ->setViewPolicy(PhabricatorPolicies::POLICY_USER)
-      ->setEditPolicy($actor->getPHID());
+      ->setEditPolicy($actor->getPHID())
+      ->attachPanels(array())
+      ->attachPanelPHIDs(array());
   }
 
   public function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
+      self::CONFIG_SERIALIZATION => array(
+        'layoutConfig' => self::SERIALIZATION_JSON),
     ) + parent::getConfiguration();
   }
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
       PhabricatorDashboardPHIDTypeDashboard::TYPECONST);
+  }
+
+  public function getLayoutConfigObject() {
+    return PhabricatorDashboardLayoutConfig::newFromDictionary(
+      $this->getLayoutConfig());
+  }
+
+  public function setLayoutConfigFromObject(
+    PhabricatorDashboardLayoutConfig $object) {
+    $this->setLayoutConfig($object->toDictionary());
+    return $this;
+  }
+
+  public function attachPanelPHIDs(array $phids) {
+    $this->panelPHIDs = $phids;
+    return $this;
+  }
+
+  public function getPanelPHIDs() {
+    return $this->assertAttached($this->panelPHIDs);
+  }
+
+  public function attachPanels(array $panels) {
+    assert_instances_of($panels, 'PhabricatorDashboardPanel');
+    $this->panels = $panels;
+    return $this;
+  }
+
+  public function getPanels() {
+    return $this->assertAttached($this->panels);
   }
 
 

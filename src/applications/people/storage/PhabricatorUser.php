@@ -5,7 +5,8 @@ final class PhabricatorUser
   implements
     PhutilPerson,
     PhabricatorPolicyInterface,
-    PhabricatorCustomFieldInterface {
+    PhabricatorCustomFieldInterface,
+    PhabricatorDestructableInterface {
 
   const SESSION_TABLE = 'phabricator_session';
   const NAMETOKEN_TABLE = 'user_nametoken';
@@ -42,6 +43,7 @@ final class PhabricatorUser
   private $customFields = self::ATTACHABLE;
 
   private $alternateCSRFString = self::ATTACHABLE;
+  private $session = self::ATTACHABLE;
 
   protected function readField($field) {
     switch ($field) {
@@ -138,6 +140,10 @@ final class PhabricatorUser
     return $this->sex;
   }
 
+  public function getMonogram() {
+    return '@'.$this->getUsername();
+  }
+
   public function getTranslation() {
     try {
       if ($this->translation &&
@@ -176,6 +182,19 @@ final class PhabricatorUser
       ->queueDocumentForIndexing($this->getPHID());
 
     return $result;
+  }
+
+  public function attachSession(PhabricatorAuthSession $session) {
+    $this->session = $session;
+    return $this;
+  }
+
+  public function getSession() {
+    return $this->assertAttached($this->session);
+  }
+
+  public function hasSession() {
+    return ($this->session !== self::ATTACHABLE);
   }
 
   private function generateConduitCertificate() {
@@ -321,60 +340,6 @@ final class PhabricatorUser
     $vec = $vec.$key.$time_block;
 
     return substr(PhabricatorHash::digest($vec), 0, $len);
-  }
-
-  private function generateEmailToken(
-    PhabricatorUserEmail $email,
-    $offset = 0) {
-
-    $key = implode(
-      '-',
-      array(
-        PhabricatorEnv::getEnvConfig('phabricator.csrf-key'),
-        $this->getPHID(),
-        $email->getVerificationCode(),
-      ));
-
-    return $this->generateToken(
-      time() + ($offset * self::EMAIL_CYCLE_FREQUENCY),
-      self::EMAIL_CYCLE_FREQUENCY,
-      $key,
-      self::EMAIL_TOKEN_LENGTH);
-  }
-
-  public function validateEmailToken(
-    PhabricatorUserEmail $email,
-    $token) {
-    for ($ii = -1; $ii <= 1; $ii++) {
-      $valid = $this->generateEmailToken($email, $ii);
-      if ($token == $valid) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public function getEmailLoginURI(PhabricatorUserEmail $email = null) {
-    if (!$email) {
-      $email = $this->loadPrimaryEmail();
-      if (!$email) {
-        throw new Exception("User has no primary email!");
-      }
-    }
-    $token = $this->generateEmailToken($email);
-
-    $uri = '/login/etoken/'.$token.'/';
-    try {
-      $uri = PhabricatorEnv::getProductionURI($uri);
-    } catch (Exception $ex) {
-      // If a user runs `bin/auth recover` before configuring the base URI,
-      // just show the path. We don't have any way to figure out the domain.
-      // See T4132.
-    }
-
-    $uri = new PhutilURI($uri);
-
-    return $uri->alter('email', $email->getAddress());
   }
 
   public function attachUserProfile(PhabricatorUserProfile $profile) {
@@ -548,7 +513,12 @@ final class PhabricatorUser
 
     $base_uri = PhabricatorEnv::getProductionURI('/');
 
-    $uri = $this->getEmailLoginURI();
+    $engine = new PhabricatorAuthSessionEngine();
+    $uri = $engine->getOneTimeLoginURI(
+      $this,
+      $this->loadPrimaryEmail(),
+      PhabricatorAuthSessionEngine::ONETIME_WELCOME);
+
     $body = <<<EOBODY
 Welcome to Phabricator!
 
@@ -592,7 +562,11 @@ EOBODY;
 
     $password_instructions = null;
     if (PhabricatorAuthProviderPassword::getPasswordProvider()) {
-      $uri = $this->getEmailLoginURI();
+      $engine = new PhabricatorAuthSessionEngine();
+      $uri = $engine->getOneTimeLoginURI(
+        $this,
+        null,
+        PhabricatorAuthSessionEngine::ONETIME_USERNAME);
       $password_instructions = <<<EOTXT
 If you use a password to login, you'll need to reset it before you can login
 again. You can reset your password by following this link:
@@ -692,7 +666,11 @@ EOBODY;
   }
 
   public function getFullName() {
-    return $this->getUsername().' ('.$this->getRealName().')';
+    if (strlen($this->getRealName())) {
+      return $this->getUsername().' ('.$this->getRealName().')';
+    } else {
+      return $this->getUsername();
+    }
   }
 
   public function __toString() {
@@ -799,5 +777,68 @@ EOBODY;
     $this->customFields = $fields;
     return $this;
   }
+
+
+/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $this->delete();
+
+      $externals = id(new PhabricatorExternalAccount())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($externals as $external) {
+        $external->delete();
+      }
+
+      $prefs = id(new PhabricatorUserPreferences())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($prefs as $pref) {
+        $pref->delete();
+      }
+
+      $profiles = id(new PhabricatorUserProfile())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($profiles as $profile) {
+        $profile->delete();
+      }
+
+      $keys = id(new PhabricatorUserSSHKey())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($keys as $key) {
+        $key->delete();
+      }
+
+      $emails = id(new PhabricatorUserEmail())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($emails as $email) {
+        $email->delete();
+      }
+
+      $sessions = id(new PhabricatorAuthSession())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($sessions as $session) {
+        $session->delete();
+      }
+
+      $factors = id(new PhabricatorAuthFactorConfig())->loadAllWhere(
+        'userPHID = %s',
+        $this->getPHID());
+      foreach ($factors as $factor) {
+        $factor->delete();
+      }
+
+    $this->saveTransaction();
+  }
+
 
 }

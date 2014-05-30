@@ -27,12 +27,16 @@ class AphrontDefaultApplicationConfiguration
   }
 
   protected function getResourceURIMapRules() {
+    $extensions = CelerityResourceController::getSupportedResourceTypes();
+    $extensions = array_keys($extensions);
+    $extensions = implode('|', $extensions);
+
     return array(
       '/res/' => array(
         '(?:(?P<mtime>[0-9]+)T/)?'.
         '(?P<library>[^/]+)/'.
         '(?P<hash>[a-f0-9]{8})/'.
-        '(?P<path>.+\.(?:css|js|jpg|png|swf|gif|woff))'
+        '(?P<path>.+\.(?:'.$extensions.'))'
           => 'CelerityPhabricatorResourceController',
       ),
     );
@@ -117,6 +121,51 @@ class AphrontDefaultApplicationConfiguration
         ->appendParagraph($ex->getMessage())
         ->appendParagraph($ex->getRateExplanation())
         ->addCancelButton('/', pht('Okaaaaaaaaaaaaaay...'));
+
+      $response = new AphrontDialogResponse();
+      $response->setDialog($dialog);
+      return $response;
+    }
+
+    if ($ex instanceof PhabricatorAuthHighSecurityRequiredException) {
+
+      $form = id(new PhabricatorAuthSessionEngine())->renderHighSecurityForm(
+        $ex->getFactors(),
+        $ex->getFactorValidationResults(),
+        $user,
+        $request);
+
+      $dialog = id(new AphrontDialogView())
+        ->setUser($user)
+        ->setTitle(pht('Entering High Security'))
+        ->setShortTitle(pht('Security Checkpoint'))
+        ->setWidth(AphrontDialogView::WIDTH_FORM)
+        ->addHiddenInput(AphrontRequest::TYPE_HISEC, true)
+        ->setErrors(
+          array(
+            pht(
+              'You are taking an action which requires you to enter '.
+              'high security.'),
+          ))
+        ->appendParagraph(
+          pht(
+            'High security mode helps protect your account from security '.
+            'threats, like session theft or someone messing with your stuff '.
+            'while you\'re grabbing a coffee. To enter high security mode, '.
+            'confirm your credentials.'))
+        ->appendChild($form->buildLayoutView())
+        ->appendParagraph(
+          pht(
+            'Your account will remain in high security mode for a short '.
+            'period of time. When you are finished taking sensitive '.
+            'actions, you should leave high security.'))
+        ->setSubmitURI($request->getPath())
+        ->addCancelButton($ex->getCancelURI())
+        ->addSubmitButton(pht('Enter High Security'));
+
+      foreach ($request->getPassthroughRequestParameters() as $key => $value) {
+        $dialog->addHiddenInput($key, $value);
+      }
 
       $response = new AphrontDialogResponse();
       $response->setDialog($dialog);
