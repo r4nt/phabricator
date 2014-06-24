@@ -3,6 +3,10 @@
 final class HeraldTranscriptSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
+  public function getResultTypeDescription() {
+    return pht('Herald Transcripts');
+  }
+
   public function getApplicationClassName() {
     return 'PhabricatorApplicationHerald';
   }
@@ -108,7 +112,6 @@ final class HeraldTranscriptSearchEngine
     $viewer = $this->requireViewer();
 
     $list = new PHUIObjectItemListView();
-    $list->setCards(true);
     foreach ($transcripts as $xscript) {
       $view_href = phutil_tag(
         'a',

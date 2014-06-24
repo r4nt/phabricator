@@ -7,12 +7,15 @@ final class PholioMock extends PholioDAO
     PhabricatorSubscribableInterface,
     PhabricatorTokenReceiverInterface,
     PhabricatorFlaggableInterface,
-    PhabricatorApplicationTransactionInterface {
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorProjectInterface,
+    PhabricatorDestructableInterface {
 
   const MARKUP_FIELD_DESCRIPTION  = 'markup:description';
 
   protected $authorPHID;
   protected $viewPolicy;
+  protected $editPolicy;
 
   protected $name;
   protected $originalName;
@@ -33,11 +36,17 @@ final class PholioMock extends PholioDAO
       ->executeOne();
 
     $view_policy = $app->getPolicy(PholioCapabilityDefaultView::CAPABILITY);
+    $edit_policy = $app->getPolicy(PholioCapabilityDefaultEdit::CAPABILITY);
 
     return id(new PholioMock())
       ->setAuthorPHID($actor->getPHID())
       ->attachImages(array())
-      ->setViewPolicy($view_policy);
+      ->setViewPolicy($view_policy)
+      ->setEditPolicy($edit_policy);
+  }
+
+  public function getMonogram() {
+    return 'M'.$this->getID();
   }
 
   public function getConfiguration() {
@@ -132,8 +141,8 @@ final class PholioMock extends PholioDAO
 
   public function getStatuses() {
     $options = array();
-    $options['closed'] = 'Closed';
-    $options['open'] = 'Open';
+    $options['open'] = pht('Open');
+    $options['closed'] = pht('Closed');
     return $options;
   }
 
@@ -173,7 +182,7 @@ final class PholioMock extends PholioDAO
       case PhabricatorPolicyCapability::CAN_VIEW:
         return $this->getViewPolicy();
       case PhabricatorPolicyCapability::CAN_EDIT:
-        return PhabricatorPolicies::POLICY_NOONE;
+        return $this->getEditPolicy();
     }
   }
 
@@ -246,6 +255,25 @@ final class PholioMock extends PholioDAO
     return array(
       $this->getAuthorPHID(),
     );
+  }
+
+
+/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $images = id(new PholioImage())->loadAllWhere(
+        'mockID = %d',
+        $this->getID());
+      foreach ($images as $image) {
+        $image->delete();
+      }
+
+      $this->delete();
+    $this->saveTransaction();
   }
 
 }

@@ -4,6 +4,7 @@ final class PhabricatorProjectBoardViewController
   extends PhabricatorProjectBoardController {
 
   private $id;
+  private $slug;
   private $handles;
   private $queryKey;
   private $filter;
@@ -13,7 +14,8 @@ final class PhabricatorProjectBoardViewController
   }
 
   public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
+    $this->id = idx($data, 'id');
+    $this->slug = idx($data, 'slug');
     $this->queryKey = idx($data, 'queryKey');
     $this->filter = (bool)idx($data, 'filter');
   }
@@ -24,12 +26,17 @@ final class PhabricatorProjectBoardViewController
 
     $project = id(new PhabricatorProjectQuery())
       ->setViewer($viewer)
-      ->needImages(true)
-      ->withIDs(array($this->id))
-      ->executeOne();
+      ->needImages(true);
+    if ($this->slug) {
+      $project->withSlugs(array($this->slug));
+    } else {
+      $project->withIDs(array($this->id));
+    }
+    $project = $project->executeOne();
     if (!$project) {
       return new Aphront404Response();
     }
+
     $this->setProject($project);
 
     $columns = id(new PhabricatorProjectColumnQuery())
@@ -162,7 +169,7 @@ final class PhabricatorProjectBoardViewController
         ->setHeader($column->getDisplayName())
         ->setHeaderColor($column->getHeaderColor());
       if (!$column->isDefaultColumn()) {
-        $panel->setEditURI('column/'.$column->getID().'/');
+        $panel->setEditURI($board_uri.'column/'.$column->getID().'/');
       }
       $panel->setHeaderAction(id(new PHUIIconView())
         ->setIconFont('fa-plus')
@@ -173,7 +180,6 @@ final class PhabricatorProjectBoardViewController
 
       $cards = id(new PHUIObjectItemListView())
         ->setUser($viewer)
-        ->setCards(true)
         ->setFlush(true)
         ->setAllowEmptyList(true)
         ->addSigil('project-column')
@@ -291,11 +297,6 @@ final class PhabricatorProjectBoardViewController
       ->setHref('#')
       ->addSigil('boards-filter-menu')
 
-/*
-      TODO: @chad, this looks really gnarly right now, at least in Safari.
-      ->setDropdown(true)
-*/
-
       ->setMetadata(
         array(
           'items' => hsprintf('%s', $filter_menu),
@@ -329,7 +330,6 @@ final class PhabricatorProjectBoardViewController
       ),
       array(
         'title' => pht('%s Board', $project->getName()),
-        'device' => true,
       ));
   }
 

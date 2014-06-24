@@ -1,7 +1,8 @@
 {
   "exclude": [
     "(^externals/)",
-    "(\\.lint-test$)"
+    "(^webroot/rsrc/externals/)",
+    "(/__tests__/data/)"
   ],
   "linters": {
     "chmod": {
@@ -26,7 +27,17 @@
         "(^externals/JsShrink/)",
         "(^webroot/rsrc/externals/raphael/)"
       ],
-      "flags": ["--config=support/jshint/jshintconfig"]
+      "jshint.jshintrc": "support/jshint/jshintconfig"
+    },
+    "json": {
+      "type": "json",
+      "include": [
+        "(^src/docs/book/.*\\.book$)",
+        "(^support/jshint/jshintconfig$)",
+        "(^\\.arcconfig$)",
+        "(^\\.arclint$)",
+        "(\\.json$)"
+      ]
     },
     "generated": {
       "type": "generated"
@@ -71,10 +82,7 @@
       "include": "(\\.php$)",
       "severity": {
         "16": "advice",
-        "29": "warning",
-        "31": "error",
-        "34": "error",
-        "35": "error"
+        "34": "error"
       },
       "xhpast.naminghook": "PhabricatorSymbolNameLinter"
     }

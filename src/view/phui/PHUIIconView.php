@@ -8,7 +8,6 @@ final class PHUIIconView extends AphrontTagView {
   const SPRITE_PAYMENTS = 'payments';
   const SPRITE_LOGIN = 'login';
   const SPRITE_PROJECTS = 'projects';
-  const SPRITE_BUTTONBAR = 'buttonbar';
 
   const HEAD_SMALL = 'phuihead-small';
   const HEAD_MEDIUM = 'phuihead-medium';
@@ -77,7 +76,7 @@ final class PHUIIconView extends AphrontTagView {
       $classes[] = 'sprite-'.$this->spriteSheet;
       $classes[] = $this->spriteSheet.'-'.$this->spriteIcon;
 
-    } elseif ($this->iconFont) {
+    } else if ($this->iconFont) {
       require_celerity_resource('phui-font-icon-base-css');
       require_celerity_resource('font-fontawesome');
       $classes[] = 'phui-font-fa';

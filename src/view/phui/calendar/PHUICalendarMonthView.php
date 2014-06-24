@@ -42,7 +42,7 @@ final class PHUICalendarMonthView extends AphrontView {
 
   public function render() {
     if (empty($this->user)) {
-      throw new Exception("Call setUser() before render()!");
+      throw new Exception('Call setUser() before render()!');
     }
 
     $events = msort($this->events, 'getEpochStart');
@@ -206,8 +206,7 @@ final class PHUICalendarMonthView extends AphrontView {
       $button_bar = new PHUIButtonBarView();
 
       $left_icon = id(new PHUIIconView())
-          ->setSpriteSheet(PHUIIconView::SPRITE_BUTTONBAR)
-          ->setSpriteIcon('chevron-left');
+          ->setIconFont('fa-chevron-left bluegrey');
       $left = id(new PHUIButtonView())
         ->setTag('a')
         ->setColor(PHUIButtonView::GREY)
@@ -216,8 +215,7 @@ final class PHUICalendarMonthView extends AphrontView {
         ->setIcon($left_icon);
 
       $right_icon = id(new PHUIIconView())
-          ->setSpriteSheet(PHUIIconView::SPRITE_BUTTONBAR)
-          ->setSpriteIcon('chevron-right');
+          ->setIconFont('fa-chevron-right bluegrey');
       $right = id(new PHUIButtonView())
         ->setTag('a')
         ->setColor(PHUIButtonView::GREY)

@@ -789,6 +789,9 @@ final class DifferentialTransactionEditor
     $actor_phid = $this->getActor()->getPHID();
     $actor_is_author = ($author_phid == $actor_phid);
 
+    $config_abandon_key = 'differential.always-allow-abandon';
+    $always_allow_abandon = PhabricatorEnv::getEnvConfig($config_abandon_key);
+
     $config_close_key = 'differential.always-allow-close';
     $always_allow_close = PhabricatorEnv::getEnvConfig($config_close_key);
 
@@ -854,22 +857,22 @@ final class DifferentialTransactionEditor
 
         if ($revision_status == $status_closed) {
           return pht(
-            "You can not commandeer this revision because it has already been ".
-            "closed.");
+            'You can not commandeer this revision because it has already been '.
+            'closed.');
         }
         break;
 
       case DifferentialAction::ACTION_ABANDON:
-        if (!$actor_is_author) {
+        if (!$actor_is_author && !$always_allow_abandon) {
           return pht(
-            "You can not abandon this revision because you do not own it. ".
-            "You can only abandon revisions you own.");
+            'You can not abandon this revision because you do not own it. '.
+            'You can only abandon revisions you own.');
         }
 
         if ($revision_status == $status_closed) {
           return pht(
-            "You can not abandon this revision because it has already been ".
-            "closed.");
+            'You can not abandon this revision because it has already been '.
+            'closed.');
         }
 
         // NOTE: Abandons of already-abandoned revisions are treated as no-op
@@ -880,14 +883,14 @@ final class DifferentialTransactionEditor
       case DifferentialAction::ACTION_RECLAIM:
         if (!$actor_is_author) {
           return pht(
-            "You can not reclaim this revision because you do not own ".
-            "it. You can only reclaim revisions you own.");
+            'You can not reclaim this revision because you do not own '.
+            'it. You can only reclaim revisions you own.');
         }
 
         if ($revision_status == $status_closed) {
           return pht(
-            "You can not reclaim this revision because it has already been ".
-            "closed.");
+            'You can not reclaim this revision because it has already been '.
+            'closed.');
         }
 
         // NOTE: Reclaims of other non-abandoned revisions are treated as no-op
@@ -910,8 +913,8 @@ final class DifferentialTransactionEditor
       case DifferentialAction::ACTION_RETHINK:
         if (!$actor_is_author) {
           return pht(
-            "You can not plan changes to this revision because you do not ".
-            "own it. To plan changes to a revision, you must be its owner.");
+            'You can not plan changes to this revision because you do not '.
+            'own it. To plan changes to a revision, you must be its owner.');
         }
 
         switch ($revision_status) {
@@ -925,12 +928,12 @@ final class DifferentialTransactionEditor
             break;
           case ArcanistDifferentialRevisionStatus::ABANDONED:
             return pht(
-              "You can not plan changes to this revision because it has ".
-              "been abandoned.");
+              'You can not plan changes to this revision because it has '.
+              'been abandoned.');
           case ArcanistDifferentialRevisionStatus::CLOSED:
             return pht(
-              "You can not plan changes to this revision because it has ".
-              "already been closed.");
+              'You can not plan changes to this revision because it has '.
+              'already been closed.');
           default:
             throw new Exception(
               pht(
@@ -944,9 +947,9 @@ final class DifferentialTransactionEditor
       case DifferentialAction::ACTION_REQUEST:
         if (!$actor_is_author) {
           return pht(
-            "You can not request review of this revision because you do ".
-            "not own it. To request review of a revision, you must be its ".
-            "owner.");
+            'You can not request review of this revision because you do '.
+            'not own it. To request review of a revision, you must be its '.
+            'owner.');
         }
 
         switch ($revision_status) {
@@ -960,12 +963,12 @@ final class DifferentialTransactionEditor
             break;
           case ArcanistDifferentialRevisionStatus::ABANDONED:
             return pht(
-              "You can not request review of this revision because it has ".
-              "been abandoned. Instead, reclaim it.");
+              'You can not request review of this revision because it has '.
+              'been abandoned. Instead, reclaim it.');
           case ArcanistDifferentialRevisionStatus::CLOSED:
             return pht(
-              "You can not request review of this revision because it has ".
-              "already been closed.");
+              'You can not request review of this revision because it has '.
+              'already been closed.');
           default:
             throw new Exception(
               pht(
@@ -984,14 +987,14 @@ final class DifferentialTransactionEditor
         if (!$this->getIsCloseByCommit()) {
           if (!$actor_is_author && !$always_allow_close) {
             return pht(
-              "You can not close this revision because you do not own it. To ".
-              "close a revision, you must be its owner.");
+              'You can not close this revision because you do not own it. To '.
+              'close a revision, you must be its owner.');
           }
 
           if ($revision_status != $status_accepted) {
             return pht(
-              "You can not close this revision because it has not been ".
-              "accepted. You can only close accepted revisions.");
+              'You can not close this revision because it has not been '.
+              'accepted. You can only close accepted revisions.');
           }
         }
         break;
@@ -1362,20 +1365,19 @@ final class DifferentialTransactionEditor
       $changeset_ids[$id] = $id;
     }
 
-    // TODO: We should write a proper Query class for this eventually.
-    $changesets = id(new DifferentialChangeset())->loadAllWhere(
-      'id IN (%Ld)',
-      $changeset_ids);
-    if ($show_context) {
-      $hunk_parser = new DifferentialHunkParser();
-      foreach ($changesets as $changeset) {
-        $changeset->attachHunks($changeset->loadHunks());
-      }
-    }
+    $changesets = id(new DifferentialChangesetQuery())
+      ->setViewer($this->getActor())
+      ->withIDs($changeset_ids)
+      ->needHunks(true)
+      ->execute();
 
     $inline_groups = DifferentialTransactionComment::sortAndGroupInlines(
       $inlines,
       $changesets);
+
+    if ($show_context) {
+      $hunk_parser = new DifferentialHunkParser();
+    }
 
     $result = array();
     foreach ($inline_groups as $changeset_id => $group) {
@@ -1400,15 +1402,15 @@ final class DifferentialTransactionEditor
         if (!$show_context) {
           $result[] = "{$file}:{$range} {$inline_content}";
         } else {
-          $result[] = "================";
-          $result[] = "Comment at: " . $file . ":" . $range;
+          $result[] = '================';
+          $result[] = 'Comment at: '.$file.':'.$range;
           $result[] = $hunk_parser->makeContextDiff(
             $changeset->getHunks(),
             $comment->getIsNewFile(),
             $comment->getLineNumber(),
             $comment->getLineLength(),
             1);
-          $result[] = "----------------";
+          $result[] = '----------------';
 
           $result[] = $this->nestCommentHistory($inline->getComment());
           $result[] = null;

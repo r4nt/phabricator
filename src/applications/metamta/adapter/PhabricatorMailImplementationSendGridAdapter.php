@@ -151,7 +151,7 @@ final class PhabricatorMailImplementationSendGridAdapter
     }
 
     if ($response['message'] !== 'success') {
-      $errors = implode(";", $response['errors']);
+      $errors = implode(';', $response['errors']);
       throw new Exception("Request failed with errors: {$errors}.");
     }
 

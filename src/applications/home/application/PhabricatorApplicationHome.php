@@ -2,12 +2,14 @@
 
 final class PhabricatorApplicationHome extends PhabricatorApplication {
 
+  const DASHBOARD_DEFAULT = 'dashboard:default';
+
   public function getBaseURI() {
-    return '/';
+    return '/home/';
   }
 
   public function getShortDescription() {
-    return pht('Where the <3 is');
+    return pht('Command Center');
   }
 
   public function getIconName() {
@@ -16,14 +18,15 @@ final class PhabricatorApplicationHome extends PhabricatorApplication {
 
   public function getRoutes() {
     return array(
-      '/(?:(?P<filter>(?:jump))/)?' => 'PhabricatorHomeMainController',
+      '/' => 'PhabricatorHomeMainController',
+      '/(?P<only>home)/' => 'PhabricatorHomeMainController',
       '/home/' => array(
         'create/' => 'PhabricatorHomeQuickCreateController',
       ),
     );
   }
 
-  public function shouldAppearInLaunchView() {
+  public function isLaunchable() {
     return false;
   }
 

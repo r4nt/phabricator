@@ -2,10 +2,11 @@ package {
 
   import flash.events.TimerEvent;
   import flash.external.ExternalInterface;
+  import flash.utils.Dictionary;
   import flash.utils.Timer;
+  import flash.events.UncaughtErrorEvent;
 
-
-  public class AphlictClient extends Aphlict {
+  final public class AphlictClient extends Aphlict {
 
     /**
      * The connection name for this client. This will be used for the
@@ -30,24 +31,34 @@ package {
 
     private var remoteServer:String;
     private var remotePort:Number;
+    private var subscriptions:Array;
 
 
     public function AphlictClient() {
       super();
 
+      loaderInfo.uncaughtErrorEvents.addEventListener(
+        UncaughtErrorEvent.UNCAUGHT_ERROR,
+        this.uncaughtErrorHandler);
+
+      ExternalInterface.marshallExceptions = true;
       ExternalInterface.addCallback('connect', this.externalConnect);
-      ExternalInterface.call(
-        'JX.Stratcom.invoke',
-        'aphlict-component-ready',
-        null,
-        {});
+
+      this.setStatus('ready');
     }
 
-    public function externalConnect(server:String, port:Number):void {
-      this.externalInvoke('connect');
+    private function uncaughtErrorHandler(event:UncaughtErrorEvent):void {
+      this.error(event.error.toString());
+    }
 
-      this.remoteServer = server;
-      this.remotePort   = port;
+    public function externalConnect(
+      server:String,
+      port:Number,
+      subscriptions:Array):void {
+
+      this.remoteServer  = server;
+      this.remotePort    = port;
+      this.subscriptions = subscriptions;
 
       this.client = AphlictClient.generateClientId();
       this.recv.connect(this.client);
@@ -80,16 +91,32 @@ package {
         this.log('Attempting to become the master...');
         this.master = new AphlictMaster(this.remoteServer, this.remotePort);
         this.log('I am the master.');
-      } catch (x:Error) {
-        // Couldn't become the master
+      } catch (err:ArgumentError) {
         this.log('Cannot become the master... probably one already exists');
+      } catch (err:Error) {
+        this.error(err);
       }
 
+      this.registerWithMaster();
+      this.timer.start();
+    }
+
+    /**
+     * Register our client ID with the @{class:AphlictMaster} and send our
+     * subscriptions.
+     */
+    private function registerWithMaster():void {
       this.send.send('aphlict_master', 'register', this.client);
       this.expiry = new Date().getTime() + (5 * AphlictClient.INTERVAL);
       this.log('Registered client ' + this.client);
 
-      this.timer.start();
+      // Send subscriptions to master.
+      this.log('Sending subscriptions to master.');
+      this.send.send(
+        'aphlict_master',
+        'subscribe',
+        this.client,
+        this.subscriptions);
     }
 
     /**
@@ -122,6 +149,10 @@ package {
     public function receiveMessage(msg:Object):void {
       this.log('Received message.');
       this.externalInvoke('receive', msg);
+    }
+
+    public function setStatus(status:String, code:String = null):void {
+      this.externalInvoke('status', {type: status, code: code});
     }
 
   }

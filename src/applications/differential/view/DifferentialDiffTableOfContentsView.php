@@ -136,8 +136,7 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
       $pchar =
         ($changeset->getOldProperties() === $changeset->getNewProperties())
           ? ''
-          : phutil_tag('span', array('title' => pht('Properties Changed')), 'M')
-        ;
+          : phutil_tag('span', array('title' => pht('Properties Changed')), 'M');
 
       $fname = $changeset->getFilename();
       $cov  = $this->renderCoverage($coverage, $fname);
@@ -312,11 +311,10 @@ final class DifferentialDiffTableOfContentsView extends AphrontView {
       'a',
       array(
         'href' => '#'.$changeset->getAnchorName(),
+        'sigil' => 'differential-load',
         'meta' => array(
           'id' => 'diff-'.$changeset->getAnchorName(),
-          'ref' => $ref,
         ),
-        'sigil' => 'differential-load',
       ),
       $display_file);
   }

@@ -32,6 +32,27 @@ abstract class PhabricatorController extends AphrontController {
     return false;
   }
 
+  public function shouldRequireMultiFactorEnrollment() {
+    if (!$this->shouldRequireLogin()) {
+      return false;
+    }
+
+    if (!$this->shouldRequireEnabledUser()) {
+      return false;
+    }
+
+    if ($this->shouldAllowPartialSessions()) {
+      return false;
+    }
+
+    $user = $this->getRequest()->getUser();
+    if (!$user->getIsStandardUser()) {
+      return false;
+    }
+
+    return PhabricatorEnv::getEnvConfig('security.require-multi-factor-auth');
+  }
+
   public function willBeginExecution() {
     $request = $this->getRequest();
 
@@ -151,6 +172,21 @@ abstract class PhabricatorController extends AphrontController {
       }
     }
 
+    // Check if the user needs to configure MFA.
+    $need_mfa = $this->shouldRequireMultiFactorEnrollment();
+    $have_mfa = $user->getIsEnrolledInMultiFactor();
+    if ($need_mfa && !$have_mfa) {
+      // Check if the cache is just out of date. Otherwise, roadblock the user
+      // and require MFA enrollment.
+      $user->updateMultiFactorEnrollment();
+      if (!$user->getIsEnrolledInMultiFactor()) {
+        $mfa_controller = new PhabricatorAuthNeedsMultiFactorController(
+          $request);
+        $this->setCurrentApplication($auth_application);
+        return $this->delegateToController($mfa_controller);
+      }
+    }
+
     if ($this->shouldRequireLogin()) {
       // This actually means we need either:
       //   - a valid user, or a public controller; and
@@ -215,7 +251,7 @@ abstract class PhabricatorController extends AphrontController {
 
   public function getApplicationURI($path = '') {
     if (!$this->getCurrentApplication()) {
-      throw new Exception("No application!");
+      throw new Exception('No application!');
     }
     return $this->getCurrentApplication()->getApplicationURI($path);
   }
@@ -257,7 +293,7 @@ abstract class PhabricatorController extends AphrontController {
       }
     }
 
-    if (idx($options, 'device')) {
+    if (idx($options, 'device', true)) {
       $page->setDeviceReady(true);
     }
 
@@ -288,7 +324,7 @@ abstract class PhabricatorController extends AphrontController {
       if (isset($seen[$hash])) {
         $seen[] = get_class($response);
         throw new Exception(
-          "Cycle while reducing proxy responses: ".
+          'Cycle while reducing proxy responses: '.
           implode(' -> ', $seen));
       }
       $seen[$hash] = get_class($response);

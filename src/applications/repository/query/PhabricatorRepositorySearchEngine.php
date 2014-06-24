@@ -3,6 +3,10 @@
 final class PhabricatorRepositorySearchEngine
   extends PhabricatorApplicationSearchEngine {
 
+  public function getResultTypeDescription() {
+    return pht('Repositories');
+  }
+
   public function getApplicationClassName() {
     return 'PhabricatorApplicationDiffusion';
   }
@@ -234,7 +238,6 @@ final class PhabricatorRepositorySearchEngine
     $viewer = $this->requireViewer();;
 
     $list = new PHUIObjectItemListView();
-    $list->setCards(true);
     foreach ($repositories as $repository) {
       $id = $repository->getID();
 

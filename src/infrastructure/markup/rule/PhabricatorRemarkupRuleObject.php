@@ -7,6 +7,7 @@ abstract class PhabricatorRemarkupRuleObject
   extends PhutilRemarkupRule {
 
   const KEY_RULE_OBJECT = 'rule.object';
+  const KEY_MENTIONED_OBJECTS = 'rule.object.mentioned';
 
   abstract protected function getObjectNamePrefix();
   abstract protected function loadObjects(array $ids);
@@ -39,8 +40,12 @@ abstract class PhabricatorRemarkupRuleObject
     return $result;
   }
 
+  protected function getObjectHref($object, $handle, $id) {
+    return $handle->getURI();
+  }
+
   protected function renderObjectRef($object, $handle, $anchor, $id) {
-    $href = $handle->getURI();
+    $href = $this->getObjectHref($object, $handle, $id);
     $text = $this->getObjectNamePrefix().$id;
 
     if ($anchor) {
@@ -187,6 +192,12 @@ abstract class PhabricatorRemarkupRuleObject
         unset($metadata[$key]);
       }
     }
+
+    $phids = $engine->getTextMetadata(self::KEY_MENTIONED_OBJECTS, array());
+    foreach ($objects as $object) {
+      $phids[$object->getPHID()] = $object->getPHID();
+    }
+    $engine->setTextMetadata(self::KEY_MENTIONED_OBJECTS, $phids);
 
     $handles = $this->loadHandles($objects);
     foreach ($metadata as $key => $spec) {

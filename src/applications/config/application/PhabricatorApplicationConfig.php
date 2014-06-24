@@ -10,6 +10,10 @@ final class PhabricatorApplicationConfig extends PhabricatorApplication {
     return 'setup';
   }
 
+  public function isPinnedByDefault(PhabricatorUser $viewer) {
+    return $viewer->getIsAdmin();
+  }
+
   public function getTitleGlyph() {
     return "\xE2\x98\xBA";
   }
@@ -33,6 +37,7 @@ final class PhabricatorApplicationConfig extends PhabricatorApplication {
         'all/'                      => 'PhabricatorConfigAllController',
         'edit/(?P<key>[\w\.\-]+)/'  => 'PhabricatorConfigEditController',
         'group/(?P<key>[^/]+)/'     => 'PhabricatorConfigGroupController',
+        'welcome/' => 'PhabricatorConfigWelcomeController',
         '(?P<verb>ignore|unignore)/(?P<key>[^/]+)/'
           => 'PhabricatorConfigIgnoreController',
         'issue/' => array(

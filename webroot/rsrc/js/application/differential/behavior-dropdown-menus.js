@@ -4,10 +4,12 @@
  *           javelin-dom
  *           javelin-util
  *           javelin-stratcom
+ *           javelin-workflow
  *           phuix-dropdown-menu
  *           phuix-action-list-view
  *           phuix-action-view
  *           phabricator-phtize
+ *           changeset-view-manager
  */
 
 JX.behavior('differential-dropdown-menus', function(config) {
@@ -47,13 +49,18 @@ JX.behavior('differential-dropdown-menus', function(config) {
   var buildmenu = function(e) {
     var button = e.getNode('differential-view-options');
     var data = JX.Stratcom.getData(button);
-
     if (data.menu) {
       return;
     }
 
     e.prevent();
 
+    var changeset = JX.DOM.findAbove(
+      button,
+      'div',
+      'differential-changeset');
+
+    var view = JX.ChangesetViewManager.getForNode(changeset);
     var menu = new JX.PHUIXDropdownMenu(button);
     var list = new JX.PHUIXActionListView();
 
@@ -97,18 +104,75 @@ JX.behavior('differential-dropdown-menus', function(config) {
       });
     list.addItem(visible_item);
 
-    add_link('fa-files', pht('Browse in Diffusion'), data.diffusionURI);
+    add_link('fa-file-text', pht('Browse in Diffusion'), data.diffusionURI);
     add_link('fa-file-o', pht('View Standalone'), data.standaloneURI);
+
+    var up_item = new JX.PHUIXActionView()
+      .setHandler(function(e) {
+        if (view.isLoaded()) {
+          var renderer = view.getRenderer();
+          if (renderer == '1up') {
+            renderer = '2up';
+          } else {
+            renderer = '1up';
+          }
+          view.setRenderer(renderer);
+        }
+        view.reload();
+
+        e.prevent();
+        menu.close();
+      });
+    list.addItem(up_item);
+
+    var encoding_item = new JX.PHUIXActionView()
+      .setIcon('fa-font')
+      .setName(pht('Change Text Encoding...'))
+      .setHandler(function(e) {
+        var params = {
+          encoding: view.getEncoding()
+        };
+
+        new JX.Workflow('/services/encoding/', params)
+          .setHandler(function(r) {
+            view.setEncoding(r.encoding);
+            view.reload();
+          })
+          .start();
+
+        e.prevent();
+        menu.close();
+      });
+    list.addItem(encoding_item);
+
+    var highlight_item = new JX.PHUIXActionView()
+      .setIcon('fa-sun-o')
+      .setName(pht('Highlight As...'))
+      .setHandler(function(e) {
+        var params = {
+          highlight: view.getHighlight()
+        };
+
+        new JX.Workflow('/services/highlight/', params)
+          .setHandler(function(r) {
+            view.setHighlight(r.highlight);
+            view.reload();
+          })
+          .start();
+
+        e.prevent();
+        menu.close();
+      });
+    list.addItem(highlight_item);
+
     add_link('fa-arrow-left', pht('Show Raw File (Left)'), data.leftURI);
     add_link('fa-arrow-right', pht('Show Raw File (Right)'), data.rightURI);
     add_link('fa-pencil', pht('Open in Editor'), data.editor, true);
     add_link('fa-wrench', pht('Configure Editor'), data.editorConfigure);
 
-
     menu.setContent(list.getNode());
 
     menu.listen('open', function() {
-
       // When the user opens the menu, check if there are any "Show More"
       // links in the changeset body. If there aren't, disable the "Show
       // Entire File" menu item since it won't change anything.
@@ -132,8 +196,29 @@ JX.behavior('differential-dropdown-menus', function(config) {
           .setHandler(function(e) { e.prevent(); });
       }
 
-      visible_item.setDisabled(true);
-      visible_item.setName(pht("Can't Toggle Unloaded File"));
+      encoding_item.setDisabled(!view.isLoaded());
+      highlight_item.setDisabled(!view.isLoaded());
+
+      if (view.isLoaded()) {
+        if (view.getRenderer() == '2up') {
+          up_item
+            .setIcon('fa-list-alt')
+            .setName(pht('View Unified'));
+        } else {
+          up_item
+            .setIcon('fa-files-o')
+            .setName(pht('View Side-by-Side'));
+        }
+      } else {
+        up_item
+          .setIcon('fa-refresh')
+          .setName(pht('Load Changes'));
+      }
+
+      visible_item
+        .setDisabled(true)
+        .setIcon('fa-expand')
+        .setName(pht("Can't Toggle Unloaded File"));
       var diffs = JX.DOM.scry(
         JX.$(data.containerID),
         'table',
@@ -161,6 +246,7 @@ JX.behavior('differential-dropdown-menus', function(config) {
       }
 
     });
+
     data.menu = menu;
     menu.open();
   };

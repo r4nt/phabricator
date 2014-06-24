@@ -15,14 +15,7 @@ final class PhabricatorConfigListController
 
     $title = pht('Phabricator Configuration');
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($title);
-
-    $nav->appendChild(
-      array(
-        $header,
-        $list,
-      ));
+    $nav->appendChild($list);
 
     $crumbs = $this
       ->buildApplicationCrumbs()
@@ -34,7 +27,6 @@ final class PhabricatorConfigListController
       $nav,
       array(
         'title' => $title,
-        'device' => true,
       ));
   }
 

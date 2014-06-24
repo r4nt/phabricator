@@ -3,6 +3,10 @@
 final class HeraldRuleSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
+  public function getResultTypeDescription() {
+    return pht('Herald Rules');
+  }
+
   public function getApplicationClassName() {
     return 'PhabricatorApplicationHerald';
   }
@@ -173,8 +177,7 @@ final class HeraldRuleSearchEngine
     $content_type_map = HeraldAdapter::getEnabledAdapterMap($viewer);
 
     $list = id(new PHUIObjectItemListView())
-      ->setUser($viewer)
-      ->setCards(true);
+      ->setUser($viewer);
     foreach ($rules as $rule) {
       $id = $rule->getID();
 

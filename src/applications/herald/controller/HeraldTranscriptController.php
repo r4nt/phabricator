@@ -60,7 +60,7 @@ final class HeraldTranscriptController extends HeraldController {
         // table, and then filter this earlier (and thus raise a better error).
         // For now, just block access so we don't violate policies.
         throw new Exception(
-          pht("This transcript has an invalid or inaccessible adapter."));
+          pht('This transcript has an invalid or inaccessible adapter.'));
       }
 
       $this->adapter = HeraldAdapter::getAdapterForContentType($object_type);
@@ -110,7 +110,6 @@ final class HeraldTranscriptController extends HeraldController {
       $nav,
       array(
         'title' => pht('Transcript'),
-        'device' => true,
       ));
   }
 
@@ -361,7 +360,7 @@ final class HeraldTranscriptController extends HeraldController {
                 $target[$k] = $handles[$phid]->getName();
               }
             }
-            $target = implode(", ", $target);
+            $target = implode(', ', $target);
           } else {
             $target = '<empty>';
           }

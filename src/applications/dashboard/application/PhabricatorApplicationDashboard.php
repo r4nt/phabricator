@@ -2,6 +2,10 @@
 
 final class PhabricatorApplicationDashboard extends PhabricatorApplication {
 
+  public function getName() {
+    return pht('Dashboards');
+  }
+
   public function getBaseURI() {
     return '/dashboard/';
   }
@@ -24,6 +28,7 @@ final class PhabricatorApplicationDashboard extends PhabricatorApplication {
         'manage/(?P<id>\d+)/' => 'PhabricatorDashboardManageController',
         'history/(?P<id>\d+)/' => 'PhabricatorDashboardHistoryController',
         'create/' => 'PhabricatorDashboardEditController',
+        'copy/(?:(?P<id>\d+)/)?' => 'PhabricatorDashboardCopyController',
         'edit/(?:(?P<id>\d+)/)?' => 'PhabricatorDashboardEditController',
         'install/(?P<id>\d+)/' => 'PhabricatorDashboardInstallController',
         'uninstall/(?P<id>\d+)/' => 'PhabricatorDashboardUninstallController',
@@ -34,7 +39,7 @@ final class PhabricatorApplicationDashboard extends PhabricatorApplication {
         'panel/' => array(
           '(?:query/(?P<queryKey>[^/]+)/)?'
             => 'PhabricatorDashboardPanelListController',
-          'create/' => 'PhabricatorDashboardPanelCreateController',
+          'create/' => 'PhabricatorDashboardPanelEditController',
           'edit/(?:(?P<id>\d+)/)?' => 'PhabricatorDashboardPanelEditController',
           'render/(?P<id>\d+)/' => 'PhabricatorDashboardPanelRenderController',
         ),
@@ -46,10 +51,6 @@ final class PhabricatorApplicationDashboard extends PhabricatorApplication {
     return array(
       new PhabricatorDashboardRemarkupRule(),
     );
-  }
-
-  public function shouldAppearInLaunchView() {
-    return false;
   }
 
   public function canUninstall() {

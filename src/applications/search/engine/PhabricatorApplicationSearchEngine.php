@@ -30,7 +30,7 @@ abstract class PhabricatorApplicationSearchEngine {
 
   protected function requireViewer() {
     if (!$this->viewer) {
-      throw new Exception("Call setViewer() before using an engine!");
+      throw new Exception('Call setViewer() before using an engine!');
     }
     return $this->viewer;
   }
@@ -118,6 +118,18 @@ abstract class PhabricatorApplicationSearchEngine {
    * @task uri
    */
   abstract protected function getURI($path);
+
+
+  /**
+   * Return a human readable description of the type of objects this query
+   * searches for.
+   *
+   * For example, "Tasks" or "Commits".
+   *
+   * @return string Human-readable description of what this engine is used to
+   *   find.
+   */
+  abstract public function getResultTypeDescription();
 
 
   public function newSavedQuery() {

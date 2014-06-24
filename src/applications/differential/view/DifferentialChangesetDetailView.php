@@ -8,6 +8,46 @@ final class DifferentialChangesetDetailView extends AphrontView {
   private $symbolIndex;
   private $id;
   private $vsChangesetID;
+  private $renderURI;
+  private $whitespace;
+  private $renderingRef;
+  private $autoload;
+
+  public function setAutoload($autoload) {
+    $this->autoload = $autoload;
+    return $this;
+  }
+
+  public function getAutoload() {
+    return $this->autoload;
+  }
+
+  public function setRenderingRef($rendering_ref) {
+    $this->renderingRef = $rendering_ref;
+    return $this;
+  }
+
+  public function getRenderingRef() {
+    return $this->renderingRef;
+  }
+
+  public function setWhitespace($whitespace) {
+    $this->whitespace = $whitespace;
+    return $this;
+  }
+
+  public function getWhitespace() {
+    return $this->whitespace;
+  }
+
+  public function setRenderURI($render_uri) {
+    $this->renderURI = $render_uri;
+    return $this;
+  }
+
+  public function getRenderURI() {
+    return $this->renderURI;
+  }
 
   public function setChangeset($changeset) {
     $this->changeset = $changeset;
@@ -36,6 +76,11 @@ final class DifferentialChangesetDetailView extends AphrontView {
     return $this->id;
   }
 
+  public function setID($id) {
+    $this->id = $id;
+    return $this;
+  }
+
   public function setVsChangesetID($vs_changeset_id) {
     $this->vsChangesetID = $vs_changeset_id;
     return $this;
@@ -59,16 +104,19 @@ final class DifferentialChangesetDetailView extends AphrontView {
       case 'wav':
       case 'mp3':
       case 'aiff':
-        $icon = 'fa-music';
+        $icon = 'fa-file-sound-o';
         break;
       case 'm4v':
       case 'mov':
-        $icon = 'fa-film';
+        $icon = 'fa-file-movie-o';
         break;
-      case 'sql';
+      case 'sql':
       case 'db':
+        $icon = 'fa-database';
+        break;
+      case 'xls':
       case 'csv':
-        $icon = 'fa-table';
+        $icon = 'fa-file-excel-o';
         break;
       case 'ics':
         $icon = 'fa-calendar';
@@ -78,16 +126,26 @@ final class DifferentialChangesetDetailView extends AphrontView {
       case 'bz':
       case 'tgz':
       case 'gz':
-        $icon = 'fa-archive';
+        $icon = 'fa-file-archive-o';
         break;
       case 'png':
       case 'jpg':
       case 'bmp':
       case 'gif':
-        $icon = 'fa-picture-o';
+        $icon = 'fa-file-picture-o';
+        break;
+      case 'txt':
+        $icon = 'fa-file-text-o';
+        break;
+      case 'doc':
+      case 'docx':
+        $icon = 'fa-file-word-o';
+        break;
+      case 'pdf':
+        $icon = 'fa-file-pdf-o';
         break;
       default:
-        $icon = 'fa-file';
+        $icon = 'fa-file-code-o';
         break;
     }
     return $icon;
@@ -139,6 +197,12 @@ final class DifferentialChangesetDetailView extends AphrontView {
             $this->getVsChangesetID(),
             $this->changeset->getID()),
           'right' => $this->changeset->getID(),
+          'renderURI' => $this->getRenderURI(),
+          'whitespace' => $this->getWhitespace(),
+          'highlight' => null,
+          'renderer' => null,
+          'ref' => $this->getRenderingRef(),
+          'autoload' => $this->getAutoload(),
         ),
         'class' => $class,
         'id'    => $id,
@@ -154,9 +218,15 @@ final class DifferentialChangesetDetailView extends AphrontView {
             'class' => 'differential-file-icon-header'),
           array(
             $icon,
-            $display_filename)),
-        phutil_tag('div', array('style' => 'clear: both'), ''),
-        $this->renderChildren(),
+            $display_filename,
+          )),
+        javelin_tag(
+          'div',
+          array(
+            'class' => 'changeset-view-content',
+            'sigil' => 'changeset-view-content',
+          ),
+          $this->renderChildren()),
       ));
   }
 

@@ -17,7 +17,7 @@ final class PhabricatorHovercardView extends AphrontView {
   private $fields = array();
   private $actions = array();
 
-  private $color = 'blue';
+  private $color = 'lightblue';
   public function setObjectHandle(PhabricatorObjectHandle $handle) {
     $this->handle = $handle;
     return $this;
@@ -62,14 +62,14 @@ final class PhabricatorHovercardView extends AphrontView {
 
   public function render() {
     if (!$this->handle) {
-      throw new Exception("Call setObjectHandle() before calling render()!");
+      throw new Exception('Call setObjectHandle() before calling render()!');
     }
 
     $handle = $this->handle;
 
-    require_celerity_resource("phabricator-hovercard-view-css");
+    require_celerity_resource('phabricator-hovercard-view-css');
 
-    $title = pht("%s: %s",
+    $title = pht('%s: %s',
       $handle->getTypeName(),
       $this->title ? $this->title : $handle->getName());
 
@@ -158,7 +158,7 @@ final class PhabricatorHovercardView extends AphrontView {
       'phabricator-hovercard-container',
       array(
         phutil_tag_div('phabricator-hovercard-head', $header),
-        phutil_tag_div('phabricator-hovercard-body', $body),
+        phutil_tag_div('phabricator-hovercard-body grouped', $body),
         $tail,
       ));
 

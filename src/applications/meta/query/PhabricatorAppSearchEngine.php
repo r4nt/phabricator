@@ -3,6 +3,10 @@
 final class PhabricatorAppSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
+  public function getResultTypeDescription() {
+    return pht('Applications');
+  }
+
   public function getApplicationClassName() {
     return 'PhabricatorApplicationApplications';
   }
@@ -226,11 +230,15 @@ final class PhabricatorAppSearchEngine
         }
 
         if (!$application->isInstalled()) {
-          $item->addIcon('delete', pht('Uninstalled'));
+          $item->addIcon('fa-times', pht('Uninstalled'));
         }
 
         if ($application->isBeta()) {
           $item->addIcon('fa-star-half-o grey', pht('Beta'));
+        }
+
+        if (!$application->isFirstParty()) {
+          $item->addIcon('fa-puzzle-piece', pht('Extension'));
         }
 
         $list->addItem($item);
