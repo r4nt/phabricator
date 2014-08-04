@@ -1,13 +1,9 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhrictionRemarkupRule
-  extends PhutilRemarkupRule {
+final class PhrictionRemarkupRule extends PhutilRemarkupRule {
 
   public function getPriority() {
-    return 350.0;
+    return 175.0;
   }
 
   public function apply($text) {
@@ -38,7 +34,7 @@ final class PhrictionRemarkupRule
     } else if ($this->getEngine()->isTextMode()) {
       return PhabricatorEnv::getProductionURI($href);
     } else {
-      $text = phutil_tag(
+      $text = $this->newTag(
         'a',
         array(
           'href'  => $href,

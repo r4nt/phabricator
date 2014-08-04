@@ -167,7 +167,6 @@ final class DifferentialTransactionEditor
     return parent::transactionHasEffect($object, $xaction);
   }
 
-
   protected function applyCustomInternalTransaction(
     PhabricatorLiskDAO $object,
     PhabricatorApplicationTransaction $xaction) {
@@ -254,7 +253,7 @@ final class DifferentialTransactionEditor
     $status_plan = ArcanistDifferentialRevisionStatus::CHANGES_PLANNED;
 
     $edge_reviewer = PhabricatorEdgeConfig::TYPE_DREV_HAS_REVIEWER;
-    $edge_ref_task = PhabricatorEdgeConfig::TYPE_DREV_HAS_RELATED_TASK;
+    $edge_ref_task = DifferentialRevisionHasTaskEdgeType::EDGECONST;
 
     $is_sticky_accept = PhabricatorEnv::getEnvConfig(
       'differential.sticky-accept');
@@ -350,7 +349,7 @@ final class DifferentialTransactionEditor
         // "T123" or similar, automatically associate the commit with the
         // task that the branch names.
 
-        $maniphest = 'PhabricatorApplicationManiphest';
+        $maniphest = 'PhabricatorManiphestApplication';
         if (PhabricatorApplication::isClassInstalled($maniphest)) {
           $diff = $this->requireDiff($xaction->getNewValue());
           $branch = $diff->getBranch();
@@ -572,8 +571,6 @@ final class DifferentialTransactionEditor
     return $result;
   }
 
-
-
   protected function applyFinalEffects(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -692,7 +689,6 @@ final class DifferentialTransactionEditor
 
     return $xactions;
   }
-
 
   protected function validateTransaction(
     PhabricatorLiskDAO $object,
@@ -825,6 +821,18 @@ final class DifferentialTransactionEditor
             'You can not accept this revision because it has already been '.
             'closed.');
         }
+
+        // TODO: It would be nice to make this generic at some point.
+        $signatures = DifferentialRequiredSignaturesField::loadForRevision(
+          $revision);
+        foreach ($signatures as $phid => $signed) {
+          if (!$signed) {
+            return pht(
+              'You can not accept this revision because the author has '.
+              'not signed all of the required legal documents.');
+          }
+        }
+
         break;
 
       case DifferentialAction::ACTION_REJECT:
@@ -1246,8 +1254,7 @@ final class DifferentialTransactionEditor
     PhabricatorLiskDAO $object,
     PhabricatorApplicationTransaction $xaction) {
 
-    switch ($xaction->getTransactionType()) {
-    }
+    switch ($xaction->getTransactionType()) {}
 
     return parent::extractFilePHIDsFromCustomTransaction($object, $xaction);
   }
@@ -1257,7 +1264,6 @@ final class DifferentialTransactionEditor
     array $xactions,
     $blocks,
     PhutilMarkupEngine $engine) {
-
 
     $flat_blocks = array_mergev($blocks);
     $huge_block = implode("\n\n", $flat_blocks);
@@ -1291,7 +1297,7 @@ final class DifferentialTransactionEditor
         ->execute();
 
       if ($tasks) {
-        $edge_related = PhabricatorEdgeConfig::TYPE_DREV_HAS_RELATED_TASK;
+        $edge_related = DifferentialRevisionHasTaskEdgeType::EDGECONST;
         $edges[$edge_related] = mpull($tasks, 'getPHID', 'getPHID');
       }
     }
@@ -1458,6 +1464,15 @@ final class DifferentialTransactionEditor
           if (!$this->getIsCloseByCommit()) {
             return true;
           }
+          break;
+        case DifferentialTransaction::TYPE_ACTION:
+          switch ($xaction->getNewValue()) {
+            case DifferentialAction::ACTION_CLAIM:
+              // When users commandeer revisions, we may need to trigger
+              // signatures or author-based rules.
+              return true;
+          }
+          break;
       }
     }
 
@@ -1582,6 +1597,34 @@ final class DifferentialTransactionEditor
         ->setNewValue($value);
     }
 
+    // Require legalpad document signatures.
+    $legal_phids = $adapter->getRequiredSignatureDocumentPHIDs();
+    if ($legal_phids) {
+      // We only require signatures of documents which have not already
+      // been signed. In general, this reduces the amount of churn that
+      // signature rules cause.
+
+      $signatures = id(new LegalpadDocumentSignatureQuery())
+        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->withDocumentPHIDs($legal_phids)
+        ->withSignerPHIDs(array($object->getAuthorPHID()))
+        ->execute();
+      $signed_phids = mpull($signatures, 'getDocumentPHID');
+      $legal_phids = array_diff($legal_phids, $signed_phids);
+
+      // If we still have something to trigger, add the edges.
+      if ($legal_phids) {
+        $edge_legal = PhabricatorEdgeConfig::TYPE_OBJECT_NEEDS_SIGNATURE;
+        $xactions[] = id(new DifferentialTransaction())
+          ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
+          ->setMetadataValue('edge:type', $edge_legal)
+          ->setNewValue(
+            array(
+              '+' => array_fuse($legal_phids),
+            ));
+      }
+    }
+
     // Save extra email PHIDs for later.
     $email_phids = $adapter->getEmailPHIDsAddedByHerald();
     $this->heraldEmailPHIDs = array_keys($email_phids);
@@ -1680,7 +1723,6 @@ final class DifferentialTransactionEditor
         implode(', ', $chunk));
     }
   }
-
 
   /**
    * Update the table connecting revisions to DVCS local hashes, so we can

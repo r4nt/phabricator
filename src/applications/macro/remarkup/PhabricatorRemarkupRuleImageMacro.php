@@ -1,10 +1,6 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhabricatorRemarkupRuleImageMacro
-  extends PhutilRemarkupRule {
+final class PhabricatorRemarkupRuleImageMacro extends PhutilRemarkupRule {
 
   private $macros;
 
@@ -128,7 +124,9 @@ final class PhabricatorRemarkupRuleImageMacro
 
       $id = null;
       $audio = idx($files, $macro->getAudioPHID());
-      if ($audio) {
+      $should_play = ($audio && $macro->getAudioBehavior() !=
+        PhabricatorFileImageMacro::AUDIO_BEHAVIOR_NONE);
+      if ($should_play) {
         $id = celerity_generate_unique_node_id();
 
         $loop = null;
@@ -147,7 +145,7 @@ final class PhabricatorRemarkupRuleImageMacro
           ));
       }
 
-      $result = phutil_tag(
+      $result = $this->newTag(
         'img',
         array(
           'id'    => $id,

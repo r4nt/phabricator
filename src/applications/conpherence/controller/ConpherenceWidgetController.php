@@ -1,10 +1,6 @@
 <?php
 
-/**
- * @group conpherence
- */
-final class ConpherenceWidgetController extends
-  ConpherenceController {
+final class ConpherenceWidgetController extends ConpherenceController {
 
   private $conpherenceID;
   private $conpherence;
@@ -14,6 +10,7 @@ final class ConpherenceWidgetController extends
     $this->userPreferences = $pref;
     return $this;
   }
+
   public function getUserPreferences() {
     return $this->userPreferences;
   }
@@ -22,6 +19,7 @@ final class ConpherenceWidgetController extends
     $this->conpherence = $conpherence;
     return $this;
   }
+
   public function getConpherence() {
     return $this->conpherence;
   }
@@ -30,6 +28,7 @@ final class ConpherenceWidgetController extends
     $this->conpherenceID = $conpherence_id;
     return $this;
   }
+
   public function getConpherenceID() {
     return $this->conpherenceID;
   }
@@ -75,8 +74,8 @@ final class ConpherenceWidgetController extends
       array(
         'class' => 'widgets-header',
       ),
-      id(new PhabricatorActionHeaderView())
-      ->setHeaderColor(PhabricatorActionHeaderView::HEADER_GREY)
+      id(new PHUIActionHeaderView())
+      ->setHeaderColor(PHUIActionHeaderView::HEADER_GREY)
       ->setHeaderTitle(pht('Participants'))
       ->setHeaderHref('#')
       ->setDropdown(true)

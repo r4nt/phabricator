@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group herald
- */
 final class HeraldCommitAdapter extends HeraldAdapter {
 
   const FIELD_NEED_AUDIT_FOR_PACKAGE      = 'need-audit-for-package';
@@ -27,7 +24,7 @@ final class HeraldCommitAdapter extends HeraldAdapter {
   protected $auditNeededPackages;
 
   public function getAdapterApplicationClass() {
-    return 'PhabricatorApplicationDiffusion';
+    return 'PhabricatorDiffusionApplication';
   }
 
   public function getObject() {
@@ -80,8 +77,7 @@ final class HeraldCommitAdapter extends HeraldAdapter {
   }
 
   public function explainValidTriggerObjects() {
-    return pht(
-      'This rule can trigger for **repositories** and **projects**.');
+    return pht('This rule can trigger for **repositories** and **projects**.');
   }
 
   public function getFieldNameMap() {
@@ -139,21 +135,25 @@ final class HeraldCommitAdapter extends HeraldAdapter {
     switch ($rule_type) {
       case HeraldRuleTypeConfig::RULE_TYPE_GLOBAL:
       case HeraldRuleTypeConfig::RULE_TYPE_OBJECT:
-        return array(
-          self::ACTION_ADD_CC,
-          self::ACTION_EMAIL,
-          self::ACTION_AUDIT,
-          self::ACTION_APPLY_BUILD_PLANS,
-          self::ACTION_NOTHING
-        );
+        return array_merge(
+          array(
+            self::ACTION_ADD_CC,
+            self::ACTION_EMAIL,
+            self::ACTION_AUDIT,
+            self::ACTION_APPLY_BUILD_PLANS,
+            self::ACTION_NOTHING
+          ),
+          parent::getActions($rule_type));
       case HeraldRuleTypeConfig::RULE_TYPE_PERSONAL:
-        return array(
-          self::ACTION_ADD_CC,
-          self::ACTION_EMAIL,
-          self::ACTION_FLAG,
-          self::ACTION_AUDIT,
-          self::ACTION_NOTHING,
-        );
+        return array_merge(
+          array(
+            self::ACTION_ADD_CC,
+            self::ACTION_EMAIL,
+            self::ACTION_FLAG,
+            self::ACTION_AUDIT,
+            self::ACTION_NOTHING,
+          ),
+          parent::getActions($rule_type));
     }
   }
 
@@ -544,9 +544,16 @@ final class HeraldCommitAdapter extends HeraldAdapter {
             $this->commit->getPHID());
           break;
         default:
-          throw new Exception("No rules to handle action '{$action}'.");
+          $custom_result = parent::handleCustomHeraldEffect($effect);
+          if ($custom_result === null) {
+            throw new Exception("No rules to handle action '{$action}'.");
+          }
+
+          $result[] = $custom_result;
+          break;
       }
     }
     return $result;
   }
+
 }

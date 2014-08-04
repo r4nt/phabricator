@@ -12,8 +12,6 @@
  * @task read       Reading Utilities
  * @task exec       Paging and Executing Queries
  * @task render     Rendering Results
- *
- * @group search
  */
 abstract class PhabricatorApplicationSearchEngine {
 
@@ -22,6 +20,10 @@ abstract class PhabricatorApplicationSearchEngine {
   private $errors = array();
   private $customFields = false;
   private $request;
+  private $context;
+
+  const CONTEXT_LIST  = 'list';
+  const CONTEXT_PANEL = 'panel';
 
   public function setViewer(PhabricatorUser $viewer) {
     $this->viewer = $viewer;
@@ -33,6 +35,15 @@ abstract class PhabricatorApplicationSearchEngine {
       throw new Exception('Call setViewer() before using an engine!');
     }
     return $this->viewer;
+  }
+
+  public function setContext($context) {
+    $this->context = $context;
+    return $this;
+  }
+
+  public function isPanelContext() {
+    return ($this->context == self::CONTEXT_PANEL);
   }
 
   public function saveQuery(PhabricatorSavedQuery $query) {
@@ -233,7 +244,7 @@ abstract class PhabricatorApplicationSearchEngine {
   }
 
   protected function getApplicationClassName() {
-    throw new Exception(pht('Not implemented for this SearchEngine yet!'));
+    throw new PhutilMethodNotImplementedException();
   }
 
 
@@ -753,6 +764,65 @@ abstract class PhabricatorApplicationSearchEngine {
     }
   }
 
+  protected function applyOrderByToQuery(
+    PhabricatorCursorPagedPolicyAwareQuery $query,
+    array $standard_values,
+    $order) {
+
+    if (substr($order, 0, 7) === 'custom:') {
+      $list = $this->getCustomFieldList();
+      if (!$list) {
+        $query->setOrderBy(head($standard_values));
+        return;
+      }
+
+      foreach ($list->getFields() as $field) {
+        $key = $this->getKeyForCustomField($field);
+
+        if ($key === $order) {
+          $index = $field->buildOrderIndex();
+
+          if ($index === null) {
+            $query->setOrderBy(head($standard_values));
+            return;
+          }
+
+          $query->withApplicationSearchOrder(
+            $field,
+            $index,
+            false);
+          break;
+        }
+      }
+    } else {
+      $order = idx($standard_values, $order);
+      if ($order) {
+        $query->setOrderBy($order);
+      } else {
+        $query->setOrderBy(head($standard_values));
+      }
+    }
+  }
+
+
+  protected function getCustomFieldOrderOptions() {
+    $list = $this->getCustomFieldList();
+    if (!$list) {
+      return;
+    }
+
+    $custom_order = array();
+    foreach ($list->getFields() as $field) {
+      if ($field->shouldAppearInApplicationSearch()) {
+        if ($field->buildOrderIndex() !== null) {
+          $key = $this->getKeyForCustomField($field);
+          $custom_order[$key] = $field->getFieldName();
+        }
+      }
+    }
+
+    return $custom_order;
+  }
 
   /**
    * Get a unique key identifying a field.

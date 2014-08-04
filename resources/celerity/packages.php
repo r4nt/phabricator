@@ -164,7 +164,6 @@ return array(
     'javelin-behavior-aphront-more',
   ),
   'diffusion.pkg.css' => array(
-    'diffusion-commit-view-css',
     'diffusion-icons-css',
   ),
   'diffusion.pkg.js' => array(
@@ -174,7 +173,6 @@ return array(
   ),
   'maniphest.pkg.css' => array(
     'maniphest-task-summary-css',
-    'phabricator-project-tag-css',
   ),
   'maniphest.pkg.js' => array(
     'javelin-behavior-maniphest-batch-selector',

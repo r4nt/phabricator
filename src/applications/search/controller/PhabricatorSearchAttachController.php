@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group search
- */
 final class PhabricatorSearchAttachController
   extends PhabricatorSearchBaseController {
 
@@ -60,18 +57,58 @@ final class PhabricatorSearchAttachController
       $phids = array_values($phids);
 
       if ($edge_type) {
-        $do_txn = $object instanceof PhabricatorApplicationTransactionInterface;
-        $old_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
-          $this->phid,
-          $edge_type);
-        $add_phids = $phids;
-        $rem_phids = array_diff($old_phids, $add_phids);
+        if ($object instanceof PhabricatorRepositoryCommit) {
+          // TODO: Remove this entire branch of special cased grossness
+          // after T4896.
 
-        if ($do_txn) {
+          $old_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
+            $this->phid,
+            $edge_type);
+          $add_phids = $phids;
+          $rem_phids = array_diff($old_phids, $add_phids);
+
+          // Doing this correctly (in a way that writes edge transactions) would
+          // be a huge mess and we don't get the commit half of the transaction
+          // anyway until T4896, so just write the edges themselves and skip
+          // the transactions for now.
+
+          $editor = new PhabricatorEdgeEditor();
+          foreach ($add_phids as $phid) {
+            $editor->addEdge(
+              $object->getPHID(),
+              DiffusionCommitHasTaskEdgeType::EDGECONST,
+              $phid);
+          }
+
+          foreach ($rem_phids as $phid) {
+            $editor->removeEdge(
+              $object->getPHID(),
+              DiffusionCommitHasTaskEdgeType::EDGECONST,
+              $phid);
+          }
+
+          $editor->save();
+
+        } else {
+          if (!$object instanceof PhabricatorApplicationTransactionInterface) {
+            throw new Exception(
+              pht(
+                'Expected object ("%s") to implement interface "%s".',
+                get_class($object),
+                'PhabricatorApplicationTransactionInterface'));
+          }
+
+          $old_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
+            $this->phid,
+            $edge_type);
+          $add_phids = $phids;
+          $rem_phids = array_diff($old_phids, $add_phids);
 
           $txn_editor = $object->getApplicationTransactionEditor()
             ->setActor($user)
-            ->setContentSourceFromRequest($request);
+            ->setContentSourceFromRequest($request)
+            ->setContinueOnMissingFields(true);
+
           $txn_template = $object->getApplicationTransactionTemplate()
             ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
             ->setMetadataValue('edge:type', $edge_type)
@@ -81,23 +118,6 @@ final class PhabricatorSearchAttachController
           $txn_editor->applyTransactions(
             $object->getApplicationTransactionObject(),
             array($txn_template));
-
-        } else {
-
-          $editor = id(new PhabricatorEdgeEditor());
-          $editor->setActor($user);
-          foreach ($add_phids as $phid) {
-            $editor->addEdge($this->phid, $edge_type, $phid);
-          }
-          foreach ($rem_phids as $phid) {
-            $editor->removeEdge($this->phid, $edge_type, $phid);
-          }
-
-          try {
-            $editor->save();
-          } catch (PhabricatorEdgeCycleException $ex) {
-            $this->raiseGraphCycleException($ex);
-          }
         }
 
         return id(new AphrontReloadResponse())->setURI($handle->getURI());
@@ -222,19 +242,19 @@ final class PhabricatorSearchAttachController
 
   private function getStrings() {
     switch ($this->type) {
-      case DifferentialPHIDTypeRevision::TYPECONST:
+      case DifferentialRevisionPHIDType::TYPECONST:
         $noun = 'Revisions';
         $selected = 'created';
         break;
-      case ManiphestPHIDTypeTask::TYPECONST:
+      case ManiphestTaskPHIDType::TYPECONST:
         $noun = 'Tasks';
         $selected = 'assigned';
         break;
-      case PhabricatorRepositoryPHIDTypeCommit::TYPECONST:
+      case PhabricatorRepositoryCommitPHIDType::TYPECONST:
         $noun = 'Commits';
         $selected = 'created';
         break;
-      case PholioPHIDTypeMock::TYPECONST:
+      case PholioMockPHIDType::TYPECONST:
         $noun = 'Mocks';
         $selected = 'created';
         break;
@@ -281,7 +301,7 @@ final class PhabricatorSearchAttachController
   }
 
   private function getFilters(array $strings) {
-    if ($this->type == PholioPHIDTypeMock::TYPECONST) {
+    if ($this->type == PholioMockPHIDType::TYPECONST) {
       $filters = array(
         'created' => 'Created By Me',
         'all' => 'All '.$strings['target_plural_noun'],
@@ -299,24 +319,24 @@ final class PhabricatorSearchAttachController
   }
 
   private function getEdgeType($src_type, $dst_type) {
-    $t_cmit = PhabricatorRepositoryPHIDTypeCommit::TYPECONST;
-    $t_task = ManiphestPHIDTypeTask::TYPECONST;
-    $t_drev = DifferentialPHIDTypeRevision::TYPECONST;
-    $t_mock = PholioPHIDTypeMock::TYPECONST;
+    $t_cmit = PhabricatorRepositoryCommitPHIDType::TYPECONST;
+    $t_task = ManiphestTaskPHIDType::TYPECONST;
+    $t_drev = DifferentialRevisionPHIDType::TYPECONST;
+    $t_mock = PholioMockPHIDType::TYPECONST;
 
     $map = array(
       $t_cmit => array(
-        $t_task => PhabricatorEdgeConfig::TYPE_COMMIT_HAS_TASK,
+        $t_task => DiffusionCommitHasTaskEdgeType::EDGECONST,
       ),
       $t_task => array(
-        $t_cmit => PhabricatorEdgeConfig::TYPE_TASK_HAS_COMMIT,
+        $t_cmit => ManiphestTaskHasCommitEdgeType::EDGECONST,
         $t_task => PhabricatorEdgeConfig::TYPE_TASK_DEPENDS_ON_TASK,
-        $t_drev => PhabricatorEdgeConfig::TYPE_TASK_HAS_RELATED_DREV,
+        $t_drev => ManiphestTaskHasRevisionEdgeType::EDGECONST,
         $t_mock => PhabricatorEdgeConfig::TYPE_TASK_HAS_MOCK,
       ),
       $t_drev => array(
         $t_drev => PhabricatorEdgeConfig::TYPE_DREV_DEPENDS_ON_DREV,
-        $t_task => PhabricatorEdgeConfig::TYPE_DREV_HAS_RELATED_TASK,
+        $t_task => DifferentialRevisionHasTaskEdgeType::EDGECONST,
       ),
       $t_mock => array(
         $t_task => PhabricatorEdgeConfig::TYPE_MOCK_HAS_TASK,

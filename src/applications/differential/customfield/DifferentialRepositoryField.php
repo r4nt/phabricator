@@ -49,7 +49,7 @@ final class DifferentialRepositoryField
 
     return id(new AphrontFormTokenizerControl())
       ->setName($this->getFieldKey())
-      ->setDatasource('/typeahead/common/repositories/')
+      ->setDatasource(new DiffusionRepositoryDatasource())
       ->setValue($control_value)
       ->setError($this->getFieldError())
       ->setLabel($this->getFieldName())
@@ -151,10 +151,6 @@ final class DifferentialRepositoryField
     PhabricatorMetaMTAMailBody $body,
     PhabricatorApplicationTransactionEditor $editor,
     array $xactions) {
-
-    if (!$editor->getDiffUpdateTransaction($xactions)) {
-      return;
-    }
 
     $repository = $this->getObject()->getRepository();
     if ($repository === null) {

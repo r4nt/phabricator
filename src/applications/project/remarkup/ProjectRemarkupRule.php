@@ -7,6 +7,14 @@ final class ProjectRemarkupRule
     return '#';
   }
 
+  protected function renderObjectRef($object, $handle, $anchor, $id) {
+    if ($this->getEngine()->isTextMode()) {
+      return '#'.$id;
+    }
+
+    return $handle->renderTag();
+  }
+
   protected function getObjectIDPattern() {
     // NOTE: This explicitly does not match strings which contain only
     // digits, because digit strings like "#123" are used to reference tasks at
@@ -20,7 +28,7 @@ final class ProjectRemarkupRule
     // accept some false negatives -- like `#1` or `#dot.` -- in order to avoid
     // a bunch of false positives on general use of the `#` character.
 
-    // In other contexts, the PhabricatorProjectPHIDTypeProject pattern is
+    // In other contexts, the PhabricatorProjectProjectPHIDType pattern is
     // controlling and these names should parse correctly.
 
     return '[^\s.!,:;{}#]*[^\s\d!,:;{}#]+(?:[^\s.!,:;{}#][^\s!,:;{}#]*)*';

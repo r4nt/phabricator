@@ -95,14 +95,6 @@ final class PhabricatorProjectEditMainController
 
     $view->addAction(
       id(new PhabricatorActionView())
-        ->setName(pht('Edit Icon'))
-        ->setIcon($project->getIcon())
-        ->setHref($this->getApplicationURI("icon/{$id}/"))
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(true));
-
-    $view->addAction(
-      id(new PhabricatorActionView())
         ->setName(pht('Edit Picture'))
         ->setIcon('fa-picture-o')
         ->setHref($this->getApplicationURI("picture/{$id}/"))
@@ -144,6 +136,12 @@ final class PhabricatorProjectEditMainController
     $descriptions = PhabricatorPolicyQuery::renderPolicyDescriptions(
       $viewer,
       $project);
+
+    $this->loadHandles(array($project->getPHID()));
+
+    $view->addProperty(
+      pht('Looks Like'),
+      $this->getHandle($project->getPHID())->renderTag());
 
     $view->addProperty(
       pht('Visible To'),

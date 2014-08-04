@@ -31,7 +31,7 @@ final class PhabricatorProjectUIEventListener
 
     $project_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
       $object->getPHID(),
-      PhabricatorEdgeConfig::TYPE_OBJECT_HAS_PROJECT);
+      PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
     if ($project_phids) {
       $project_phids = array_reverse($project_phids);
       $handles = id(new PhabricatorHandleQuery())
@@ -43,11 +43,8 @@ final class PhabricatorProjectUIEventListener
     }
 
     if ($handles) {
-      $list = array();
-      foreach ($handles as $handle) {
-        $list[] = $handle->renderLink();
-      }
-      $list = phutil_implode_html(phutil_tag('br'), $list);
+      $list = id(new PHUIHandleTagListView())
+        ->setHandles($handles);
     } else {
       $list = phutil_tag('em', array(), pht('None'));
     }

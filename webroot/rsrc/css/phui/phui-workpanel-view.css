@@ -2,15 +2,37 @@
  * @provides phui-workpanel-view-css
  */
 
-.phui-workpanel-view .phabricator-action-header {
+.phui-workpanel-view .phui-action-header {
   border: 1px solid #b3b5b6;
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
 }
 
+.phui-workpanel-view .phui-action-header .phui-action-header-title {
+  padding: 8px 0;
+}
+
 .device-phone .phui-workboard-view {
   width: auto;
   margin: 0 8px;
+}
+
+.phui-workboard-view {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.phui-workboard-view .phui-object-item .phui-object-item-objname {
+  -webkit-touch-callout: text;
+  -webkit-user-select: text;
+  -khtml-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
 .phui-workboard-view .phui-object-item-link {
@@ -84,6 +106,12 @@
 
 .project-column-empty.drag-target-list {
   background: rgba(255,255,255,.7);
+}
+
+.phui-workpanel-view .phui-workpanel-lightred .phui-action-header {
+  border-top: 1px solid {$redborder};
+  border-left: 1px solid {$redborder};
+  border-right: 1px solid {$redborder};
 }
 
 /* - Workpanel Cards -----------------------------------------------------------

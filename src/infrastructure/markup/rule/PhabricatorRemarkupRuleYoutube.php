@@ -1,10 +1,6 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhabricatorRemarkupRuleYoutube
-  extends PhutilRemarkupRule {
+final class PhabricatorRemarkupRuleYoutube extends PhutilRemarkupRule {
 
   public function getPriority() {
     return 350.0;
@@ -30,9 +26,12 @@ final class PhabricatorRemarkupRuleYoutube
     }
 
     $youtube_src = 'https://www.youtube.com/embed/'.$v;
-    $iframe = phutil_tag_div(
-      'embedded-youtube-video',
-      phutil_tag(
+    $iframe = $this->newTag(
+      'div',
+      array(
+        'class' => 'embedded-youtube-video',
+      ),
+      $this->newTag(
         'iframe',
         array(
           'width'       => '650',

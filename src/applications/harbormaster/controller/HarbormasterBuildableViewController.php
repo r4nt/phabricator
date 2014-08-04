@@ -179,29 +179,7 @@ final class HarbormasterBuildableViewController
         ->setHref($view_uri);
 
       $status = $build->getBuildStatus();
-      switch ($status) {
-        case HarbormasterBuild::STATUS_INACTIVE:
-          $item->setBarColor('grey');
-          break;
-        case HarbormasterBuild::STATUS_PENDING:
-          $item->setBarColor('blue');
-          break;
-        case HarbormasterBuild::STATUS_BUILDING:
-          $item->setBarColor('yellow');
-          break;
-        case HarbormasterBuild::STATUS_PASSED:
-          $item->setBarColor('green');
-          break;
-        case HarbormasterBuild::STATUS_FAILED:
-          $item->setBarColor('red');
-          break;
-        case HarbormasterBuild::STATUS_ERROR:
-          $item->setBarColor('red');
-          break;
-        case HarbormasterBuild::STATUS_STOPPED:
-          $item->setBarColor('black');
-          break;
-      }
+      $item->setBarColor(HarbormasterBuild::getBuildStatusColor($status));
 
       $item->addAttribute(HarbormasterBuild::getBuildStatusName($status));
 
@@ -282,12 +260,7 @@ final class HarbormasterBuildableViewController
               break;
           }
 
-          try {
-            $impl = $target->getImplementation();
-            $name = $impl->getName();
-          } catch (Exception $ex) {
-            $name = $target->getClassName();
-          }
+          $name = $target->getName();
 
           $target_list->addItem(
             id(new PHUIStatusItemView())

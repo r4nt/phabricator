@@ -17,6 +17,10 @@ final class PhabricatorProjectIcon extends Phobject {
         'fa-truck' => pht('Release'),
         'fa-lock' => pht('Policy'),
         'fa-umbrella' => pht('An Umbrella'),
+        'fa-cloud' => pht('The Cloud'),
+        'fa-building' => pht('Company'),
+        'fa-credit-card' => pht('Accounting'),
+        'fa-flask' => pht('Experimental'),
       );
   }
 
@@ -24,4 +28,18 @@ final class PhabricatorProjectIcon extends Phobject {
     $map = self::getIconMap();
     return $map[$key];
   }
+
+  public static function renderIconForChooser($icon) {
+    $project_icons = PhabricatorProjectIcon::getIconMap();
+
+    return phutil_tag(
+      'span',
+      array(),
+      array(
+        id(new PHUIIconView())->setIconFont($icon),
+        ' ',
+        idx($project_icons, $icon, pht('Unknown Icon')),
+      ));
+  }
+
 }

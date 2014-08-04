@@ -220,6 +220,7 @@ JX.install('HeraldRuleEditor', {
         case 'buildplan':
         case 'taskpriority':
         case 'arcanistprojects':
+        case 'legaldocuments':
           var tokenizer = this._newTokenizer(type);
           input = tokenizer[0];
           get_fn = tokenizer[1];
@@ -282,7 +283,8 @@ JX.install('HeraldRuleEditor', {
 
       var tokenizerConfig = {
         root : template,
-        src : this._config.template.source[type],
+        src : this._config.template.source[type].uri,
+        placeholder: this._config.template.source[type].placeholder,
         icons : this._config.template.icons,
         username : this._config.username
       };

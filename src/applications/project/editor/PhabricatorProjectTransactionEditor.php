@@ -16,6 +16,7 @@ final class PhabricatorProjectTransactionEditor
     $types[] = PhabricatorProjectTransaction::TYPE_STATUS;
     $types[] = PhabricatorProjectTransaction::TYPE_IMAGE;
     $types[] = PhabricatorProjectTransaction::TYPE_ICON;
+    $types[] = PhabricatorProjectTransaction::TYPE_COLOR;
 
     return $types;
   }
@@ -38,6 +39,8 @@ final class PhabricatorProjectTransactionEditor
         return $object->getProfileImagePHID();
       case PhabricatorProjectTransaction::TYPE_ICON:
         return $object->getIcon();
+      case PhabricatorProjectTransaction::TYPE_COLOR:
+        return $object->getColor();
     }
 
     return parent::getCustomTransactionOldValue($object, $xaction);
@@ -53,6 +56,7 @@ final class PhabricatorProjectTransactionEditor
       case PhabricatorProjectTransaction::TYPE_STATUS:
       case PhabricatorProjectTransaction::TYPE_IMAGE:
       case PhabricatorProjectTransaction::TYPE_ICON:
+      case PhabricatorProjectTransaction::TYPE_COLOR:
         return $xaction->getNewValue();
     }
 
@@ -79,6 +83,9 @@ final class PhabricatorProjectTransactionEditor
       case PhabricatorProjectTransaction::TYPE_ICON:
         $object->setIcon($xaction->getNewValue());
         return;
+      case PhabricatorProjectTransaction::TYPE_COLOR:
+        $object->setColor($xaction->getNewValue());
+        return;
       case PhabricatorTransactions::TYPE_EDGE:
         return;
       case PhabricatorTransactions::TYPE_VIEW_POLICY:
@@ -99,23 +106,26 @@ final class PhabricatorProjectTransactionEditor
     PhabricatorLiskDAO $object,
     PhabricatorApplicationTransaction $xaction) {
 
+    $old = $xaction->getOldValue();
+    $new = $xaction->getNewValue();
+
     switch ($xaction->getTransactionType()) {
       case PhabricatorProjectTransaction::TYPE_NAME:
+        // First, remove the old and new slugs. Removing the old slug is
+        // important when changing the project's capitalization or puctuation.
+        // Removing the new slug is important when changing the project's name
+        // so that one of its secondary slugs is now the primary slug.
+        if ($old !== null) {
+          $this->removeSlug($object, $old);
+        }
+        $this->removeSlug($object, $new);
+
         $new_slug = id(new PhabricatorProjectSlug())
           ->setSlug($object->getPrimarySlug())
           ->setProjectPHID($object->getPHID())
           ->save();
 
-        if ($xaction->getOldValue() !== null) {
-          $clone_object = clone $object;
-          $clone_object->setPhrictionSlug($xaction->getOldValue());
-          $old_slug = $clone_object->getPrimarySlug();
-          $old_slug = id(new PhabricatorProjectSlug())
-            ->loadOneWhere('slug = %s', $old_slug);
-          if ($old_slug) {
-            $old_slug->delete();
-          }
-        }
+        $object->updateDatasourceTokens();
 
         // TODO -- delete all of the below once we sever automagical project
         // to phriction stuff
@@ -174,6 +184,9 @@ final class PhabricatorProjectTransactionEditor
             $rem_slug->delete();
           }
         }
+
+        $object->updateDatasourceTokens();
+
         return;
       case PhabricatorTransactions::TYPE_VIEW_POLICY:
       case PhabricatorTransactions::TYPE_EDIT_POLICY:
@@ -181,6 +194,7 @@ final class PhabricatorProjectTransactionEditor
       case PhabricatorProjectTransaction::TYPE_STATUS:
       case PhabricatorProjectTransaction::TYPE_IMAGE:
       case PhabricatorProjectTransaction::TYPE_ICON:
+      case PhabricatorProjectTransaction::TYPE_COLOR:
         return;
       case PhabricatorTransactions::TYPE_EDGE:
         $edge_type = $xaction->getMetadataValue('edge:type');
@@ -222,8 +236,7 @@ final class PhabricatorProjectTransactionEditor
 
             if ($rem) {
               // When removing members, also remove any watches on the project.
-              $edge_editor = id(new PhabricatorEdgeEditor())
-                ->setSuppressEvents(true);
+              $edge_editor = new PhabricatorEdgeEditor();
               foreach ($rem as $rem_phid) {
                 $edge_editor->removeEdge(
                   $object->getPHID(),
@@ -358,6 +371,7 @@ final class PhabricatorProjectTransactionEditor
       case PhabricatorProjectTransaction::TYPE_STATUS:
       case PhabricatorProjectTransaction::TYPE_IMAGE:
       case PhabricatorProjectTransaction::TYPE_ICON:
+      case PhabricatorProjectTransaction::TYPE_COLOR:
         PhabricatorPolicyFilter::requireCapability(
           $this->requireActor(),
           $object,
@@ -418,6 +432,30 @@ final class PhabricatorProjectTransactionEditor
     }
 
     return parent::extractFilePHIDsFromCustomTransaction($object, $xaction);
+  }
+
+  private function removeSlug(
+    PhabricatorLiskDAO $object,
+    $name) {
+
+    $object = (clone $object);
+    $object->setPhrictionSlug($name);
+    $slug = $object->getPrimarySlug();
+
+    $slug_object = id(new PhabricatorProjectSlug())->loadOneWhere(
+      'slug = %s',
+      $slug);
+
+    if (!$slug_object) {
+      return;
+    }
+
+    if ($slug_object->getProjectPHID() != $object->getPHID()) {
+      throw new Exception(
+        pht('Trying to remove slug owned by another project!'));
+    }
+
+    $slug_object->delete();
   }
 
 }

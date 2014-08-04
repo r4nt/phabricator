@@ -376,14 +376,22 @@ final class DifferentialChangesetParser {
     $conn_w = $changeset->establishConnection('w');
 
     $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-      queryfx(
-        $conn_w,
-        'INSERT INTO %T (id, cache, dateCreated) VALUES (%d, %B, %d)
-          ON DUPLICATE KEY UPDATE cache = VALUES(cache)',
-        DifferentialChangeset::TABLE_CACHE,
-        $render_cache_key,
-        $cache,
-        time());
+      try {
+        queryfx(
+          $conn_w,
+          'INSERT INTO %T (id, cache, dateCreated) VALUES (%d, %B, %d)
+            ON DUPLICATE KEY UPDATE cache = VALUES(cache)',
+          DifferentialChangeset::TABLE_CACHE,
+          $render_cache_key,
+          $cache,
+          time());
+      } catch (AphrontQueryException $ex) {
+        // Ignore these exceptions. A common cause is that the cache is
+        // larger than 'max_allowed_packet', in which case we're better off
+        // not writing it.
+
+        // TODO: It would be nice to tailor this more narrowly.
+      }
     unset($unguarded);
   }
 
@@ -590,7 +598,7 @@ final class DifferentialChangesetParser {
     if ($changetype == DifferentialChangeType::TYPE_MOVE_AWAY) {
       // sometimes we show moved files as unchanged, sometimes deleted,
       // and sometimes inconsistent with what actually happened at the
-      // destination of the move.  Rather than make a false claim,
+      // destination of the move. Rather than make a false claim,
       // omit the 'not changed' notice if this is the source of a move
       $unchanged = false;
     }

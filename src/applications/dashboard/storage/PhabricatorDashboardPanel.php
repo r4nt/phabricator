@@ -13,6 +13,7 @@ final class PhabricatorDashboardPanel
   protected $panelType;
   protected $viewPolicy;
   protected $editPolicy;
+  protected $isArchived = 0;
   protected $properties = array();
 
   private $customFields = self::ATTACHABLE;
@@ -46,7 +47,7 @@ final class PhabricatorDashboardPanel
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorDashboardPHIDTypePanel::TYPECONST);
+      PhabricatorDashboardPanelPHIDType::TYPECONST);
   }
 
   public function getProperty($key, $default = null) {
