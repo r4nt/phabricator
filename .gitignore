@@ -27,4 +27,4 @@
 /support/bin/*
 
 # User extensions
-/src/extensions/*
+# /src/extensions/*
