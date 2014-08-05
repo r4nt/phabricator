@@ -7,6 +7,7 @@ final class PhabricatorAuditEditor
     $types = parent::getTransactionTypes();
 
     $types[] = PhabricatorTransactions::TYPE_COMMENT;
+    $types[] = PhabricatorTransactions::TYPE_EDGE;
 
     // TODO: These will get modernized eventually, but that can happen one
     // at a time later on.
@@ -66,6 +67,7 @@ final class PhabricatorAuditEditor
     switch ($xaction->getTransactionType()) {
       case PhabricatorTransactions::TYPE_COMMENT:
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
+      case PhabricatorTransactions::TYPE_EDGE:
       case PhabricatorAuditActionConstants::ACTION:
       case PhabricatorAuditActionConstants::INLINE:
       case PhabricatorAuditActionConstants::ADD_AUDITORS:
@@ -82,6 +84,7 @@ final class PhabricatorAuditEditor
     switch ($xaction->getTransactionType()) {
       case PhabricatorTransactions::TYPE_COMMENT:
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
+      case PhabricatorTransactions::TYPE_EDGE:
       case PhabricatorAuditActionConstants::ACTION:
       case PhabricatorAuditActionConstants::INLINE:
         return;
@@ -130,6 +133,20 @@ final class PhabricatorAuditEditor
     PhabricatorLiskDAO $object,
     array $xactions) {
 
+    // Load auditors explicitly; we may not have them if the caller was a
+    // generic piece of infrastructure.
+
+    $commit = id(new DiffusionCommitQuery())
+      ->setViewer($this->requireActor())
+      ->withIDs(array($object->getID()))
+      ->needAuditRequests(true)
+      ->executeOne();
+    if (!$commit) {
+      throw new Exception(
+        pht('Failed to load commit during transaction finalization!'));
+    }
+    $object->attachAudits($commit->getAudits());
+
     $status_concerned = PhabricatorAuditStatusConstants::CONCERNED;
     $status_closed = PhabricatorAuditStatusConstants::CLOSED;
     $status_resigned = PhabricatorAuditStatusConstants::RESIGNED;
@@ -161,11 +178,23 @@ final class PhabricatorAuditEditor
               $requests = mpull($requests, null, 'getAuditorPHID');
               $actor_request = idx($requests, $actor_phid);
 
-              if ($actor_request) {
-                $actor_request
-                  ->setAuditStatus($status_resigned)
-                  ->save();
+              // If the actor doesn't currently have a relationship to the
+              // commit, add one explicitly. For example, this allows members
+              // of a project to resign from a commit and have it drop out of
+              // their queue.
+
+              if (!$actor_request) {
+                $actor_request = id(new PhabricatorRepositoryAuditRequest())
+                  ->setCommitPHID($object->getPHID())
+                  ->setAuditorPHID($actor_phid);
+
+                $requests[] = $actor_request;
+                $object->attachAudits($requests);
               }
+
+              $actor_request
+                ->setAuditStatus($status_resigned)
+                ->save();
               break;
             case PhabricatorAuditActionConstants::ACCEPT:
             case PhabricatorAuditActionConstants::CONCERN:
