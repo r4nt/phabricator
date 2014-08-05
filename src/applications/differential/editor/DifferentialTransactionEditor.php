@@ -1277,6 +1277,34 @@ final class DifferentialTransactionEditor
     return $result;
   }
 
+  protected function indentForMail($lines) {
+    foreach ($lines as &$line) {
+      $line = '> '.$line;
+    }
+    return $lines;
+  }
+
+  protected function nestCommentHistory($inline) {
+    $nested = array();
+    $previous_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
+      'changesetID = %d AND lineNumber = %d AND id < %d '.
+      'ORDER BY id ASC',
+      $inline->getChangesetID(), $inline->getLineNumber(), $inline->getID());
+    foreach ($previous_inlines as $previous_inline) {
+      $nested = $this->indentForMail(
+        array_merge(
+          $nested,
+          explode("\n", $previous_inline->getContent())));
+      $user = id(new PhabricatorUser())->loadOneWhere(
+        'phid = %s', $previous_inline->getAuthorPHID());
+      if ($user) {
+        array_unshift($nested, $user->getRealName().' wrote:');
+      }
+    }
+    $nested = array_merge($nested, explode("\n", $inline->getContent()));
+    return implode("\n", $nested);
+  }
+
   private function renderInlineCommentsForMail(
     PhabricatorLiskDAO $object,
     array $inlines) {
@@ -1337,7 +1365,12 @@ final class DifferentialTransactionEditor
             1);
           $result[] = '----------------';
 
-          $result[] = $inline_content;
+          if (PhabricatorEnv::getEnvConfig(
+                'metamta.differential.comment-thread', false)) {
+            $result[] = $this->nestCommentHistory($inline->getComment());
+          } else {
+            $result[] = $inline_content;
+          }
           $result[] = null;
         }
       }

@@ -294,6 +294,21 @@ final class PhabricatorDifferentialConfigOptions
             'Normally, inline comments in emails are shown with a file and '.
             'line but without any diff context. Enabling this option adds '.
             'diff context.')),
+      $this->newOption(
+        'metamta.differential.comment-thread',
+        'bool',
+        false)
+        ->setBoolOptions(
+          array(
+            pht('Show comment thread'),
+            pht('Do not show comment thread'),
+          ))
+        ->setSummary(pht('Show comment thread around inline comments.'))
+        ->setDescription(
+          pht(
+            'Normally, inline comments in emails do not include the full '.
+            'comment thread. Enabling this option adds the full history of '.
+            'the conversation for each inline comment.')),
     );
   }
 
