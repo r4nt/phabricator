@@ -1340,7 +1340,7 @@ final class DifferentialTransactionEditor
           'changesetID = '.join(' OR changesetID = ', $changeset_ids).
           ' AND transactionPHID IS NOT NULL '.
           'ORDER BY lineNumber,id ASC');
-      error_log("all_inlines: ".$all_inlines);
+      error_log("all_inlines: ".join(", ", $all_inlines));
     }
 
     $result = array();
