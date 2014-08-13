@@ -1332,14 +1332,15 @@ final class DifferentialTransactionEditor
       $inlines,
       $changesets);
 
+    alert("heeee");
     if ($show_context) {
       $hunk_parser = new DifferentialHunkParser();
       $changeset_ids = mpull($changesets, null, 'getID');
-      $inlines = id(new DifferentialTransactionComment())->loadAllWhere(
+      $all_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
           'changesetID = '.join(' OR changesetID = ', $changeset_ids).
           ' AND transactionPHID IS NOT NULL '.
           'ORDER BY lineNumber,id ASC');
-      error_log($inlines);
+      alert("all_inlines: ".$all_inlines);
     }
 
     $result = array();
