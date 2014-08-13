@@ -1339,14 +1339,19 @@ final class DifferentialTransactionEditor
           'changesetID = '.join(' OR changesetID = ', $changeset_ids).
           ' AND transactionPHID IS NOT NULL '.
           'ORDER BY lineNumber,id ASC');
+      $inlines_by_changeset = array();
+      foreach ($all_inlines as $inline) {
+        $inlines_by_changeset
+          [$inline->getChangesetID()]
+          [$inline->getLineNumber()]
+          [$inline->getID()] = $inline;
+      }
       $author_phids = array_keys(mpull($all_inlines, null, 'getAuthorPHID'));
       $authors = id(new PhabricatorPeopleQuery())
         ->setViewer($this->getActor())
         ->withPHIDs($author_phids)
         ->execute();
-      $author_names = mpull($authors, null, 'getUserName');
-      $authors = mpull($authors, null, 'getPHID');
-      error_log(join(", ", array_keys($authors)));
+      $authors_by_phid = mpull($authors, null, 'getPHID');
     }
 
     $result = array();
@@ -1381,7 +1386,8 @@ final class DifferentialTransactionEditor
             $comment->getLineLength(),
             1);
           $result[] = '----------------';
-          $result[] = $this->nestCommentHistory($inline->getComment());
+          $result[] = $this->nestCommentHistory(
+            $inline->getComment(), );
           $result[] = null;
         }
       }
