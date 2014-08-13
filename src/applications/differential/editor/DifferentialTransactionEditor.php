@@ -1298,15 +1298,15 @@ final class DifferentialTransactionEditor
       $nested = $this->indentForMail(
         array_merge(
           $nested,
-          explode('\n', $previous_inline->getContent())));
+          explode("\n", $previous_inline->getContent())));
       $user = idx($users_by_phid, $previous_inline->getAuthorPHID(), null);
       if ($user) {
         array_unshift($nested, $user->getUserName().' wrote:');
       }
     }
 
-    $nested = array_merge($nested, explode('\n', $inline->getContent()));
-    return implode('\n', $nested);
+    $nested = array_merge($nested, explode("\n", $inline->getContent()));
+    return implode("\n", $nested);
   }
 
   private function renderInlineCommentsForMail(
