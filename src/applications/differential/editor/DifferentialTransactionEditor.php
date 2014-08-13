@@ -1340,10 +1340,10 @@ final class DifferentialTransactionEditor
       $queries = array();
       foreach ($line_numbers_by_changeset as $id => $line_numbers) {
         $queries[] = '(changesetID = '.$id.
-          ' AND lineNumber = '.join(' AND lineNumber = ', $line_numbers).')';
+          ' AND (lineNumber = '.join(' OR lineNumber = ', $line_numbers).'))';
       }
       $all_comments = id(new DifferentialTransactionComment())->loadAllWhere(
-        join(' OR ', $queries).' AND transactionPHID IS NOT NULL');
+        '('.join(' OR ', $queries).') AND transactionPHID IS NOT NULL');
       $comments_by_line_number = array();
       foreach ($all_comments as $comment) {
         $comments_by_line_number
