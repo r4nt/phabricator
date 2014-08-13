@@ -1286,26 +1286,26 @@ final class DifferentialTransactionEditor
   }
 
   protected function nestCommentHistory(
-    DifferentialTransactionComment $inline, array $inlines_by_changeset,
+    DifferentialTransactionComment $comment, array $comments_by_line_number,
     array $users_by_phid) {
 
     $nested = array();
-    $previous_inlines = $inlines_by_changeset[$inline->getChangesetID()]
-                                             [$inline->getLineNumber()];
-    foreach ($previous_inlines as $previous_inline) {
-      if ($previous_inline->getID() >= $inline->getID())
+    $previous_comments = $comments_by_line_number[$comment->getChangesetID()]
+                                                 [$comment->getLineNumber()];
+    foreach ($previous_comments as $previous_comment) {
+      if ($previous_comment->getID() >= $comment->getID())
         break;
       $nested = $this->indentForMail(
         array_merge(
           $nested,
-          explode("\n", $previous_inline->getContent())));
-      $user = idx($users_by_phid, $previous_inline->getAuthorPHID(), null);
+          explode("\n", $previous_comment->getContent())));
+      $user = idx($users_by_phid, $previous_comment->getAuthorPHID(), null);
       if ($user) {
         array_unshift($nested, $user->getUserName().' wrote:');
       }
     }
 
-    $nested = array_merge($nested, explode("\n", $inline->getContent()));
+    $nested = array_merge($nested, explode("\n", $comment->getContent()));
     return implode("\n", $nested);
   }
 
@@ -1342,16 +1342,16 @@ final class DifferentialTransactionEditor
         $queries[] = '(changesetID = '.$id.
           ' AND lineNumber = '.join(' AND lineNumber = ', $line_numbers).')';
       }
-      $all_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
+      $all_comments = id(new DifferentialTransactionComment())->loadAllWhere(
         join(' OR ', $queries).' AND transactionPHID IS NOT NULL');
-      $inlines_by_changeset = array();
-      foreach ($all_inlines as $inline) {
-        $inlines_by_changeset
-          [$inline->getChangesetID()]
-          [$inline->getLineNumber()]
-          [$inline->getID()] = $inline;
+      $comments_by_line_number = array();
+      foreach ($all_comments as $comment) {
+        $comments_by_line_number
+          [$comment->getChangesetID()]
+          [$comment->getLineNumber()]
+          [$comment->getID()] = $comment;
       }
-      $author_phids = array_keys(mpull($all_inlines, null, 'getAuthorPHID'));
+      $author_phids = array_keys(mpull($all_comments, null, 'getAuthorPHID'));
       $authors = id(new PhabricatorPeopleQuery())
         ->setViewer($this->getActor())
         ->withPHIDs($author_phids)
@@ -1392,7 +1392,7 @@ final class DifferentialTransactionEditor
             1);
           $result[] = '----------------';
           $result[] = $this->nestCommentHistory(
-            $inline->getComment(), $inlines_by_changeset, $authors_by_phid);
+            $inline->getComment(), $comments_by_line_number, $authors_by_phid);
           $result[] = null;
         }
       }
