@@ -1290,7 +1290,9 @@ final class DifferentialTransactionEditor
     array $users_by_phid) {
 
     $nested = array();
-    foreach ($inlines_by_changeset[$inline->getChangesetID()][$inline->getLineNumber()] as $previous_inline) {
+    $previous_inlines = $inlines_by_changeset[$inline->getChangesetID()]
+                                             [$inline->getLineNumber()];
+    foreach ($previous_inlines as $previous_inline) {
       if ($previous_inline->getID() >= $inline->getID())
         break;
       $nested = $this->indentForMail(
@@ -1302,26 +1304,9 @@ final class DifferentialTransactionEditor
         array_unshift($nested, $user->getUserName().' wrote:');
       }
     }
-/*
-    $previous_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
-      'changesetID = %d AND lineNumber = %d AND id < %d '.
-      'AND transactionPHID IS NOT NULL '.
-      'ORDER BY id ASC',
-      $inline->getChangesetID(), $inline->getLineNumber(), $inline->getID());
-    foreach ($previous_inlines as $previous_inline) {
-      $nested = $this->indentForMail(
-        array_merge(
-          $nested,
-          explode("\n", $previous_inline->getContent())));
-      $user = id(new PhabricatorUser())->loadOneWhere(
-        'phid = %s', $previous_inline->getAuthorPHID());
-      if ($user) {
-        array_unshift($nested, $user->getUserName().' wrote:');
-      }
-    }
- */
-    $nested = array_merge($nested, explode("\n", $inline->getContent()));
-    return implode("\n", $nested);
+
+    $nested = array_merge($nested, explode('\n', $inline->getContent()));
+    return implode('\n', $nested);
   }
 
   private function renderInlineCommentsForMail(
