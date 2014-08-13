@@ -1345,7 +1345,8 @@ final class DifferentialTransactionEditor
         ->withPHIDs($author_phids)
         ->execute();
       $author_names = mpull($authors, null, 'getUserName');
-      error_log(join(", ", $author_names));
+      $authors = mpull($authors, null, 'getPHID');
+      error_log(join(", ", array_keys($authors)));
     }
 
     $result = array();
