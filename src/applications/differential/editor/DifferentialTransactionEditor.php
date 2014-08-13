@@ -1332,7 +1332,6 @@ final class DifferentialTransactionEditor
       $inlines,
       $changesets);
 
-    error_log("heeee");
     if ($show_context) {
       $hunk_parser = new DifferentialHunkParser();
       $changeset_ids = array_keys(mpull($changesets, null, 'getID'));
@@ -1340,7 +1339,13 @@ final class DifferentialTransactionEditor
           'changesetID = '.join(' OR changesetID = ', $changeset_ids).
           ' AND transactionPHID IS NOT NULL '.
           'ORDER BY lineNumber,id ASC');
-      error_log("all_inlines: ".join(", ", $all_inlines));
+      $author_phids = array_keys(mpull($all_inlines, null, 'getAuthorPHID'));
+      $authors = id(new PhabricatorPeopleQuery())
+        ->setViewer($this->getViewer())
+        ->withPHIDs($author_phids)
+        ->execute();
+      $author_names = mpull($authors, null, 'getUserName');
+      error_log(join(", ", $author_names));
     }
 
     $result = array();
