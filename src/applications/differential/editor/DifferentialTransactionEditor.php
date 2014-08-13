@@ -1387,7 +1387,7 @@ final class DifferentialTransactionEditor
             1);
           $result[] = '----------------';
           $result[] = $this->nestCommentHistory(
-            $inline->getComment(), );
+            $inline->getComment(), $inlines_by_changeset, $authors_by_phid);
           $result[] = null;
         }
       }
