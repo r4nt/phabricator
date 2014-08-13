@@ -1317,9 +1317,12 @@ final class DifferentialTransactionEditor
     $show_context = PhabricatorEnv::getEnvConfig($context_key);
 
     $changeset_ids = array();
+    $line_numbers_by_changeset = array();
     foreach ($inlines as $inline) {
       $id = $inline->getComment()->getChangesetID();
       $changeset_ids[$id] = $id;
+      $line_numbers_by_changeset[$id][] =
+        $inline->getComment()->getLineNumber();
     }
 
     $changesets = id(new DifferentialChangesetQuery())
@@ -1334,11 +1337,13 @@ final class DifferentialTransactionEditor
 
     if ($show_context) {
       $hunk_parser = new DifferentialHunkParser();
-      $changeset_ids = array_keys(mpull($changesets, null, 'getID'));
+      $queries = array();
+      foreach ($line_numbers_by_changeset as $id => $line_numbers) {
+        $queries[] = '(changesetID = '.$id.
+          ' AND lineNumber = '.join(' AND lineNumber = ', $line_numbers).')';
+      }
       $all_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
-          'changesetID = '.join(' OR changesetID = ', $changeset_ids).
-          ' AND transactionPHID IS NOT NULL'.
-          ' ORDER BY lineNumber,id ASC');
+        join(' OR ', $queries).' AND transactionPHID IS NOT NULL');
       $inlines_by_changeset = array();
       foreach ($all_inlines as $inline) {
         $inlines_by_changeset
