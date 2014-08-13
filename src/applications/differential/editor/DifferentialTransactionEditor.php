@@ -1286,9 +1286,23 @@ final class DifferentialTransactionEditor
   }
 
   protected function nestCommentHistory(
-    DifferentialTransactionComment $inline) {
+    DifferentialTransactionComment $inline, array $inlines_by_changeset,
+    array $users_by_phid) {
 
     $nested = array();
+    foreach ($inlines_by_changeset[$inline->getChangesetID()][$inline->getLineNumber()] as $previous_inline) {
+      if ($previous_inline->getID() >= $inline->getID())
+        break;
+      $nested = $this->indentForMail(
+        array_merge(
+          $nested,
+          explode('\n', $previous_inline->getContent())));
+      $user = idx($users_by_phid, $previous_inline->getAuthorPHID(), null);
+      if ($user) {
+        array_unshift($nested, $user->getUserName().' wrote:');
+      }
+    }
+/*
     $previous_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
       'changesetID = %d AND lineNumber = %d AND id < %d '.
       'AND transactionPHID IS NOT NULL '.
@@ -1305,6 +1319,7 @@ final class DifferentialTransactionEditor
         array_unshift($nested, $user->getUserName().' wrote:');
       }
     }
+ */
     $nested = array_merge($nested, explode("\n", $inline->getContent()));
     return implode("\n", $nested);
   }
