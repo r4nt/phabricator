@@ -1341,7 +1341,6 @@ final class DifferentialTransactionEditor
           'ORDER BY lineNumber,id ASC');
       $author_phids = array_keys(mpull($all_inlines, null, 'getAuthorPHID'));
       $authors = id(new PhabricatorPeopleQuery())
-        ->setViewer($this->getViewer())
         ->withPHIDs($author_phids)
         ->execute();
       $author_names = mpull($authors, null, 'getUserName');
