@@ -1337,8 +1337,8 @@ final class DifferentialTransactionEditor
       $changeset_ids = array_keys(mpull($changesets, null, 'getID'));
       $all_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
           'changesetID = '.join(' OR changesetID = ', $changeset_ids).
-          ' AND transactionPHID IS NOT NULL '.
-          'ORDER BY lineNumber,id ASC');
+          ' AND transactionPHID IS NOT NULL'.
+          ' ORDER BY lineNumber,id ASC');
       $inlines_by_changeset = array();
       foreach ($all_inlines as $inline) {
         $inlines_by_changeset
