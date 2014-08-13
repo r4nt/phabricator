@@ -1335,7 +1335,7 @@ final class DifferentialTransactionEditor
     error_log("heeee");
     if ($show_context) {
       $hunk_parser = new DifferentialHunkParser();
-      $changeset_ids = mpull($changesets, null, 'getID');
+      $changeset_ids = array_keys(mpull($changesets, null, 'getID'));
       $all_inlines = id(new DifferentialTransactionComment())->loadAllWhere(
           'changesetID = '.join(' OR changesetID = ', $changeset_ids).
           ' AND transactionPHID IS NOT NULL '.
