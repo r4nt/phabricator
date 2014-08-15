@@ -31,7 +31,7 @@ final class PhabricatorBotMacroHandler extends PhabricatorBotHandler {
     foreach ($macros as $macro_name => $macro) {
       $regexp[] = preg_quote($macro_name, '/');
     }
-    $regexp = '/('.implode('|', $regexp).')/';
+    $regexp = '/^('.implode('|', $regexp).')\z/';
 
     $this->macros = $macros;
     $this->regexp = $regexp;
@@ -49,7 +49,7 @@ final class PhabricatorBotMacroHandler extends PhabricatorBotHandler {
         $message_body = $message->getBody();
 
         $matches = null;
-        if (!preg_match($this->regexp, $message_body, $matches)) {
+        if (!preg_match($this->regexp, trim($message_body), $matches)) {
           return;
         }
 
@@ -66,6 +66,11 @@ final class PhabricatorBotMacroHandler extends PhabricatorBotHandler {
             $this->getConfig('macro.size', 48),
             $this->getConfig('macro.aspect', 0.66));
           $ascii = $this->macros[$macro]['ascii'];
+        }
+
+        if ($ascii === false) {
+          // If we failed to rasterize the macro, bail out.
+          return;
         }
 
         $target_name = $message->getTarget()->getName();

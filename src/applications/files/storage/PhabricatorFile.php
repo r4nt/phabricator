@@ -1,5 +1,21 @@
 <?php
 
+/**
+ * Parameters
+ * ==========
+ *
+ * When creating a new file using a method like @{method:newFromFileData}, these
+ * parameters are supported:
+ *
+ *   | name | Human readable filename.
+ *   | authorPHID | User PHID of uploader.
+ *   | ttl | Temporary file lifetime, in seconds.
+ *   | viewPolicy | File visibility policy.
+ *   | isExplicitUpload | Used to show users files they explicitly uploaded.
+ *   | canCDN | Allows the file to be cached and delivered over a CDN.
+ *   | mime-type | Optional, explicit file MIME type.
+ *
+ */
 final class PhabricatorFile extends PhabricatorFileDAO
   implements
     PhabricatorTokenReceiverInterface,
@@ -7,10 +23,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
     PhabricatorFlaggableInterface,
     PhabricatorPolicyInterface {
 
+  const ONETIME_TEMPORARY_TOKEN_TYPE = 'file:onetime';
   const STORAGE_FORMAT_RAW  = 'raw';
 
   const METADATA_IMAGE_WIDTH  = 'width';
   const METADATA_IMAGE_HEIGHT = 'height';
+  const METADATA_CAN_CDN = 'canCDN';
 
   protected $name;
   protected $mimeType;
@@ -157,10 +175,11 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return $file;
   }
 
-  public static function newFileFromContentHash($hash, $params) {
+  public static function newFileFromContentHash($hash, array $params) {
     // Check to see if a file with same contentHash exist
     $file = id(new PhabricatorFile())->loadOneWhere(
-      'contentHash = %s LIMIT 1', $hash);
+      'contentHash = %s LIMIT 1',
+      $hash);
 
     if ($file) {
       // copy storageEngine, storageHandle, storageFormat
@@ -170,21 +189,9 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $copy_of_byteSize = $file->getByteSize();
       $copy_of_mimeType = $file->getMimeType();
 
-      $file_name = idx($params, 'name');
-      $file_name = self::normalizeFileName($file_name);
-      $file_ttl = idx($params, 'ttl');
-      $authorPHID = idx($params, 'authorPHID');
-
       $new_file = new PhabricatorFile();
 
-      $new_file->setName($file_name);
       $new_file->setByteSize($copy_of_byteSize);
-      $new_file->setAuthorPHID($authorPHID);
-      $new_file->setTtl($file_ttl);
-
-      if (idx($params, 'viewPolicy')) {
-        $new_file->setViewPolicy($params['viewPolicy']);
-      }
 
       $new_file->setContentHash($hash);
       $new_file->setStorageEngine($copy_of_storage_engine);
@@ -192,6 +199,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $new_file->setStorageFormat($copy_of_storage_format);
       $new_file->setMimeType($copy_of_mimeType);
       $new_file->copyDimensions($file);
+
+      $new_file->readPropertiesFromParameters($params);
 
       $new_file->save();
 
@@ -202,7 +211,6 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   private static function buildFromFileData($data, array $params = array()) {
-    $selector = PhabricatorEnv::newObjectFromConfig('storage.engine-selector');
 
     if (isset($params['storageEngines'])) {
       $engines = $params['storageEngines'];
@@ -252,23 +260,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
         $exceptions);
     }
 
-    $file_name = idx($params, 'name');
-    $file_name = self::normalizeFileName($file_name);
-    $file_ttl = idx($params, 'ttl');
-
-    // If for whatever reason, authorPHID isn't passed as a param
-    // (always the case with newFromFileDownload()), store a ''
-    $authorPHID = idx($params, 'authorPHID');
-
-    $file->setName($file_name);
     $file->setByteSize(strlen($data));
-    $file->setAuthorPHID($authorPHID);
-    $file->setTtl($file_ttl);
     $file->setContentHash(self::hashFileContent($data));
-
-    if (idx($params, 'viewPolicy')) {
-      $file->setViewPolicy($params['viewPolicy']);
-    }
 
     $file->setStorageEngine($engine_identifier);
     $file->setStorageHandle($data_handle);
@@ -276,11 +269,10 @@ final class PhabricatorFile extends PhabricatorFileDAO
     // TODO: This is probably YAGNI, but allows for us to do encryption or
     // compression later if we want.
     $file->setStorageFormat(self::STORAGE_FORMAT_RAW);
-    $file->setIsExplicitUpload(idx($params, 'isExplicitUpload') ? 1 : 0);
 
-    if (isset($params['mime-type'])) {
-      $file->setMimeType($params['mime-type']);
-    } else {
+    $file->readPropertiesFromParameters($params);
+
+    if (!$file->getMimeType()) {
       $tmp = new TempFile();
       Filesystem::writeFile($tmp, $data);
       $file->setMimeType(Filesystem::getMimeType($tmp));
@@ -852,6 +844,73 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return idx($this->metadata, self::METADATA_IMAGE_WIDTH);
   }
 
+  public function getCanCDN() {
+    if (!$this->isViewableImage()) {
+      return false;
+    }
+
+    // TODO: Migrate away this old constant and remove this check.
+    if (idx($this->metadata, 'cancdn')) {
+      return true;
+    }
+
+    return idx($this->metadata, self::METADATA_CAN_CDN);
+  }
+
+  public function setCanCDN($can_cdn) {
+    $this->metadata[self::METADATA_CAN_CDN] = $can_cdn ? 1 : 0;
+    return $this;
+  }
+
+  protected function generateOneTimeToken() {
+    $key = Filesystem::readRandomCharacters(16);
+
+    // Save the new secret.
+    $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
+      $token = id(new PhabricatorAuthTemporaryToken())
+        ->setObjectPHID($this->getPHID())
+        ->setTokenType(self::ONETIME_TEMPORARY_TOKEN_TYPE)
+        ->setTokenExpires(time() + phutil_units('1 hour in seconds'))
+        ->setTokenCode(PhabricatorHash::digest($key))
+        ->save();
+    unset($unguarded);
+
+    return $key;
+  }
+
+  public function validateOneTimeToken($token_code) {
+    $token = id(new PhabricatorAuthTemporaryTokenQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withObjectPHIDs(array($this->getPHID()))
+      ->withTokenTypes(array(self::ONETIME_TEMPORARY_TOKEN_TYPE))
+      ->withExpired(false)
+      ->withTokenCodes(array(PhabricatorHash::digest($token_code)))
+      ->executeOne();
+
+    return $token;
+  }
+
+  /** Get the CDN uri for this file
+   * This will generate a one-time-use token if
+   * security.alternate_file_domain is set in the config.
+   */
+  public function getCDNURIWithToken() {
+    if (!$this->getPHID()) {
+      throw new Exception(
+        'You must save a file before you can generate a CDN URI.');
+    }
+    $name = phutil_escape_uri($this->getName());
+
+    $path = '/file/data'
+          .'/'.$this->getSecretKey()
+          .'/'.$this->getPHID()
+          .'/'.$this->generateOneTimeToken()
+          .'/'.$name;
+    return PhabricatorEnv::getCDNURI($path);
+  }
+
+
+
   /**
    * Write the policy edge between this file and some object.
    *
@@ -865,6 +924,49 @@ final class PhabricatorFile extends PhabricatorFileDAO
     id(new PhabricatorEdgeEditor())
       ->addEdge($phid, $edge_type, $this->getPHID())
       ->save();
+
+    return $this;
+  }
+
+
+  /**
+   * Configure a newly created file object according to specified parameters.
+   *
+   * This method is called both when creating a file from fresh data, and
+   * when creating a new file which reuses existing storage.
+   *
+   * @param map<string, wild>   Bag of parameters, see @{class:PhabricatorFile}
+   *  for documentation.
+   * @return this
+   */
+  private function readPropertiesFromParameters(array $params) {
+    $file_name = idx($params, 'name');
+    $file_name = self::normalizeFileName($file_name);
+    $this->setName($file_name);
+
+    $author_phid = idx($params, 'authorPHID');
+    $this->setAuthorPHID($author_phid);
+
+    $file_ttl = idx($params, 'ttl');
+    $this->setTtl($file_ttl);
+
+    $view_policy = idx($params, 'viewPolicy');
+    if ($view_policy) {
+      $this->setViewPolicy($params['viewPolicy']);
+    }
+
+    $is_explicit = (idx($params, 'isExplicitUpload') ? 1 : 0);
+    $this->setIsExplicitUpload($is_explicit);
+
+    $can_cdn = idx($params, 'canCDN');
+    if ($can_cdn) {
+      $this->setCanCDN(true);
+    }
+
+    $mime_type = idx($params, 'mime-type');
+    if ($mime_type) {
+      $this->setMimeType($mime_type);
+    }
 
     return $this;
   }

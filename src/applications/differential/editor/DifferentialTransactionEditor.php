@@ -7,6 +7,14 @@ final class DifferentialTransactionEditor
   private $changedPriorToCommitURI;
   private $isCloseByCommit;
 
+  public function getEditorApplicationClass() {
+    return 'PhabricatorDifferentialApplication';
+  }
+
+  public function getEditorObjectsDescription() {
+    return pht('Differential Revisions');
+  }
+
   public function getDiffUpdateTransaction(array $xactions) {
     $type_update = DifferentialTransaction::TYPE_UPDATE;
 
@@ -98,6 +106,8 @@ final class DifferentialTransactionEditor
     PhabricatorLiskDAO $object,
     PhabricatorApplicationTransaction $xaction) {
 
+    $actor_phid = $this->getActingAsPHID();
+
     switch ($xaction->getTransactionType()) {
       case DifferentialTransaction::TYPE_INLINE:
         return $xaction->hasComment();
@@ -119,7 +129,6 @@ final class DifferentialTransactionEditor
             }
 
             $actor = $this->getActor();
-            $actor_phid = $actor->getPHID();
 
             // These transactions can cause effects in two ways: by altering the
             // status of an existing reviewer; or by adding the actor as a new
@@ -151,7 +160,6 @@ final class DifferentialTransactionEditor
           case DifferentialAction::ACTION_REQUEST:
             return ($object->getStatus() != $status_review);
           case DifferentialAction::ACTION_RESIGN:
-            $actor_phid = $this->getActor()->getPHID();
             foreach ($object->getReviewerStatus() as $reviewer) {
               if ($reviewer->getReviewerPHID() == $actor_phid) {
                 return true;
@@ -159,7 +167,6 @@ final class DifferentialTransactionEditor
             }
             return false;
           case DifferentialAction::ACTION_CLAIM:
-            $actor_phid = $this->getActor()->getPHID();
             return ($actor_phid != $object->getAuthorPHID());
         }
     }
@@ -231,7 +238,7 @@ final class DifferentialTransactionEditor
             $object->setStatus(ArcanistDifferentialRevisionStatus::CLOSED);
             return;
           case DifferentialAction::ACTION_CLAIM:
-            $object->setAuthorPHID($this->getActor()->getPHID());
+            $object->setAuthorPHID($this->getActingAsPHID());
             return;
         }
         break;
@@ -247,7 +254,7 @@ final class DifferentialTransactionEditor
     $results = parent::expandTransaction($object, $xaction);
 
     $actor = $this->getActor();
-    $actor_phid = $actor->getPHID();
+    $actor_phid = $this->getActingAsPHID();
     $type_edge = PhabricatorTransactions::TYPE_EDGE;
 
     $status_plan = ArcanistDifferentialRevisionStatus::CHANGES_PLANNED;
@@ -782,7 +789,7 @@ final class DifferentialTransactionEditor
     $action) {
 
     $author_phid = $revision->getAuthorPHID();
-    $actor_phid = $this->getActor()->getPHID();
+    $actor_phid = $this->getActingAsPHID();
     $actor_is_author = ($author_phid == $actor_phid);
 
     $config_abandon_key = 'differential.always-allow-abandon';
@@ -1172,25 +1179,45 @@ final class DifferentialTransactionEditor
       $config_attach = PhabricatorEnv::getEnvConfig($config_key_attach);
 
       if ($config_inline || $config_attach) {
-        $patch = $this->renderPatchForMail($diff);
-        $lines = count(phutil_split_lines($patch));
+        $patch_section = $this->renderPatchForMail($diff);
+        $lines = count(phutil_split_lines($patch_section->getPlaintext()));
 
         if ($config_inline && ($lines <= $config_inline)) {
           $body->addTextSection(
             pht('CHANGE DETAILS'),
-            $patch);
+            $patch_section);
         }
 
         if ($config_attach) {
           $name = pht('D%s.%s.patch', $object->getID(), $diff->getID());
           $mime_type = 'text/x-patch; charset=utf-8';
           $body->addAttachment(
-            new PhabricatorMetaMTAAttachment($patch, $name, $mime_type));
+            new PhabricatorMetaMTAAttachment(
+              $patch_section->getPlaintext(), $name, $mime_type));
         }
       }
     }
 
     return $body;
+  }
+
+  public function getMailTagsMap() {
+    return array(
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_REVIEW_REQUEST =>
+        pht('A revision is created.'),
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_UPDATED =>
+        pht('A revision is updated.'),
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_COMMENT =>
+        pht('Someone comments on a revision.'),
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_CLOSED =>
+        pht('A revision is closed.'),
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_REVIEWERS =>
+        pht("A revision's reviewers change."),
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_CC =>
+        pht("A revision's CCs change."),
+      MetaMTANotificationType::TYPE_DIFFERENTIAL_OTHER =>
+        pht('Other revision activity not listed above occurs.'),
+    );
   }
 
   protected function supportsSearch() {
@@ -1363,7 +1390,7 @@ final class DifferentialTransactionEditor
       $authors_by_phid = mpull($authors, null, 'getPHID');
     }
 
-    $result = array();
+    $section = new PhabricatorMetaMTAMailSection();
     foreach ($inline_groups as $changeset_id => $group) {
       $changeset = idx($changesets, $changeset_id);
       if (!$changeset) {
@@ -1384,25 +1411,29 @@ final class DifferentialTransactionEditor
         $inline_content = $comment->getContent();
 
         if (!$show_context) {
-          $result[] = "{$file}:{$range} {$inline_content}";
+          $section->addFragment("{$file}:{$range} {$inline_content}");
         } else {
-          $result[] = '================';
-          $result[] = 'Comment at: '.$file.':'.$range;
-          $result[] = $hunk_parser->makeContextDiff(
+          $patch = $hunk_parser->makeContextDiff(
             $changeset->getHunks(),
             $comment->getIsNewFile(),
             $comment->getLineNumber(),
             $comment->getLineLength(),
             1);
-          $result[] = '----------------';
-          $result[] = $this->nestCommentHistory(
+          $nested_comments = $this->nestCommentHistory(
             $inline->getComment(), $comments_by_line_number, $authors_by_phid);
-          $result[] = null;
+
+          $section->addFragment('================')
+                  ->addFragment('Comment at: '.$file.':'.$range)
+                  ->addPlaintextFragment($patch)
+                  ->addHTMLFragment($this->renderPatchHTMLForMail($patch))
+                  ->addFragment('----------------')
+                  ->addFragment($nested_comments)
+                  ->addFragment(null);
         }
       }
     }
 
-    return implode("\n", $result);
+    return $section;
   }
 
   private function loadDiff($phid, $need_changesets = false) {
@@ -1795,14 +1826,25 @@ final class DifferentialTransactionEditor
     return implode("\n", $filenames);
   }
 
+  private function renderPatchHTMLForMail($patch) {
+    return phutil_tag('pre',
+      array('style' => 'font-family: monospace;'), $patch);
+  }
+
   private function renderPatchForMail(DifferentialDiff $diff) {
     $format = PhabricatorEnv::getEnvConfig('metamta.differential.patch-format');
 
-    return id(new DifferentialRawDiffRenderer())
+    $patch = id(new DifferentialRawDiffRenderer())
       ->setViewer($this->getActor())
       ->setFormat($format)
       ->setChangesets($diff->getChangesets())
       ->buildPatch();
+
+    $section = new PhabricatorMetaMTAMailSection();
+    $section->addHTMLFragment($this->renderPatchHTMLForMail($patch));
+    $section->addPlaintextFragment($patch);
+
+    return $section;
   }
 
 }
