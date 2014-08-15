@@ -1301,7 +1301,7 @@ final class DifferentialTransactionEditor
           explode("\n", $previous_comment->getContent())));
       $user = idx($users_by_phid, $previous_comment->getAuthorPHID(), null);
       if ($user) {
-        array_unshift($nested, $user->getUserName().' wrote:');
+        array_unshift($nested, pht('%s wrote:', $user->getUserName()));
       }
     }
 
@@ -1337,13 +1337,17 @@ final class DifferentialTransactionEditor
 
     if ($show_context) {
       $hunk_parser = new DifferentialHunkParser();
+      $table = new DifferentialTransactionComment();
+      $conn_r = $table->establishConnection('r');
       $queries = array();
       foreach ($line_numbers_by_changeset as $id => $line_numbers) {
-        $queries[] = '(changesetID = '.$id.
-          ' AND (lineNumber = '.join(' OR lineNumber = ', $line_numbers).'))';
+        $queries[] = qsprintf(
+          $conn_r,
+          '(changesetID = %d AND lineNumber IN (%Ld))',
+          $id, $line_numbers);
       }
       $all_comments = id(new DifferentialTransactionComment())->loadAllWhere(
-        '('.join(' OR ', $queries).') AND transactionPHID IS NOT NULL');
+        'transactionPHID IS NOT NULL AND (%Q)', implode(' OR ', $queries));
       $comments_by_line_number = array();
       foreach ($all_comments as $comment) {
         $comments_by_line_number
@@ -1351,7 +1355,7 @@ final class DifferentialTransactionEditor
           [$comment->getLineNumber()]
           [$comment->getID()] = $comment;
       }
-      $author_phids = array_keys(mpull($all_comments, null, 'getAuthorPHID'));
+      $author_phids = mpull($all_comments, 'getAuthorPHID');
       $authors = id(new PhabricatorPeopleQuery())
         ->setViewer($this->getActor())
         ->withPHIDs($author_phids)
