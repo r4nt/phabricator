@@ -331,6 +331,7 @@ EOBODY
 
     $mail = id(new PhabricatorMetaMTAMail())
       ->setIsErrorEmail(true)
+      ->setForceDelivery(true)
       ->setSubject($title)
       ->addRawTos(array($from))
       ->setBody($body)

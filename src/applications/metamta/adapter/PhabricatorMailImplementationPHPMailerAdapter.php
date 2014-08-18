@@ -92,21 +92,24 @@ final class PhabricatorMailImplementationPHPMailerAdapter
   }
 
   public function setBody($body) {
+    $this->mailer->IsHTML(false);
     $this->mailer->Body = $body;
     return $this;
   }
 
-  public function setSubject($subject) {
-    $this->mailer->Subject = $subject;
+  public function setHTMLBody($html_body) {
+    $this->mailer->IsHTML(true);
+    $this->mailer->Body = $html_body;
     return $this;
   }
 
   public function setSender($sender) {
     $this->addHeader('List-Id', $sender);
+    return $this;
   }
 
-  public function setIsHTML($is_html) {
-    $this->mailer->IsHTML($is_html);
+  public function setSubject($subject) {
+    $this->mailer->Subject = $subject;
     return $this;
   }
 
