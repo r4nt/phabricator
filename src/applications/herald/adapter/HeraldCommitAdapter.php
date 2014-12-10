@@ -141,7 +141,7 @@ final class HeraldCommitAdapter extends HeraldAdapter {
             self::ACTION_EMAIL,
             self::ACTION_AUDIT,
             self::ACTION_APPLY_BUILD_PLANS,
-            self::ACTION_NOTHING
+            self::ACTION_NOTHING,
           ),
           parent::getActions($rule_type));
       case HeraldRuleTypeConfig::RULE_TYPE_PERSONAL:
@@ -346,7 +346,9 @@ final class HeraldCommitAdapter extends HeraldAdapter {
     $parser = new ArcanistDiffParser();
     $changes = $parser->parseDiff($raw);
 
-    $diff = DifferentialDiff::newFromRawChanges($changes);
+    $diff = DifferentialDiff::newFromRawChanges(
+      PhabricatorUser::getOmnipotentUser(),
+      $changes);
     return $diff;
   }
 
@@ -443,7 +445,10 @@ final class HeraldCommitAdapter extends HeraldAdapter {
           return null;
         }
 
-        switch ($revision->getStatus()) {
+        $status = $data->getCommitDetail(
+          'precommitRevisionStatus',
+          $revision->getStatus());
+        switch ($status) {
           case ArcanistDifferentialRevisionStatus::ACCEPTED:
           case ArcanistDifferentialRevisionStatus::CLOSED:
             return $revision->getPHID();
@@ -475,9 +480,7 @@ final class HeraldCommitAdapter extends HeraldAdapter {
         $refs = DiffusionRepositoryRef::loadAllFromDictionaries($result);
         return mpull($refs, 'getShortName');
       case self::FIELD_REPOSITORY_AUTOCLOSE_BRANCH:
-        return $this->repository->shouldAutocloseCommit(
-          $this->commit,
-          $this->commitData);
+        return $this->repository->shouldAutocloseCommit($this->commit);
     }
 
     return parent::getHeraldField($field);
@@ -546,7 +549,9 @@ final class HeraldCommitAdapter extends HeraldAdapter {
         default:
           $custom_result = parent::handleCustomHeraldEffect($effect);
           if ($custom_result === null) {
-            throw new Exception("No rules to handle action '{$action}'.");
+            throw new Exception(pht(
+              "No rules to handle action '%s'.",
+              $action));
           }
 
           $result[] = $custom_result;

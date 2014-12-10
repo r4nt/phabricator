@@ -93,27 +93,10 @@ final class DiffusionRepositoryEditMainController
       $repository,
       $this->buildActionsActions($repository));
 
-    $xactions = id(new PhabricatorRepositoryTransactionQuery())
-      ->setViewer($viewer)
-      ->withObjectPHIDs(array($repository->getPHID()))
-      ->execute();
-
-    $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($viewer);
-    foreach ($xactions as $xaction) {
-      if ($xaction->getComment()) {
-        $engine->addObject(
-          $xaction->getComment(),
-          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
-      }
-    }
-    $engine->process();
-
-    $xaction_view = id(new PhabricatorApplicationTransactionView())
-      ->setUser($viewer)
-      ->setObjectPHID($repository->getPHID())
-      ->setTransactions($xactions)
-      ->setMarkupEngine($engine);
+    $timeline = $this->buildTransactionTimeline(
+      $repository,
+      new PhabricatorRepositoryTransactionQuery());
+    $timeline->setShouldTerminate(true);
 
     $boxes = array();
 
@@ -187,7 +170,7 @@ final class DiffusionRepositoryEditMainController
       array(
         $crumbs,
         $boxes,
-        $xaction_view,
+        $timeline,
       ),
       array(
         'title' => $title,
@@ -205,6 +188,14 @@ final class DiffusionRepositoryEditMainController
       ->setIcon('fa-pencil')
       ->setName(pht('Edit Basic Information'))
       ->setHref($this->getRepositoryControllerURI($repository, 'edit/basic/'));
+    $view->addAction($edit);
+
+    $edit = id(new PhabricatorActionView())
+      ->setIcon('fa-refresh')
+      ->setName(pht('Update Now'))
+      ->setWorkflow(true)
+      ->setHref(
+        $this->getRepositoryControllerURI($repository, 'edit/update/'));
     $view->addAction($edit);
 
     $activate = id(new PhabricatorActionView())
@@ -279,6 +270,10 @@ final class DiffusionRepositoryEditMainController
     $view->addProperty(
       pht('Status'),
       $this->buildRepositoryStatus($repository));
+
+    $view->addProperty(
+      pht('Update Frequency'),
+      $this->buildRepositoryUpdateInterval($repository));
 
     $description = $repository->getDetail('description');
     $view->addSectionHeader(pht('Description'));
@@ -942,14 +937,16 @@ final class DiffusionRepositoryEditMainController
               ->setNote($message->getParameter('message')));
           return $view;
         case PhabricatorRepositoryStatusMessage::CODE_OKAY:
+          $ago = (PhabricatorTime::getNow() - $message->getEpoch());
           $view->addItem(
             id(new PHUIStatusItemView())
               ->setIcon(PHUIStatusItemView::ICON_ACCEPT, 'green')
               ->setTarget(pht('Updates OK'))
               ->setNote(
                 pht(
-                  'Last updated %s.',
-                  phabricator_datetime($message->getEpoch(), $viewer))));
+                  'Last updated %s (%s ago).',
+                  phabricator_datetime($message->getEpoch(), $viewer),
+                  phutil_format_relative_time_detailed($ago))));
           break;
       }
     } else {
@@ -1020,11 +1017,33 @@ final class DiffusionRepositoryEditMainController
         id(new PHUIStatusItemView())
           ->setIcon(PHUIStatusItemView::ICON_UP, 'indigo')
           ->setTarget(pht('Prioritized'))
-          ->setNote(pht('This repository will be updated soon.')));
+          ->setNote(pht('This repository will be updated soon!')));
     }
 
     return $view;
   }
+
+  private function buildRepositoryUpdateInterval(
+    PhabricatorRepository $repository) {
+
+    $smart_wait = $repository->loadUpdateInterval();
+
+    $doc_href = PhabricatorEnv::getDoclink(
+      'Diffusion User Guide: Repository Updates');
+
+    return array(
+      phutil_format_relative_time_detailed($smart_wait),
+      " \xC2\xB7 ",
+      phutil_tag(
+        'a',
+        array(
+          'href' => $doc_href,
+          'target' => '_blank',
+        ),
+        pht('Learn More')),
+    );
+  }
+
 
   private function buildMirrorActions(
     PhabricatorRepository $repository) {

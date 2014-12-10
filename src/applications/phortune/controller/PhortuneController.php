@@ -2,102 +2,66 @@
 
 abstract class PhortuneController extends PhabricatorController {
 
-  protected function loadActiveAccount(PhabricatorUser $user) {
-    $accounts = id(new PhortuneAccountQuery())
-      ->setViewer($user)
-      ->withMemberPHIDs(array($user->getPHID()))
-      ->execute();
+  protected function addAccountCrumb(
+    $crumbs,
+    PhortuneAccount $account,
+    $link = true) {
 
-    if (!$accounts) {
-      return $this->createUserAccount($user);
-    } else if (count($accounts) == 1) {
-      return head($accounts);
+    $name = pht('Account');
+    $href = null;
+
+    if ($link) {
+      $href = $this->getApplicationURI($account->getID().'/');
+      $crumbs->addTextCrumb($name, $href);
     } else {
-      throw new Exception('TODO: No account selection yet.');
+      $crumbs->addTextCrumb($name);
     }
   }
 
-  protected function createUserAccount(PhabricatorUser $user) {
-    $request = $this->getRequest();
+  private function loadEnabledProvidersForMerchant(PhortuneMerchant $merchant) {
+    $viewer = $this->getRequest()->getUser();
 
-    $xactions = array();
-    $xactions[] = id(new PhortuneAccountTransaction())
-      ->setTransactionType(PhortuneAccountTransaction::TYPE_NAME)
-      ->setNewValue(pht('Account (%s)', $user->getUserName()));
+    $provider_configs = id(new PhortunePaymentProviderConfigQuery())
+      ->setViewer($viewer)
+      ->withMerchantPHIDs(array($merchant->getPHID()))
+      ->execute();
+    $providers = mpull($provider_configs, 'buildProvider', 'getID');
 
-    $xactions[] = id(new PhortuneAccountTransaction())
-      ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
-      ->setMetadataValue(
-        'edge:type',
-        PhabricatorEdgeConfig::TYPE_ACCOUNT_HAS_MEMBER)
-      ->setNewValue(
-        array(
-          '=' => array($user->getPHID() => $user->getPHID()),
-        ));
-
-    $account = id(new PhortuneAccount())
-      ->attachMemberPHIDs(array());
-
-    $editor = id(new PhortuneAccountEditor())
-      ->setActor($user)
-      ->setContentSourceFromRequest($request);
-
-    // We create an account for you the first time you visit Phortune.
-    $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-
-      $editor->applyTransactions($account, $xactions);
-
-    unset($unguarded);
-
-    return $account;
-  }
-
-  protected function buildChargesTable(array $charges) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    $rows = array();
-    foreach ($charges as $charge) {
-      $rows[] = array(
-        $charge->getID(),
-        $charge->getCartPHID(),
-        $charge->getPaymentProviderKey(),
-        $charge->getPaymentMethodPHID(),
-        PhortuneCurrency::newFromUSDCents($charge->getAmountInCents())
-          ->formatForDisplay(),
-        $charge->getStatus(),
-        phabricator_datetime($charge->getDateCreated(), $viewer),
-      );
+    foreach ($providers as $key => $provider) {
+      if (!$provider->isEnabled()) {
+        unset($providers[$key]);
+      }
     }
 
-    $charge_table = id(new AphrontTableView($rows))
-      ->setHeaders(
-        array(
-          pht('Charge ID'),
-          pht('Cart'),
-          pht('Provider'),
-          pht('Method'),
-          pht('Amount'),
-          pht('Status'),
-          pht('Created'),
-        ))
-      ->setColumnClasses(
-        array(
-          '',
-          '',
-          '',
-          '',
-          'wide right',
-          '',
-          '',
-        ));
+    return $providers;
+  }
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader(pht('Charge History'));
+  protected function loadCreatePaymentMethodProvidersForMerchant(
+    PhortuneMerchant $merchant) {
 
-    return id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->appendChild($charge_table);
+    $providers = $this->loadEnabledProvidersForMerchant($merchant);
+    foreach ($providers as $key => $provider) {
+      if (!$provider->canCreatePaymentMethods()) {
+        unset($providers[$key]);
+        continue;
+      }
+    }
+
+    return $providers;
+  }
+
+  protected function loadOneTimePaymentProvidersForMerchant(
+    PhortuneMerchant $merchant) {
+
+    $providers = $this->loadEnabledProvidersForMerchant($merchant);
+    foreach ($providers as $key => $provider) {
+      if (!$provider->canProcessOneTimePayments()) {
+        unset($providers[$key]);
+        continue;
+      }
+    }
+
+    return $providers;
   }
 
 }

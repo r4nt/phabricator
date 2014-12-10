@@ -7,6 +7,9 @@ final class PhortuneChargeQuery
   private $phids;
   private $accountPHIDs;
   private $cartPHIDs;
+  private $statuses;
+
+  private $needCarts;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -25,6 +28,16 @@ final class PhortuneChargeQuery
 
   public function withCartPHIDs(array $cart_phids) {
     $this->cartPHIDs = $cart_phids;
+    return $this;
+  }
+
+  public function withStatuses(array $statuses) {
+    $this->statuses = $statuses;
+    return $this;
+  }
+
+  public function needCarts($need_carts) {
+    $this->needCarts = $need_carts;
     return $this;
   }
 
@@ -63,6 +76,24 @@ final class PhortuneChargeQuery
     return $charges;
   }
 
+  protected function didFilterPage(array $charges) {
+    if ($this->needCarts) {
+      $carts = id(new PhortuneCartQuery())
+        ->setViewer($this->getViewer())
+        ->setParentQuery($this)
+        ->withPHIDs(mpull($charges, 'getCartPHID'))
+        ->execute();
+      $carts = mpull($carts, null, 'getPHID');
+
+      foreach ($charges as $charge) {
+        $cart = idx($carts, $charge->getCartPHID());
+        $charge->attachCart($cart);
+      }
+    }
+
+    return $charges;
+  }
+
   private function buildWhereClause(AphrontDatabaseConnection $conn) {
     $where = array();
 
@@ -94,6 +125,13 @@ final class PhortuneChargeQuery
         $conn,
         'charge.cartPHID IN (%Ls)',
         $this->cartPHIDs);
+    }
+
+    if ($this->statuses !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'charge.status IN (%Ls)',
+        $this->statuses);
     }
 
     return $this->formatWhereClause($where);

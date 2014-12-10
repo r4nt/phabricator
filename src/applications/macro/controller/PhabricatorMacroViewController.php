@@ -20,6 +20,7 @@ final class PhabricatorMacroViewController
     $macro = id(new PhabricatorMacroQuery())
       ->setViewer($user)
       ->withIDs(array($this->id))
+      ->needFiles(true)
       ->executeOne();
     if (!$macro) {
       return new Aphront404Response();
@@ -50,27 +51,9 @@ final class PhabricatorMacroViewController
           )));
     }
 
-    $xactions = id(new PhabricatorMacroTransactionQuery())
-      ->setViewer($request->getUser())
-      ->withObjectPHIDs(array($macro->getPHID()))
-      ->execute();
-
-    $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($user);
-    foreach ($xactions as $xaction) {
-      if ($xaction->getComment()) {
-        $engine->addObject(
-          $xaction->getComment(),
-          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
-      }
-    }
-    $engine->process();
-
-    $timeline = id(new PhabricatorApplicationTransactionView())
-      ->setUser($user)
-      ->setObjectPHID($macro->getPHID())
-      ->setTransactions($xactions)
-      ->setMarkupEngine($engine);
+    $timeline = $this->buildTransactionTimeline(
+      $macro,
+      new PhabricatorMacroTransactionQuery());
 
     $header = id(new PHUIHeaderView())
       ->setUser($user)

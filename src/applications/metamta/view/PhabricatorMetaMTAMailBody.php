@@ -12,6 +12,15 @@ final class PhabricatorMetaMTAMailBody {
   private $htmlSections = array();
   private $attachments = array();
 
+  private $viewer;
+
+  public function getViewer() {
+    return $this->viewer;
+  }
+
+  public function setViewer($viewer) {
+    $this->viewer = $viewer;
+  }
 
 /* -(  Composition  )-------------------------------------------------------- */
 
@@ -35,6 +44,39 @@ final class PhabricatorMetaMTAMailBody {
 
   public function addGreeting($text) {
     array_unshift($this->sections, $text);
+    return $this;
+  }
+
+  public function addRemarkupSection($text) {
+    try {
+      $engine = PhabricatorMarkupEngine::newMarkupEngine(array());
+      $engine->setConfig('viewer', $this->getViewer());
+      $engine->setMode(PhutilRemarkupEngine::MODE_TEXT);
+      $styled_text = $engine->markupText($text);
+      $this->sections[] = $styled_text;
+    } catch (Exception $ex) {
+      phlog($ex);
+      $this->sections[] = $text;
+    }
+
+    try {
+      $mail_engine = PhabricatorMarkupEngine::newMarkupEngine(array());
+      $mail_engine->setConfig('viewer', $this->getViewer());
+      $mail_engine->setMode(PhutilRemarkupEngine::MODE_HTML_MAIL);
+      $mail_engine->setConfig(
+        'uri.base',
+        PhabricatorEnv::getProductionURI('/'));
+      $html = $mail_engine->markupText($text);
+      $this->htmlSections[] = $html;
+    } catch (Exception $ex) {
+      phlog($ex);
+      $this->htmlSections[] = phutil_escape_html_newlines(
+        phutil_tag(
+          'div',
+          array(),
+          $text));
+    }
+
     return $this;
   }
 
@@ -83,9 +125,21 @@ final class PhabricatorMetaMTAMailBody {
 
   public function addHTMLSection($header, $html_fragment) {
     $this->htmlSections[] = array(
-      phutil_tag('div', array('style' => 'font-weight:800;'), $header),
-      $html_fragment);
+      phutil_tag(
+        'div',
+        array(),
+        array(
+          phutil_tag('strong', array(), $header),
+          phutil_tag('div', array(), $html_fragment),
+        )),
+    );
+    return $this;
+  }
 
+  public function addLinkSection($header, $link) {
+    $html = phutil_tag('a', array('href' => $link), $link);
+    $this->addPlaintextSection($header, $link);
+    $this->addHTMLSection($header, $html);
     return $this;
   }
 
@@ -101,7 +155,7 @@ final class PhabricatorMetaMTAMailBody {
       return $this;
     }
 
-    $this->addTextSection(
+    $this->addLinkSection(
       pht('WHY DID I GET THIS EMAIL?'),
       PhabricatorEnv::getProductionURI($xscript_uri));
 
@@ -129,6 +183,23 @@ final class PhabricatorMetaMTAMailBody {
     return $this;
   }
 
+  /**
+   * Add a section with a link to email preferences.
+   *
+   * @return this
+   * @task compose
+   */
+  public function addEmailPreferenceSection() {
+    if (!PhabricatorEnv::getEnvConfig('metamta.email-preferences')) {
+      return $this;
+    }
+
+    $href = PhabricatorEnv::getProductionURI(
+      '/settings/panel/emailpreferences/');
+    $this->addLinkSection(pht('EMAIL PREFERENCES'), $href);
+
+    return $this;
+  }
 
   /**
    * Add an attachment.
@@ -158,7 +229,7 @@ final class PhabricatorMetaMTAMailBody {
 
   public function renderHTML() {
     $br = phutil_tag('br');
-    $body = phutil_implode_html(array($br, $br), $this->htmlSections);
+    $body = phutil_implode_html($br, $this->htmlSections);
     return (string)hsprintf('%s', array($body, $br));
   }
 

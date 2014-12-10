@@ -11,7 +11,7 @@ final class PhabricatorFilesApplication extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return 'Store and Share Files';
+    return pht('Store and Share Files');
   }
 
   public function getIconName() {
@@ -40,9 +40,18 @@ final class PhabricatorFilesApplication extends PhabricatorApplication {
     );
   }
 
+  protected function getCustomCapabilities() {
+    return array(
+      FilesDefaultViewCapability::CAPABILITY => array(
+        'caption' => pht(
+          'Default view policy for newly created files.'),
+      ),
+    );
+  }
+
   public function getRoutes() {
     return array(
-      '/F(?P<id>[1-9]\d*)' => 'PhabricatorFileShortcutController',
+      '/F(?P<id>[1-9]\d*)' => 'PhabricatorFileInfoController',
       '/file/' => array(
         '(query/(?P<key>[^/]+)/)?' => 'PhabricatorFileListController',
         'upload/' => 'PhabricatorFileUploadController',

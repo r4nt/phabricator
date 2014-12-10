@@ -3,29 +3,41 @@
 final class PhabricatorFileInfoController extends PhabricatorFileController {
 
   private $phid;
+  private $id;
+
+  public function shouldAllowPublic() {
+    return true;
+  }
 
   public function willProcessRequest(array $data) {
-    $this->phid = $data['phid'];
+    $this->phid = idx($data, 'phid');
+    $this->id = idx($data, 'id');
   }
 
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
 
+    if ($this->phid) {
+      $file = id(new PhabricatorFileQuery())
+        ->setViewer($user)
+        ->withPHIDs(array($this->phid))
+        ->executeOne();
+
+      if (!$file) {
+        return new Aphront404Response();
+      }
+      return id(new AphrontRedirectResponse())->setURI($file->getInfoURI());
+    }
     $file = id(new PhabricatorFileQuery())
       ->setViewer($user)
-      ->withPHIDs(array($this->phid))
+      ->withIDs(array($this->id))
       ->executeOne();
-
     if (!$file) {
       return new Aphront404Response();
     }
 
     $phid = $file->getPHID();
-    $xactions = id(new PhabricatorFileTransactionQuery())
-      ->setViewer($user)
-      ->withObjectPHIDs(array($phid))
-      ->execute();
 
     $handle_phids = array_merge(
       array($file->getAuthorPHID()),
@@ -46,7 +58,7 @@ final class PhabricatorFileInfoController extends PhabricatorFileController {
     }
 
     $actions = $this->buildActionView($file);
-    $timeline = $this->buildTransactionView($file, $xactions);
+    $timeline = $this->buildTransactionView($file);
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->setActionList($actions);
     $crumbs->addTextCrumb(
@@ -62,7 +74,7 @@ final class PhabricatorFileInfoController extends PhabricatorFileController {
       array(
         $crumbs,
         $object_box,
-        $timeline
+        $timeline,
       ),
       array(
         'title' => $file->getName(),
@@ -70,27 +82,12 @@ final class PhabricatorFileInfoController extends PhabricatorFileController {
       ));
   }
 
-  private function buildTransactionView(
-    PhabricatorFile $file,
-    array $xactions) {
-
+  private function buildTransactionView(PhabricatorFile $file) {
     $user = $this->getRequest()->getUser();
-    $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($user);
-    foreach ($xactions as $xaction) {
-      if ($xaction->getComment()) {
-        $engine->addObject(
-          $xaction->getComment(),
-          PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
-      }
-    }
-    $engine->process();
 
-    $timeline = id(new PhabricatorApplicationTransactionView())
-      ->setUser($user)
-      ->setObjectPHID($file->getPHID())
-      ->setTransactions($xactions)
-      ->setMarkupEngine($engine);
+    $timeline = $this->buildTransactionTimeline(
+      $file,
+      new PhabricatorFileTransactionQuery());
 
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
 
@@ -110,7 +107,8 @@ final class PhabricatorFileInfoController extends PhabricatorFileController {
 
     return array(
       $timeline,
-      $add_comment_form);
+      $add_comment_form,
+    );
   }
 
   private function buildActionView(PhabricatorFile $file) {

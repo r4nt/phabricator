@@ -26,6 +26,20 @@ final class HarbormasterBuildArtifact extends HarbormasterDAO
       self::CONFIG_SERIALIZATION => array(
         'artifactData' => self::SERIALIZATION_JSON,
       ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'artifactType' => 'text32',
+        'artifactIndex' => 'bytes12',
+        'artifactKey' => 'text255',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_artifact' => array(
+          'columns' => array('artifactType', 'artifactIndex'),
+          'unique' => true,
+        ),
+        'key_garbagecollect' => array(
+          'columns' => array('artifactType', 'dateCreated'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -38,9 +52,9 @@ final class HarbormasterBuildArtifact extends HarbormasterDAO
     return $this->assertAttached($this->buildTarget);
   }
 
-  public function setArtifactKey($build_phid, $key) {
+  public function setArtifactKey($build_phid, $build_gen, $key) {
     $this->artifactIndex =
-      PhabricatorHash::digestForIndex($build_phid.$key);
+      PhabricatorHash::digestForIndex($build_phid.$build_gen.$key);
     $this->artifactKey = $key;
     return $this;
   }

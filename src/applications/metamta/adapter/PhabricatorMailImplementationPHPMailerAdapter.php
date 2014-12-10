@@ -14,6 +14,9 @@ final class PhabricatorMailImplementationPHPMailerAdapter
     $this->mailer->CharSet = 'utf-8';
     $this->mailer->Encoding = 'quoted-printable';
 
+    $encoding = PhabricatorEnv::getEnvConfig('phpmailer.smtp-encoding', '8bit');
+    $this->mailer->Encoding = $encoding;
+
     // By default, PHPMailer sends one mail per recipient. We handle
     // multiplexing higher in the stack, so tell it to send mail exactly
     // like we ask.

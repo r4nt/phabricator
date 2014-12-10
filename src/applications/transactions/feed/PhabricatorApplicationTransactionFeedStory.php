@@ -34,6 +34,35 @@ class PhabricatorApplicationTransactionFeedStory
     return $this->getObject($this->getPrimaryTransactionPHID());
   }
 
+  public function getFieldStoryMarkupFields() {
+    $xaction_phids = $this->getValue('transactionPHIDs');
+
+    $fields = array();
+    foreach ($xaction_phids as $xaction_phid) {
+      $xaction = $this->getObject($xaction_phid);
+      foreach ($xaction->getMarkupFieldsForFeed($this) as $field) {
+        $fields[] = $field;
+      }
+    }
+
+    return $fields;
+  }
+
+  public function getMarkupText($field) {
+    $xaction_phids = $this->getValue('transactionPHIDs');
+
+    foreach ($xaction_phids as $xaction_phid) {
+      $xaction = $this->getObject($xaction_phid);
+      foreach ($xaction->getMarkupFieldsForFeed($this) as $xaction_field) {
+        if ($xaction_field == $field) {
+          return $xaction->getMarkupTextForFeed($this, $field);
+        }
+      }
+    }
+
+    return null;
+  }
+
   public function renderView() {
     $view = $this->newStoryView();
 
@@ -73,6 +102,21 @@ class PhabricatorApplicationTransactionFeedStory
     $text = $xaction->getTitleForFeed($this);
     $xaction->setRenderingTarget($old_target);
     return $text;
+  }
+
+  public function renderAsTextForDoorkeeper(
+    DoorkeeperFeedStoryPublisher $publisher) {
+
+    $xactions = array();
+    $xaction_phids = $this->getValue('transactionPHIDs');
+    foreach ($xaction_phids as $xaction_phid) {
+      $xaction = $this->getObject($xaction_phid);
+      $xaction->setHandles($this->getHandles());
+      $xactions[] = $xaction;
+    }
+
+    $primary = $this->getPrimaryTransaction();
+    return $primary->renderAsTextForDoorkeeper($publisher, $this, $xactions);
   }
 
 }

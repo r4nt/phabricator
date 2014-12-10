@@ -9,6 +9,10 @@ abstract class PhabricatorBaseEnglishTranslation
 
   public function getTranslations() {
     return array(
+      'No daemon(s) with id(s) "%s" exist!' => array(
+        'No daemon with id %s exists!',
+        'No daemons with ids %s exist!',
+      ),
       'These %d configuration value(s) are related:' => array(
         'This configuration value is related:',
         'These configuration values are related:',
@@ -337,6 +341,20 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
+      '%s merged %d task(s): %s.' => array(
+        array(
+          '%s merged a task: %3$s.',
+          '%s merged tasks: %3$s.',
+        ),
+      ),
+
+      '%s merged %d task(s) %s into %s.' => array(
+        array(
+          '%s merged %3$s into %4$s.',
+          '%s merged tasks %3$s into %4$s.',
+        ),
+      ),
+
       '%s edited voting user(s), added %d: %s; removed %d: %s.' =>
         '%s edited voting users, added: %3$s; removed: %5$s',
 
@@ -357,29 +375,29 @@ abstract class PhabricatorBaseEnglishTranslation
       '%s added %d blocking task(s): %s.' => array(
         array(
           '%s added a blocking task: %3$s.',
-          '%s added blocking tasks: %3$s.'
+          '%s added blocking tasks: %3$s.',
         ),
       ),
 
       '%s added %d blocked task(s): %s.' => array(
         array(
           '%s added a blocked task: %3$s.',
-          '%s added blocked tasks: %3$s.'
-        )
+          '%s added blocked tasks: %3$s.',
+        ),
       ),
 
       '%s removed %d blocking task(s): %s.' => array(
         array(
           '%s removed a blocking task: %3$s.',
-          '%s removed blocking tasks: %3$s.'
+          '%s removed blocking tasks: %3$s.',
         ),
       ),
 
       '%s removed %d blocked task(s): %s.' => array(
         array(
           '%s removed a blocked task: %3$s.',
-          '%s removed blocked tasks: %3$s.'
-        )
+          '%s removed blocked tasks: %3$s.',
+        ),
       ),
 
       '%s edited answer(s), added %d: %s; removed %d: %s.' =>
@@ -536,7 +554,7 @@ abstract class PhabricatorBaseEnglishTranslation
       ),
 
       '%s edited reviewer(s), added %d: %s; removed %d: %s.' =>
-        '%s edited reviewers, added: %3$s; removed: %5$s',
+        '%s edited reviewers, added: %4$s; removed: %6$s',
 
       '%s added %d reviewer(s): %s.' => array(
         array(
@@ -672,6 +690,11 @@ abstract class PhabricatorBaseEnglishTranslation
       'The current Phabricator configuration has these %d value(s):' => array(
         'The current Phabricator configuration has this value:',
         'The current Phabricator configuration has these values:',
+      ),
+
+      'The current MySQL configuration has these %d value(s):' => array(
+        'The current MySQL configuration has this value:',
+        'The current MySQL configuration has these values:',
       ),
 
       'To update these %d value(s), run these command(s) from the command line:'
@@ -1007,7 +1030,7 @@ abstract class PhabricatorBaseEnglishTranslation
       '%s added %s revision(s): %s.' => array(
         array(
           '%s added a revision: %3$s.',
-          '%s added revisionss: %3$s.',
+          '%s added revisions: %3$s.',
         ),
       ),
 

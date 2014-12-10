@@ -8,7 +8,10 @@
  * @task load     Loading Stories
  * @task policy   Policy Implementation
  */
-abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
+abstract class PhabricatorFeedStory
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorMarkupInterface {
 
   private $data;
   private $hasViewed;
@@ -19,6 +22,7 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
   private $handles = array();
   private $objects = array();
   private $projectPHIDs = array();
+  private $markupFieldOutput = array();
 
 /* -(  Loading Stories  )---------------------------------------------------- */
 
@@ -150,7 +154,44 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
       $stories[$key]->setHandles($story_handles);
     }
 
+    // Load and process story markup blocks.
+
+    $engine = new PhabricatorMarkupEngine();
+    $engine->setViewer($viewer);
+    foreach ($stories as $story) {
+      foreach ($story->getFieldStoryMarkupFields() as $field) {
+        $engine->addObject($story, $field);
+      }
+    }
+
+    $engine->process();
+
+    foreach ($stories as $story) {
+      foreach ($story->getFieldStoryMarkupFields() as $field) {
+        $story->setMarkupFieldOutput(
+          $field,
+          $engine->getOutput($story, $field));
+      }
+    }
+
     return $stories;
+  }
+
+  public function setMarkupFieldOutput($field, $output) {
+    $this->markupFieldOutput[$field] = $output;
+    return $this;
+  }
+
+  public function getMarkupFieldOutput($field) {
+    if (!array_key_exists($field, $this->markupFieldOutput)) {
+      throw new Exception(
+        pht(
+          'Trying to retrieve markup field key "%s", but this feed story '.
+          'did not request it be rendered.',
+          $field));
+    }
+
+    return $this->markupFieldOutput[$field];
   }
 
   public function setHovercard($hover) {
@@ -210,6 +251,17 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
   }
 
   abstract public function renderView();
+  public function renderAsTextForDoorkeeper(
+    DoorkeeperFeedStoryPublisher $publisher) {
+
+    // TODO: This (and text rendering) should be properly abstract and
+    // universal. However, this is far less bad than it used to be, and we
+    // need to clean up more old feed code to really make this reasonable.
+
+    return pht(
+      '(Unable to render story of class %s for Doorkeeper.)',
+      get_class($this));
+  }
 
   public function getRequiredHandlePHIDs() {
     return array();
@@ -335,9 +387,11 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
     }
   }
 
-  final protected function renderSummary($text, $len = 128) {
+  final public function renderSummary($text, $len = 128) {
     if ($len) {
-      $text = phutil_utf8_shorten($text, $len);
+      $text = id(new PhutilUTF8StringTruncator())
+        ->setMaximumGlyphs($len)
+        ->truncateString($text);
     }
     switch ($this->getRenderingTarget()) {
       case PhabricatorApplicationTransaction::TARGET_HTML:
@@ -372,6 +426,10 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
 
   public function getProjectPHIDs() {
     return $this->projectPHIDs;
+  }
+
+  public function getFieldStoryMarkupFields() {
+    return array();
   }
 
 
@@ -423,6 +481,33 @@ abstract class PhabricatorFeedStory implements PhabricatorPolicyInterface {
 
   public function describeAutomaticCapability($capability) {
     return null;
+  }
+
+
+/* -(  PhabricatorMarkupInterface Implementation )--------------------------- */
+
+
+  public function getMarkupFieldKey($field) {
+    return 'feed:'.$this->getChronologicalKey().':'.$field;
+  }
+
+  public function newMarkupEngine($field) {
+    return PhabricatorMarkupEngine::newMarkupEngine(array());
+  }
+
+  public function getMarkupText($field) {
+    throw new PhutilMethodNotImplementedException();
+  }
+
+  public function didMarkupText(
+    $field,
+    $output,
+    PhutilMarkupEngine $engine) {
+    return $output;
+  }
+
+  public function shouldUseMarkupCache($field) {
+    return true;
   }
 
 }

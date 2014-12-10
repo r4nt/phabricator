@@ -68,7 +68,9 @@ final class PhabricatorProjectBoardViewController
     $columns = $column_query->execute();
     $columns = mpull($columns, null, 'getSequence');
 
-    if (empty($columns[0])) {
+    // TODO: Expand the checks here if we add the ability
+    // to hide the Backlog column
+    if (!$columns) {
       switch ($request->getStr('initialize-type')) {
         case 'backlog-only':
           $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
@@ -225,6 +227,7 @@ final class PhabricatorProjectBoardViewController
 
       $panel = id(new PHUIWorkpanelView())
         ->setHeader($column->getDisplayName())
+        ->setSubHeader($column->getDisplayType())
         ->addSigil('workpanel');
 
       $header_icon = $column->getHeaderIcon();
@@ -300,7 +303,7 @@ final class PhabricatorProjectBoardViewController
     $header_link = phutil_tag(
       'a',
       array(
-        'href' => $this->getApplicationURI('view/'.$project->getID().'/')
+        'href' => $this->getApplicationURI('view/'.$project->getID().'/'),
       ),
       $project->getName());
 
@@ -326,6 +329,7 @@ final class PhabricatorProjectBoardViewController
       ),
       array(
         'title' => pht('%s Board', $project->getName()),
+        'showFooter' => false,
       ));
   }
 
@@ -561,6 +565,27 @@ final class PhabricatorProjectBoardViewController
       ->setHref($edit_uri)
       ->setDisabled(!$can_edit)
       ->setWorkflow(!$can_edit);
+
+    $can_hide = ($can_edit && !$column->isDefaultColumn());
+    $hide_uri = 'board/'.$this->id.'/hide/'.$column->getID().'/';
+    $hide_uri = $this->getApplicationURI($hide_uri);
+    $hide_uri = $this->getURIWithState($hide_uri);
+
+    if (!$column->isHidden()) {
+      $column_items[] = id(new PhabricatorActionView())
+        ->setName(pht('Hide Column'))
+        ->setIcon('fa-eye-slash')
+        ->setHref($hide_uri)
+        ->setDisabled(!$can_hide)
+        ->setWorkflow(true);
+    } else {
+      $column_items[] = id(new PhabricatorActionView())
+        ->setName(pht('Show Column'))
+        ->setIcon('fa-eye')
+        ->setHref($hide_uri)
+        ->setDisabled(!$can_hide)
+        ->setWorkflow(true);
+    }
 
     $column_menu = id(new PhabricatorActionListView())
       ->setUser($viewer);

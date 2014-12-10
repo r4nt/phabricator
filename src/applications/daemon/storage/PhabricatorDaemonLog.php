@@ -15,6 +15,7 @@ final class PhabricatorDaemonLog extends PhabricatorDaemonDAO
   protected $pid;
   protected $argv;
   protected $explicitArgv = array();
+  protected $envHash;
   protected $status;
 
   public function getConfiguration() {
@@ -22,6 +23,21 @@ final class PhabricatorDaemonLog extends PhabricatorDaemonDAO
       self::CONFIG_SERIALIZATION => array(
         'argv' => self::SERIALIZATION_JSON,
         'explicitArgv' => self::SERIALIZATION_JSON,
+      ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'daemon' => 'text255',
+        'host' => 'text255',
+        'pid' => 'uint32',
+        'envHash' => 'bytes40',
+        'status' => 'text8',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'status' => array(
+          'columns' => array('status'),
+        ),
+        'dateCreated' => array(
+          'columns' => array('dateCreated'),
+        ),
       ),
     ) + parent::getConfiguration();
   }

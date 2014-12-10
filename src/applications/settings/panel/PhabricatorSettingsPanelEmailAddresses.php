@@ -75,7 +75,7 @@ final class PhabricatorSettingsPanelEmailAddresses
         array(
           'class'   => 'button small grey',
           'href'    => $uri->alter('delete', $email->getID()),
-          'sigil'   => 'workflow'
+          'sigil'   => 'workflow',
         ),
         pht('Remove'));
 
@@ -211,7 +211,7 @@ final class PhabricatorSettingsPanelEmailAddresses
 
           return id(new AphrontDialogResponse())->setDialog($dialog);
         } catch (AphrontDuplicateKeyQueryException $ex) {
-          $email = pht('Duplicate');
+          $e_email = pht('Duplicate');
           $errors[] = pht('Another user already has this email.');
         }
       }

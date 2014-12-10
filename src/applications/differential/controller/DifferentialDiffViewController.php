@@ -62,8 +62,10 @@ final class DifferentialDiffViewController extends DifferentialController {
             array(
               'value' => $revision->getID(),
             ),
-            phutil_utf8_shorten(
-              'D'.$revision->getID().' '.$revision->getTitle(), 128));
+            id(new PhutilUTF8StringTruncator())
+            ->setMaximumGlyphs(128)
+            ->truncateString(
+              'D'.$revision->getID().' '.$revision->getTitle()));
         }
         $select[] = hsprintf('</optgroup>');
       }
@@ -78,6 +80,9 @@ final class DifferentialDiffViewController extends DifferentialController {
         ->setAction('/differential/revision/edit/')
         ->addHiddenInput('diffID', $diff->getID())
         ->addHiddenInput('viaDiffView', 1)
+        ->addHiddenInput(
+          id(new DifferentialRepositoryField())->getFieldKey(),
+          $diff->getRepositoryPHID())
         ->appendRemarkupInstructions(
           pht(
             'Review the diff for correctness. When you are satisfied, either '.

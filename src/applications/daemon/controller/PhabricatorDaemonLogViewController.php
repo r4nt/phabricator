@@ -64,6 +64,14 @@ final class PhabricatorDaemonLogViewController
     }
 
     $header->addTag($tag);
+    $env_hash = PhabricatorEnv::calculateEnvironmentHash();
+    if ($log->getEnvHash() != $env_hash) {
+      $tag = id(new PHUITagView())
+        ->setType(PHUITagView::TYPE_STATE)
+        ->setBackgroundColor(PHUITagView::COLOR_YELLOW)
+        ->setName(pht('Stale Config'));
+      $header->addTag($tag);
+    }
 
     $properties = $this->buildPropertyListView($log);
 
@@ -182,7 +190,7 @@ final class PhabricatorDaemonLogViewController
       phutil_tag(
         'tt',
         array(),
-        "phabricator/ $ ./bin/phd log {$id}"));
+        "phabricator/ $ ./bin/phd log --id {$id}"));
 
 
     return $view;

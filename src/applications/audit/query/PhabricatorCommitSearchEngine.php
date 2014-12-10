@@ -82,7 +82,8 @@ final class PhabricatorCommitSearchEngine
       array(
         $auditor_phids,
         $commit_author_phids,
-        $repository_phids));
+        $repository_phids,
+      ));
 
     $handles = id(new PhabricatorHandleQuery())
       ->setViewer($this->requireViewer())
@@ -181,6 +182,8 @@ final class PhabricatorCommitSearchEngine
       DiffusionCommitQuery::AUDIT_STATUS_ANY => pht('Any'),
       DiffusionCommitQuery::AUDIT_STATUS_OPEN => pht('Open'),
       DiffusionCommitQuery::AUDIT_STATUS_CONCERN => pht('Concern Raised'),
+      DiffusionCommitQuery::AUDIT_STATUS_ACCEPTED => pht('Accepted'),
+      DiffusionCommitQuery::AUDIT_STATUS_PARTIAL => pht('Partially Audited'),
     );
   }
 
