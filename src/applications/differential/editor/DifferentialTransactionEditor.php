@@ -1246,7 +1246,11 @@ final class DifferentialTransactionEditor
               pht('CHANGE DETAILS'),
               $patch_section);
           } else {
-            $body->addTextSection($patch_section);
+            $plaintext = $patch_section;
+            if ($patch_section instanceof PhabricatorMetaMTAMailSection) {
+             $plaintext = $patch_section->getPlaintext();
+            }
+            $body->addRawSection($plaintext);
           }
         }
 
