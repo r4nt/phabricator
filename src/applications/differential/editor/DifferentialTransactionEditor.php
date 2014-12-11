@@ -1246,7 +1246,7 @@ final class DifferentialTransactionEditor
               pht('CHANGE DETAILS'),
               $patch_section);
           } else {
-            $body->addRawSection($patch_section);
+            $body->addTextSection($patch_section);
           }
         }
 
