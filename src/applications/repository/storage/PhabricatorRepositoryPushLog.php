@@ -54,18 +54,18 @@ final class PhabricatorRepositoryPushLog
 
   public static function getHeraldChangeFlagConditionOptions() {
     return array(
-      PhabricatorRepositoryPushLog::CHANGEFLAG_ADD =>
+      self::CHANGEFLAG_ADD =>
         pht('change creates ref'),
-      PhabricatorRepositoryPushLog::CHANGEFLAG_DELETE =>
+      self::CHANGEFLAG_DELETE =>
         pht('change deletes ref'),
-      PhabricatorRepositoryPushLog::CHANGEFLAG_REWRITE =>
+      self::CHANGEFLAG_REWRITE =>
         pht('change rewrites ref'),
-      PhabricatorRepositoryPushLog::CHANGEFLAG_DANGEROUS =>
+      self::CHANGEFLAG_DANGEROUS =>
         pht('dangerous change'),
     );
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_TIMESTAMPS => false,

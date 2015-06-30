@@ -5,7 +5,7 @@ final class PasteEmbedView extends AphrontView {
   private $paste;
   private $handle;
   private $highlights = array();
-  private $lines = 30;
+  private $lines = 24;
 
   public function setPaste(PhabricatorPaste $paste) {
     $this->paste = $paste;
@@ -28,7 +28,7 @@ final class PasteEmbedView extends AphrontView {
 
   public function render() {
     if (!$this->paste) {
-      throw new Exception('Call setPaste() before render()!');
+      throw new PhutilInvalidStateException('setPaste');
     }
 
     $lines = phutil_split_lines($this->paste->getContent());

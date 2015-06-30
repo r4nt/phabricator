@@ -34,7 +34,6 @@ final class PhabricatorMacroViewController
     $actions = $this->buildActionView($macro);
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->setActionList($actions);
     $crumbs->addTextCrumb(
       $title_short,
       $this->getApplicationURI('/view/'.$macro->getID().'/'));
@@ -60,12 +59,10 @@ final class PhabricatorMacroViewController
       ->setPolicyObject($macro)
       ->setHeader($title_long);
 
-    if ($macro->getIsDisabled()) {
-      $header->addTag(
-        id(new PHUITagView())
-          ->setType(PHUITagView::TYPE_STATE)
-          ->setName(pht('Macro Disabled'))
-          ->setBackgroundColor(PHUITagView::COLOR_BLACK));
+    if (!$macro->getIsDisabled()) {
+      $header->setStatus('fa-check', 'bluegrey', pht('Active'));
+    } else {
+      $header->setStatus('fa-ban', 'red', pht('Archived'));
     }
 
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
@@ -132,15 +129,15 @@ final class PhabricatorMacroViewController
     if ($macro->getIsDisabled()) {
       $view->addAction(
         id(new PhabricatorActionView())
-          ->setName(pht('Restore Macro'))
+          ->setName(pht('Activate Macro'))
           ->setHref($this->getApplicationURI('/disable/'.$macro->getID().'/'))
           ->setWorkflow(true)
           ->setDisabled(!$can_manage)
-          ->setIcon('fa-check-circle-o'));
+          ->setIcon('fa-check'));
     } else {
       $view->addAction(
         id(new PhabricatorActionView())
-          ->setName(pht('Disable Macro'))
+          ->setName(pht('Archive Macro'))
           ->setHref($this->getApplicationURI('/disable/'.$macro->getID().'/'))
           ->setWorkflow(true)
           ->setDisabled(!$can_manage)
@@ -153,6 +150,7 @@ final class PhabricatorMacroViewController
   private function buildPropertyView(
     PhabricatorFileImageMacro $macro,
     PhabricatorActionListView $actions) {
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($this->getRequest()->getUser())
@@ -170,10 +168,9 @@ final class PhabricatorMacroViewController
 
     $audio_phid = $macro->getAudioPHID();
     if ($audio_phid) {
-      $this->loadHandles(array($audio_phid));
       $view->addProperty(
         pht('Audio'),
-        $this->getHandle($audio_phid)->renderLink());
+        $viewer->renderHandle($audio_phid));
     }
 
     $view->invokeWillRenderEvent();

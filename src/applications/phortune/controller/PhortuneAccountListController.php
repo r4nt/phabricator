@@ -27,6 +27,7 @@ final class PhortuneAccountListController extends PhortuneController {
     $crumbs->addTextCrumb(pht('Accounts'));
 
     $payment_list = id(new PHUIObjectItemListView())
+      ->setStackable(true)
       ->setUser($viewer)
       ->setNoDataString(
         pht(
@@ -59,6 +60,7 @@ final class PhortuneAccountListController extends PhortuneController {
       ->appendChild($payment_list);
 
     $merchant_list = id(new PHUIObjectItemListView())
+      ->setStackable(true)
       ->setUser($viewer)
       ->setNoDataString(
         pht(

@@ -1,10 +1,12 @@
 <?php
 
-final class PhabricatorFeedBuilder {
+final class PhabricatorFeedBuilder extends Phobject {
 
+  private $user;
   private $stories;
   private $framed;
   private $hovercards = false;
+  private $noDataString;
 
   public function __construct(array $stories) {
     assert_instances_of($stories, 'PhabricatorFeedStory');
@@ -26,9 +28,14 @@ final class PhabricatorFeedBuilder {
     return $this;
   }
 
+  public function setNoDataString($string) {
+    $this->noDataString = $string;
+    return $this;
+  }
+
   public function buildView() {
     if (!$this->user) {
-      throw new Exception('Call setUser() before buildView()!');
+      throw new PhutilInvalidStateException('setUser');
     }
 
     $user = $this->user;
@@ -75,6 +82,20 @@ final class PhabricatorFeedBuilder {
 
       $null_view->appendChild($view);
     }
+
+    if (empty($stories)) {
+      $nodatastring = pht('No Stories.');
+      if ($this->noDataString) {
+        $nodatastring = $this->noDataString;
+      }
+
+      $view = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_NODATA)
+        ->appendChild($nodatastring);
+      $null_view->appendChild($view);
+    }
+
+
 
     return id(new AphrontNullView())
       ->appendChild($null_view->render());

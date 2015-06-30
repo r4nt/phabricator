@@ -3,7 +3,6 @@
 /**
  * This is a standard Phabricator page with menus, Javelin, DarkConsole, and
  * basic styles.
- *
  */
 final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
@@ -16,6 +15,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
   private $pageObjects = array();
   private $applicationMenu;
   private $showFooter = true;
+  private $showDurableColumn = true;
 
   public function setShowFooter($show_footer) {
     $this->showFooter = $show_footer;
@@ -73,16 +73,64 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     }
   }
 
-  public function getTitle() {
-    $use_glyph = true;
+  public function setShowDurableColumn($show) {
+    $this->showDurableColumn = $show;
+    return $this;
+  }
 
+  public function getShowDurableColumn() {
     $request = $this->getRequest();
-    if ($request) {
-      $user = $request->getUser();
-      if ($user && $user->loadPreferences()->getPreference(
-            PhabricatorUserPreferences::PREFERENCE_TITLES) !== 'glyph') {
-        $use_glyph = false;
+    if (!$request) {
+      return false;
+    }
+
+    $viewer = $request->getUser();
+    if (!$viewer->isLoggedIn()) {
+      return false;
+    }
+
+    $conpherence_installed = PhabricatorApplication::isClassInstalledForViewer(
+      'PhabricatorConpherenceApplication',
+      $viewer);
+    if (!$conpherence_installed) {
+      return false;
+    }
+
+    if ($this->isQuicksandBlacklistURI()) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private function isQuicksandBlacklistURI() {
+    $request = $this->getRequest();
+    if (!$request) {
+      return false;
+    }
+
+    $patterns = $this->getQuicksandURIPatternBlacklist();
+    $path = $request->getRequestURI()->getPath();
+    foreach ($patterns as $pattern) {
+      if (preg_match('(^'.$pattern.'$)', $path)) {
+        return true;
       }
+    }
+    return false;
+  }
+
+  public function getDurableColumnVisible() {
+    $column_key = PhabricatorUserPreferences::PREFERENCE_CONPHERENCE_COLUMN;
+    return (bool)$this->getUserPreference($column_key, 0);
+  }
+
+
+  public function getTitle() {
+    $glyph_key = PhabricatorUserPreferences::PREFERENCE_TITLES;
+    if ($this->getUserPreference($glyph_key) == 'text') {
+      $use_glyph = false;
+    } else {
+      $use_glyph = true;
     }
 
     $title = parent::getTitle();
@@ -111,7 +159,9 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     if (!$this->getRequest()) {
       throw new Exception(
         pht(
-          'You must set the Request to render a PhabricatorStandardPageView.'));
+          'You must set the %s to render a %s.',
+          'Request',
+          __CLASS__));
     }
 
     $console = $this->getConsole();
@@ -123,6 +173,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     require_celerity_resource('phui-form-css');
     require_celerity_resource('sprite-gradient-css');
     require_celerity_resource('phabricator-standard-page-view');
+    require_celerity_resource('conpherence-durable-column-view');
 
     Javelin::initBehavior('workflow', array());
 
@@ -159,7 +210,6 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
     Javelin::initBehavior('aphront-form-disable-on-submit');
     Javelin::initBehavior('toggle-class', array());
-    Javelin::initBehavior('konami', array());
     Javelin::initBehavior('history-install');
     Javelin::initBehavior('phabricator-gesture');
 
@@ -178,21 +228,9 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
     Javelin::initBehavior('device');
 
-    if ($user->hasSession()) {
-      $hisec = ($user->getSession()->getHighSecurityUntil() - time());
-      if ($hisec > 0) {
-        $remaining_time = phutil_format_relative_time($hisec);
-        Javelin::initBehavior(
-          'high-security-warning',
-          array(
-            'uri' => '/auth/session/downgrade/',
-            'message' => pht(
-              'Your session is in high security mode. When you '.
-              'finish using it, click here to leave.',
-              $remaining_time),
-          ));
-      }
-    }
+    Javelin::initBehavior(
+      'high-security-warning',
+      $this->getHighSecurityWarningConfig());
 
     if ($console) {
       require_celerity_resource('aphront-dark-console-css');
@@ -207,15 +245,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
       Javelin::initBehavior(
         'dark-console',
-        array(
-          // NOTE: We use a generic label here to prevent input reflection
-          // and mitigate compression attacks like BREACH. See discussion in
-          // T3684.
-          'uri' => pht('Main Request'),
-          'selected' => $user ? $user->getConsoleTab() : null,
-          'visible'  => $user ? (int)$user->getConsoleVisible() : true,
-          'headers' => $headers,
-        ));
+        $this->getConsoleConfig());
 
       // Change this to initBehavior when there is some behavior to initialize
       require_celerity_resource('javelin-behavior-error-log');
@@ -243,34 +273,40 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
 
   protected function getHead() {
-    $monospaced = PhabricatorEnv::getEnvConfig('style.monospace');
-    $monospaced_win = PhabricatorEnv::getEnvConfig('style.monospace.windows');
+    $monospaced = null;
 
     $request = $this->getRequest();
     if ($request) {
       $user = $request->getUser();
       if ($user) {
-        $pref = $user->loadPreferences()->getPreference(
-            PhabricatorUserPreferences::PREFERENCE_MONOSPACED);
-        $monospaced = nonempty($pref, $monospaced);
-        $monospaced_win = nonempty($pref, $monospaced_win);
+        $monospaced = $user->loadPreferences()->getPreference(
+          PhabricatorUserPreferences::PREFERENCE_MONOSPACED);
       }
     }
 
     $response = CelerityAPI::getStaticResourceResponse();
 
+    $font_css = null;
+    if (!empty($monospaced)) {
+      // We can't print this normally because escaping quotation marks will
+      // break the CSS. Instead, filter it strictly and then mark it as safe.
+      $monospaced = new PhutilSafeHTML(
+        PhabricatorUserPreferences::filterMonospacedCSSRule(
+          $monospaced));
+
+      $font_css = hsprintf(
+        '<style type="text/css">'.
+        '.PhabricatorMonospaced, '.
+        '.phabricator-remarkup .remarkup-code-block '.
+          '.remarkup-code { font: %s !important; } '.
+        '</style>',
+        $monospaced);
+    }
+
     return hsprintf(
-      '%s<style type="text/css">'.
-      '.PhabricatorMonospaced, '.
-      '.phabricator-remarkup .remarkup-code-block '.
-        '.remarkup-code { font: %s; } '.
-      '.platform-windows .PhabricatorMonospaced, '.
-      '.platform-windows .phabricator-remarkup '.
-        '.remarkup-code-block .remarkup-code { font: %s; }'.
-      '</style>%s',
+      '%s%s%s',
       parent::getHead(),
-      phutil_safe_html($monospaced),
-      phutil_safe_html($monospaced_win),
+      $font_css,
       $response->renderSingleResource('javelin-magical-init', 'phabricator'));
   }
 
@@ -301,8 +337,6 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
   }
 
   protected function getBody() {
-    $console = $this->getConsole();
-
     $user = null;
     $request = $this->getRequest();
     if ($request) {
@@ -314,6 +348,8 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       $header_chrome = $this->menuContent;
     }
 
+    $classes = array();
+    $classes[] = 'main-page-frame';
     $developer_warning = null;
     if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode') &&
         DarkConsoleErrorLogPluginAPI::getErrors()) {
@@ -327,35 +363,74 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     // Render the "you have unresolved setup issues..." warning.
     $setup_warning = null;
     if ($user && $user->getIsAdmin()) {
-      $open = PhabricatorSetupCheck::getOpenSetupIssueCount();
+      $open = PhabricatorSetupCheck::getOpenSetupIssueKeys();
       if ($open) {
+        $classes[] = 'page-has-warning';
         $setup_warning = phutil_tag_div(
           'setup-warning-callout',
           phutil_tag(
             'a',
             array(
               'href' => '/config/issue/',
+              'title' => implode(', ', $open),
             ),
-            pht('You have %d unresolved setup issue(s)...', $open)));
+            pht('You have %d unresolved setup issue(s)...', count($open))));
       }
     }
 
-    return phutil_tag(
+    $main_page = phutil_tag(
       'div',
       array(
-        'id' => 'base-page',
+        'id' => 'phabricator-standard-page',
         'class' => 'phabricator-standard-page',
       ),
       array(
         $developer_warning,
-        $setup_warning,
         $header_chrome,
-        phutil_tag_div('phabricator-standard-page-body', array(
-          ($console ? hsprintf('<darkconsole />') : null),
-          parent::getBody(),
-          $this->renderFooter(),
-        )),
+        $setup_warning,
+        phutil_tag(
+          'div',
+          array(
+            'id' => 'phabricator-standard-page-body',
+            'class' => 'phabricator-standard-page-body',
+          ),
+          $this->renderPageBodyContent()),
       ));
+
+    $durable_column = null;
+    if ($this->getShowDurableColumn()) {
+      $is_visible = $this->getDurableColumnVisible();
+      $durable_column = id(new ConpherenceDurableColumnView())
+        ->setSelectedConpherence(null)
+        ->setUser($user)
+        ->setQuicksandConfig($this->buildQuicksandConfig())
+        ->setVisible($is_visible)
+        ->setInitialLoad(true);
+    }
+
+    Javelin::initBehavior('quicksand-blacklist', array(
+      'patterns' => $this->getQuicksandURIPatternBlacklist(),
+    ));
+
+    return phutil_tag(
+      'div',
+      array(
+        'class' => implode(' ', $classes),
+      ),
+      array(
+        $main_page,
+        $durable_column,
+      ));
+  }
+
+  private function renderPageBodyContent() {
+    $console = $this->getConsole();
+
+    return array(
+      ($console ? hsprintf('<darkconsole />') : null),
+      parent::getBody(),
+      $this->renderFooter(),
+    );
   }
 
   protected function getTail() {
@@ -371,9 +446,6 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     if (PhabricatorEnv::getEnvConfig('notification.enabled')) {
       if ($user && $user->isLoggedIn()) {
 
-        $aphlict_object_id = celerity_generate_unique_node_id();
-        $aphlict_container_id = celerity_generate_unique_node_id();
-
         $client_uri = PhabricatorEnv::getEnvConfig('notification.client-uri');
         $client_uri = new PhutilURI($client_uri);
         if ($client_uri->getDomain() == 'localhost') {
@@ -382,37 +454,17 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
           $client_uri->setDomain($this_host->getDomain());
         }
 
-        $map = CelerityResourceMap::getNamedInstance('phabricator');
-        $swf_uri = $response->getURI($map, 'rsrc/swf/aphlict.swf', true);
-
-        $enable_debug = PhabricatorEnv::getEnvConfig('notification.debug');
-
-        $subscriptions = $this->pageObjects;
-        if ($user) {
-          $subscriptions[] = $user->getPHID();
+        if ($request->isHTTPS()) {
+          $client_uri->setProtocol('wss');
+        } else {
+          $client_uri->setProtocol('ws');
         }
 
         Javelin::initBehavior(
           'aphlict-listen',
           array(
-            'id'            => $aphlict_object_id,
-            'containerID'   => $aphlict_container_id,
-            'server'        => $client_uri->getDomain(),
-            'port'          => $client_uri->getPort(),
-            'debug'         => $enable_debug,
-            'swfURI'        => $swf_uri,
-            'pageObjects'   => array_fill_keys($this->pageObjects, true),
-            'subscriptions' => $subscriptions,
-          ));
-
-        $tail[] = phutil_tag(
-          'div',
-          array(
-            'id' => $aphlict_container_id,
-            'style' =>
-              'position: absolute; width: 0; height: 0; overflow: hidden;',
-          ),
-          '');
+            'websocketURI'  => (string)$client_uri,
+          ) + $this->buildAphlictListenConfigData());
       }
     }
 
@@ -467,6 +519,48 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     return $this->getRequest()->getApplicationConfiguration()->getConsole();
   }
 
+  private function getConsoleConfig() {
+    $user = $this->getRequest()->getUser();
+
+    $headers = array();
+    if (DarkConsoleXHProfPluginAPI::isProfilerStarted()) {
+      $headers[DarkConsoleXHProfPluginAPI::getProfilerHeader()] = 'page';
+    }
+    if (DarkConsoleServicesPlugin::isQueryAnalyzerRequested()) {
+      $headers[DarkConsoleServicesPlugin::getQueryAnalyzerHeader()] = true;
+    }
+
+    return array(
+      // NOTE: We use a generic label here to prevent input reflection
+      // and mitigate compression attacks like BREACH. See discussion in
+      // T3684.
+      'uri' => pht('Main Request'),
+      'selected' => $user ? $user->getConsoleTab() : null,
+      'visible'  => $user ? (int)$user->getConsoleVisible() : true,
+      'headers' => $headers,
+    );
+  }
+
+  private function getHighSecurityWarningConfig() {
+    $user = $this->getRequest()->getUser();
+
+    $show = false;
+    if ($user->hasSession()) {
+      $hisec = ($user->getSession()->getHighSecurityUntil() - time());
+      if ($hisec > 0) {
+        $show = true;
+      }
+    }
+
+    return array(
+      'show' => $show,
+      'uri' => '/auth/session/downgrade/',
+      'message' => pht(
+        'Your session is in high security mode. When you '.
+        'finish using it, click here to leave.'),
+        );
+  }
+
   private function renderFooter() {
     if (!$this->getShowChrome()) {
       return null;
@@ -486,7 +580,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
       $name = idx($item, 'name', pht('Unnamed Footer Item'));
 
       $href = idx($item, 'href');
-      if (!PhabricatorEnv::isValidWebResource($href)) {
+      if (!PhabricatorEnv::isValidURIForLink($href)) {
         $href = null;
       }
 
@@ -511,6 +605,119 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
         'class' => 'phabricator-standard-page-footer grouped',
       ),
       $foot);
+  }
+
+  public function renderForQuicksand(array $extra_config) {
+    parent::willRenderPage();
+    $response = $this->renderPageBodyContent();
+    $response = $this->willSendResponse($response);
+
+    return array(
+      'content' => hsprintf('%s', $response),
+    ) + $this->buildQuicksandConfig()
+      + $extra_config;
+  }
+
+  private function buildQuicksandConfig() {
+    $viewer = $this->getRequest()->getUser();
+    $controller = $this->getController();
+
+    $dropdown_query = id(new AphlictDropdownDataQuery())
+      ->setViewer($viewer);
+    $dropdown_query->execute();
+
+    $rendered_dropdowns = array();
+    $applications = array(
+      'PhabricatorHelpApplication',
+    );
+    foreach ($applications as $application_class) {
+      if (!PhabricatorApplication::isClassInstalledForViewer(
+        $application_class,
+        $viewer)) {
+        continue;
+      }
+      $application = PhabricatorApplication::getByClass($application_class);
+      $rendered_dropdowns[$application_class] =
+        $application->buildMainMenuExtraNodes(
+          $viewer,
+          $controller);
+    }
+
+    $hisec_warning_config = $this->getHighSecurityWarningConfig();
+
+    $console_config = null;
+    $console = $this->getConsole();
+    if ($console) {
+      $console_config = $this->getConsoleConfig();
+    }
+
+    $upload_enabled = false;
+    if ($controller) {
+      $upload_enabled = $controller->isGlobalDragAndDropUploadEnabled();
+    }
+
+    $application_class = null;
+    $application_search_icon = null;
+    $controller = $this->getController();
+    if ($controller) {
+      $application = $controller->getCurrentApplication();
+      if ($application) {
+        $application_class = get_class($application);
+        if ($application->getApplicationSearchDocumentTypes()) {
+          $application_search_icon = $application->getFontIcon();
+        }
+      }
+    }
+
+    return array(
+      'title' => $this->getTitle(),
+      'aphlictDropdownData' => array(
+        $dropdown_query->getNotificationData(),
+        $dropdown_query->getConpherenceData(),
+      ),
+      'globalDragAndDrop' => $upload_enabled,
+      'aphlictDropdowns' => $rendered_dropdowns,
+      'hisecWarningConfig' => $hisec_warning_config,
+      'consoleConfig' => $console_config,
+      'applicationClass' => $application_class,
+      'applicationSearchIcon' => $application_search_icon,
+    ) + $this->buildAphlictListenConfigData();
+  }
+
+  private function buildAphlictListenConfigData() {
+    $user = $this->getRequest()->getUser();
+    $subscriptions = $this->pageObjects;
+    $subscriptions[] = $user->getPHID();
+
+    return array(
+      'pageObjects'   => array_fill_keys($this->pageObjects, true),
+      'subscriptions' => $subscriptions,
+    );
+  }
+
+  private function getQuicksandURIPatternBlacklist() {
+    $applications = PhabricatorApplication::getAllApplications();
+
+    $blacklist = array();
+    foreach ($applications as $application) {
+      $blacklist[] = $application->getQuicksandURIPatternBlacklist();
+    }
+
+    return array_mergev($blacklist);
+  }
+
+  private function getUserPreference($key, $default = null) {
+    $request = $this->getRequest();
+    if (!$request) {
+      return $default;
+    }
+
+    $user = $request->getUser();
+    if (!$user) {
+      return $default;
+    }
+
+    return $user->loadPreferences()->getPreference($key, $default);
   }
 
 }

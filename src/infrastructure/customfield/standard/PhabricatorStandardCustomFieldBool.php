@@ -22,9 +22,13 @@ final class PhabricatorStandardCustomFieldBool
     return $this->newNumericIndex(0);
   }
 
+  public function readValueFromRequest(AphrontRequest $request) {
+    $this->setFieldValue((bool)$request->getBool($this->getFieldKey()));
+  }
+
   public function getValueForStorage() {
     $value = $this->getFieldValue();
-    if (strlen($value)) {
+    if ($value !== null) {
       return (int)$value;
     } else {
       return null;
@@ -61,8 +65,7 @@ final class PhabricatorStandardCustomFieldBool
   public function appendToApplicationSearchForm(
     PhabricatorApplicationSearchEngine $engine,
     AphrontFormView $form,
-    $value,
-    array $handles) {
+    $value) {
 
     $form->appendChild(
       id(new AphrontFormSelectControl())

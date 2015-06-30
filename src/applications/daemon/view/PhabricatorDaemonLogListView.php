@@ -14,11 +14,12 @@ final class PhabricatorDaemonLogListView extends AphrontView {
     $rows = array();
 
     if (!$this->user) {
-      throw new Exception('Call setUser() before rendering!');
+      throw new PhutilInvalidStateException('setUser');
     }
 
     $env_hash = PhabricatorEnv::calculateEnvironmentHash();
     $list = new PHUIObjectItemListView();
+    $list->setFlush(true);
     foreach ($this->daemonLogs as $log) {
       $id = $log->getID();
       $epoch = $log->getDateCreated();

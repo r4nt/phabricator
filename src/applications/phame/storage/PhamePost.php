@@ -4,6 +4,7 @@ final class PhamePost extends PhameDAO
   implements
     PhabricatorPolicyInterface,
     PhabricatorMarkupInterface,
+    PhabricatorApplicationTransactionInterface,
     PhabricatorTokenReceiverInterface {
 
   const MARKUP_FIELD_BODY    = 'markup:body';
@@ -74,6 +75,12 @@ final class PhamePost extends PhameDAO
     return $name;
   }
 
+  public function setCommentsWidget($widget) {
+    $config_data = $this->getConfigData();
+    $config_data['comments_widget'] = $widget;
+    return $this;
+  }
+
   public function getCommentsWidget() {
     $config_data = $this->getConfigData();
     if (empty($config_data)) {
@@ -82,7 +89,7 @@ final class PhamePost extends PhameDAO
     return idx($config_data, 'comments_widget', 'none');
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID   => true,
       self::CONFIG_SERIALIZATION => array(
@@ -148,8 +155,9 @@ final class PhamePost extends PhameDAO
 
   public static function getVisibilityOptionsForSelect() {
     return array(
-      self::VISIBILITY_DRAFT     => 'Draft: visible only to me.',
-      self::VISIBILITY_PUBLISHED => 'Published: visible to the whole world.',
+      self::VISIBILITY_DRAFT     => pht('Draft: visible only to me.'),
+      self::VISIBILITY_PUBLISHED => pht(
+        'Published: visible to the whole world.'),
     );
   }
 
@@ -159,13 +167,13 @@ final class PhamePost extends PhameDAO
 
     if ($current == 'facebook' ||
         PhabricatorFacebookAuthProvider::getFacebookApplicationID()) {
-      $options['facebook'] = 'Facebook';
+      $options['facebook'] = pht('Facebook');
     }
     if ($current == 'disqus' ||
         PhabricatorEnv::getEnvConfig('disqus.shortname')) {
-      $options['disqus'] = 'Disqus';
+      $options['disqus'] = pht('Disqus');
     }
-    $options['none'] = 'None';
+    $options['none'] = pht('None');
 
     return $options;
   }
@@ -180,7 +188,6 @@ final class PhamePost extends PhameDAO
       PhabricatorPolicyCapability::CAN_EDIT,
     );
   }
-
 
   public function getPolicy($capability) {
     // Draft posts are visible only to the author. Published posts are visible
@@ -199,7 +206,6 @@ final class PhamePost extends PhameDAO
     }
   }
 
-
   public function hasAutomaticCapability($capability, PhabricatorUser $user) {
     // A blog post's author can always view it, and is the only user allowed
     // to edit it.
@@ -211,10 +217,8 @@ final class PhamePost extends PhameDAO
     }
   }
 
-
   public function describeAutomaticCapability($capability) {
-    return pht(
-      'The author of a blog post can always view and edit it.');
+    return pht('The author of a blog post can always view and edit it.');
   }
 
 
@@ -226,11 +230,9 @@ final class PhamePost extends PhameDAO
     return $this->getPHID().':'.$field.':'.$hash;
   }
 
-
   public function newMarkupEngine($field) {
     return PhabricatorMarkupEngine::newPhameMarkupEngine();
   }
-
 
   public function getMarkupText($field) {
     switch ($field) {
@@ -248,12 +250,36 @@ final class PhamePost extends PhameDAO
     return $output;
   }
 
-
   public function shouldUseMarkupCache($field) {
     return (bool)$this->getPHID();
   }
 
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PhamePostEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PhamePostTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+
+    return $timeline;
+  }
+
+
 /* -(  PhabricatorTokenReceiverInterface  )---------------------------------- */
+
 
   public function getUsersToNotifyOfTokenGiven() {
     return array(

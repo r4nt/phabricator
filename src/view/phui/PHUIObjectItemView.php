@@ -22,6 +22,7 @@ final class PHUIObjectItemView extends AphrontTagView {
   private $state;
   private $fontIcon;
   private $imageIcon;
+  private $titleText;
 
   const AGE_FRESH = 'fresh';
   const AGE_STALE = 'stale';
@@ -98,6 +99,15 @@ final class PHUIObjectItemView extends AphrontTagView {
     return $this;
   }
 
+  public function setTitleText($title_text) {
+    $this->titleText = $title_text;
+    return $this;
+  }
+
+  public function getTitleText() {
+    return $this->titleText;
+  }
+
   public function getHeader() {
     return $this->header;
   }
@@ -144,8 +154,13 @@ final class PHUIObjectItemView extends AphrontTagView {
         $fi = 'fa-refresh ph-spin sky';
       break;
     }
+    $this->setFontIcon($fi);
+    return $this;
+  }
+
+  public function setFontIcon($icon) {
     $this->fontIcon = id(new PHUIIconView())
-      ->setIconFont($fi.' fa-2x');
+      ->setIconFont($icon);
     return $this;
   }
 
@@ -174,7 +189,7 @@ final class PHUIObjectItemView extends AphrontTagView {
         $this->addIcon('fa-clock-o red', $date, $attr);
         break;
       default:
-        throw new Exception("Unknown age '{$age}'!");
+        throw new Exception(pht("Unknown age '%s'!", $age));
     }
 
     return $this;
@@ -182,7 +197,7 @@ final class PHUIObjectItemView extends AphrontTagView {
 
   public function addAction(PHUIListItemView $action) {
     if (count($this->actions) >= 3) {
-      throw new Exception('Limit 3 actions per item.');
+      throw new Exception(pht('Limit 3 actions per item.'));
     }
     $this->actions[] = $action;
     return $this;
@@ -307,13 +322,22 @@ final class PHUIObjectItemView extends AphrontTagView {
     );
   }
 
-  public function getTagContent() {
+  protected function getTagContent() {
+    $viewer = $this->getUser();
+
     $content_classes = array();
     $content_classes[] = 'phui-object-item-content';
 
-    $header_name = null;
+    $header_name = array();
+
+    if ($viewer) {
+      $header_name[] = id(new PHUISpacesNamespaceContextView())
+        ->setUser($viewer)
+        ->setObject($this->object);
+    }
+
     if ($this->objectName) {
-      $header_name = array(
+      $header_name[] = array(
         phutil_tag(
           'span',
           array(
@@ -324,11 +348,19 @@ final class PHUIObjectItemView extends AphrontTagView {
       );
     }
 
+    $title_text = null;
+    if ($this->titleText) {
+      $title_text = $this->titleText;
+    } else if ($this->href) {
+      $title_text = $this->header;
+    }
+
     $header_link = phutil_tag(
       $this->href ? 'a' : 'div',
       array(
         'href' => $this->href,
         'class' => 'phui-object-item-link',
+        'title' => $title_text,
       ),
       $this->header);
 
@@ -536,15 +568,6 @@ final class PHUIObjectItemView extends AphrontTagView {
         $this->getImageIcon());
     }
 
-    if ($image && $this->href) {
-      $image = phutil_tag(
-        'a',
-        array(
-          'href' => $this->href,
-        ),
-        $image);
-    }
-
     $ficon = null;
     if ($this->fontIcon) {
       $image = phutil_tag(
@@ -553,6 +576,15 @@ final class PHUIObjectItemView extends AphrontTagView {
           'class' => 'phui-object-item-ficon',
         ),
         $this->fontIcon);
+    }
+
+    if ($image && $this->href) {
+      $image = phutil_tag(
+        'a',
+        array(
+          'href' => $this->href,
+        ),
+        $image);
     }
 
     /* Build a fake table */
@@ -575,7 +607,8 @@ final class PHUIObjectItemView extends AphrontTagView {
         ),
         array(
           $icons,
-          $bylines,));
+          $bylines,
+        ));
     }
 
     $table = phutil_tag(
@@ -661,7 +694,5 @@ final class PHUIObjectItemView extends AphrontTagView {
       $options,
       '');
   }
-
-
 
 }

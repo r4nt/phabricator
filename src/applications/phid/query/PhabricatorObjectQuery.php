@@ -24,7 +24,7 @@ final class PhabricatorObjectQuery
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     if ($this->namedResults === null) {
       $this->namedResults = array();
     }
@@ -78,7 +78,7 @@ final class PhabricatorObjectQuery
 
   public function getNamedResults() {
     if ($this->namedResults === null) {
-      throw new Exception('Call execute() before getNamedResults()!');
+      throw new PhutilInvalidStateException('execute');
     }
     return $this->namedResults;
   }
@@ -125,8 +125,19 @@ final class PhabricatorObjectQuery
       $groups[$type][] = $phid;
     }
 
+    $in_flight = $this->getPHIDsInFlight();
     foreach ($groups as $type => $group) {
-      if (isset($types[$type])) {
+      // Don't try to load PHIDs which are already "in flight"; this prevents
+      // us from recursing indefinitely if policy checks or edges form a loop.
+      // We will decline to load the corresponding objects.
+      foreach ($group as $key => $phid) {
+        if (isset($in_flight[$phid])) {
+          unset($group[$key]);
+        }
+      }
+
+      if ($group && isset($types[$type])) {
+        $this->putPHIDsInFlight($group);
         $objects = $types[$type]->loadObjects($this, $group);
         $results += mpull($objects, null, 'getPHID');
       }
@@ -144,12 +155,18 @@ final class PhabricatorObjectQuery
   }
 
   /**
-   * This query disables policy filtering because it is performed in the
-   * subqueries which actually load objects. We don't need to re-filter
-   * results, since policies have already been applied.
+   * This query disables policy filtering if the only required capability is
+   * the view capability.
+   *
+   * The view capability is always checked in the subqueries, so we do not need
+   * to re-filter results. For any other set of required capabilities, we do.
    */
   protected function shouldDisablePolicyFiltering() {
-    return true;
+    $view_capability = PhabricatorPolicyCapability::CAN_VIEW;
+    if ($this->getRequiredCapabilities() === array($view_capability)) {
+      return true;
+    }
+    return false;
   }
 
   public function getQueryApplicationClass() {

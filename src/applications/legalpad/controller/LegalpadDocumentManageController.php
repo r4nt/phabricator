@@ -33,15 +33,6 @@ final class LegalpadDocumentManageController extends LegalpadController {
       $document->getPHID());
 
     $document_body = $document->getDocumentBody();
-    $phids = array();
-    $phids[] = $document_body->getCreatorPHID();
-    foreach ($subscribers as $subscriber) {
-      $phids[] = $subscriber;
-    }
-    foreach ($document->getContributors() as $contributor) {
-      $phids[] = $contributor;
-    }
-    $this->loadHandles($phids);
 
     $engine = id(new PhabricatorMarkupEngine())
       ->setViewer($user);
@@ -68,7 +59,6 @@ final class LegalpadDocumentManageController extends LegalpadController {
     $add_comment = $this->buildAddCommentView($document, $comment_form_id);
 
     $crumbs = $this->buildApplicationCrumbs($this->buildSideNav());
-    $crumbs->setActionList($actions);
     $crumbs->addTextCrumb(
       $document->getMonogram(),
       '/'.$document->getMonogram());
@@ -168,21 +158,19 @@ final class LegalpadDocumentManageController extends LegalpadController {
 
     $properties->addProperty(
       pht('Updated By'),
-      $this->getHandle(
-        $document->getDocumentBody()->getCreatorPHID())->renderLink());
+      $user->renderHandle($document->getDocumentBody()->getCreatorPHID()));
 
     $properties->addProperty(
       pht('Versions'),
       $document->getVersions());
 
-    $contributor_view = array();
-    foreach ($document->getContributors() as $contributor) {
-      $contributor_view[] = $this->getHandle($contributor)->renderLink();
+    if ($document->getContributors()) {
+      $properties->addProperty(
+        pht('Contributors'),
+        $user
+          ->renderHandleList($document->getContributors())
+          ->setAsInline(true));
     }
-    $contributor_view = phutil_implode_html(', ', $contributor_view);
-    $properties->addProperty(
-      pht('Contributors'),
-      $contributor_view);
 
     $properties->invokeWillRenderEvent();
 

@@ -10,6 +10,7 @@ final class DifferentialRevisionListView extends AphrontView {
   private $highlightAge;
   private $header;
   private $noDataString;
+  private $noBox;
 
   public function setNoDataString($no_data_string) {
     $this->noDataString = $no_data_string;
@@ -32,6 +33,11 @@ final class DifferentialRevisionListView extends AphrontView {
     return $this;
   }
 
+  public function setNoBox($box) {
+    $this->noBox = $box;
+    return $this;
+  }
+
   public function getRequiredHandlePHIDs() {
     $phids = array();
     foreach ($this->revisions as $revision) {
@@ -51,10 +57,9 @@ final class DifferentialRevisionListView extends AphrontView {
   }
 
   public function render() {
-
     $user = $this->user;
     if (!$user) {
-      throw new Exception('Call setUser() before render()!');
+      throw new PhutilInvalidStateException('setUser');
     }
 
     $fresh = PhabricatorEnv::getEnvConfig('differential.days-fresh');
@@ -121,9 +126,8 @@ final class DifferentialRevisionListView extends AphrontView {
       }
 
       $item->setObjectName('D'.$revision->getID());
-      $item->setHeader(phutil_tag('a',
-        array('href' => '/D'.$revision->getID()),
-        $revision->getTitle()));
+      $item->setHeader($revision->getTitle());
+      $item->setHref('/D'.$revision->getID());
 
       if (isset($icons['draft'])) {
         $draft = id(new PHUIIconView())
@@ -180,8 +184,22 @@ final class DifferentialRevisionListView extends AphrontView {
       $list->addItem($item);
     }
 
-    $list->setHeader($this->header);
     $list->setNoDataString($this->noDataString);
+
+
+    if ($this->header && !$this->noBox) {
+      $list->setFlush(true);
+      $list = id(new PHUIObjectBoxView())
+        ->appendChild($list);
+
+      if ($this->header instanceof PHUIHeaderView) {
+        $list->setHeader($this->header);
+      } else {
+        $list->setHeaderText($this->header);
+      }
+    } else {
+      $list->setHeader($this->header);
+    }
 
     return $list;
   }

@@ -16,7 +16,7 @@ final class DoorkeeperExternalObjectQuery
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = new DoorkeeperExternalObject();
     $conn_r = $table->establishConnection('r');
 
@@ -31,7 +31,7 @@ final class DoorkeeperExternalObjectQuery
     return $table->loadAllFromArray($data);
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->phids) {

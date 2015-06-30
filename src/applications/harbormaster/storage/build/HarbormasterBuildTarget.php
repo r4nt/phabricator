@@ -93,7 +93,7 @@ final class HarbormasterBuildTarget extends HarbormasterDAO
       ->setBuildGeneration($build->getBuildGeneration());
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_SERIALIZATION => array(
@@ -175,8 +175,16 @@ final class HarbormasterBuildTarget extends HarbormasterDAO
     return $this->implementation;
   }
 
+  public function isAutotarget() {
+    try {
+      return (bool)$this->getImplementation()->getBuildStepAutotargetPlanKey();
+    } catch (Exception $e) {
+      return false;
+    }
+  }
+
   public function getName() {
-    if (strlen($this->name)) {
+    if (strlen($this->name) && !$this->isAutotarget()) {
       return $this->name;
     }
 

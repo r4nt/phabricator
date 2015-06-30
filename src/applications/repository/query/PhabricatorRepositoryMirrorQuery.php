@@ -37,7 +37,7 @@ final class PhabricatorRepositoryMirrorQuery
     return $table->loadAllFromArray($data);
   }
 
-  public function willFilterPage(array $mirrors) {
+  protected function willFilterPage(array $mirrors) {
     assert_instances_of($mirrors, 'PhabricatorRepositoryMirror');
 
     $repository_phids = mpull($mirrors, 'getRepositoryPHID');
@@ -63,7 +63,7 @@ final class PhabricatorRepositoryMirrorQuery
     return $mirrors;
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->ids) {

@@ -54,18 +54,13 @@ final class PhamePostListController extends PhameController {
         $nav->selectFilter('post/all');
         break;
       default:
-        throw new Exception("Unknown filter '{$this->filter}'!");
+        throw new Exception(pht("Unknown filter '%s'!", $this->filter));
     }
 
     $pager = id(new AphrontCursorPagerView())
       ->readFromRequest($request);
 
     $posts = $query->executeWithCursorPager($pager);
-
-    $handle_phids = array_merge(
-      mpull($posts, 'getBloggerPHID'),
-      mpull($posts, 'getBlogPHID'));
-    $this->loadHandles($handle_phids);
 
     require_celerity_resource('phame-css');
     $post_list = $this->renderPostList($posts, $user, $nodata);
@@ -75,6 +70,7 @@ final class PhamePostListController extends PhameController {
       ->appendChild($post_list);
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setBorder(true);
     $crumbs->addTextCrumb($title, $this->getApplicationURI());
 
     $nav->appendChild(

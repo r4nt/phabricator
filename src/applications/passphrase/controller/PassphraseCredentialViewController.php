@@ -39,8 +39,6 @@ final class PassphraseCredentialViewController extends PassphraseController {
     $actions = $this->buildActionView($credential, $type);
     $properties = $this->buildPropertyView($credential, $type, $actions);
 
-    $crumbs->setActionList($actions);
-
     $box = id(new PHUIObjectBoxView())
       ->setHeader($header)
       ->addPropertyList($properties);
@@ -136,6 +134,7 @@ final class PassphraseCredentialViewController extends PassphraseController {
             ->setName(pht('Show Public Key'))
             ->setIcon('fa-download')
             ->setHref($this->getApplicationURI("public/{$id}/"))
+            ->setDisabled(!$can_edit)
             ->setWorkflow(true));
       }
 
@@ -144,6 +143,7 @@ final class PassphraseCredentialViewController extends PassphraseController {
           ->setName($credential_conduit_text)
           ->setIcon($credential_conduit_icon)
           ->setHref($this->getApplicationURI("conduit/{$id}/"))
+          ->setDisabled(!$can_edit)
           ->setWorkflow(true));
 
       $actions->addAction(
@@ -151,7 +151,7 @@ final class PassphraseCredentialViewController extends PassphraseController {
           ->setName($credential_lock_text)
           ->setIcon($credential_lock_icon)
           ->setHref($this->getApplicationURI("lock/{$id}/"))
-          ->setDisabled($is_locked)
+          ->setDisabled(!$can_edit || $is_locked)
           ->setWorkflow(true));
     }
 
@@ -182,19 +182,20 @@ final class PassphraseCredentialViewController extends PassphraseController {
       pht('Editable By'),
       $descriptions[PhabricatorPolicyCapability::CAN_EDIT]);
 
-    $properties->addProperty(
-      pht('Username'),
-      $credential->getUsername());
+    if ($type->shouldRequireUsername()) {
+      $properties->addProperty(
+        pht('Username'),
+        $credential->getUsername());
+    }
 
     $used_by_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
       $credential->getPHID(),
-      PhabricatorEdgeConfig::TYPE_CREDENTIAL_USED_BY_OBJECT);
+      PhabricatorCredentialsUsedByObjectEdgeType::EDGECONST);
 
     if ($used_by_phids) {
-      $this->loadHandles($used_by_phids);
       $properties->addProperty(
         pht('Used By'),
-        $this->renderHandlesForPHIDs($used_by_phids));
+        $viewer->renderHandleList($used_by_phids));
     }
 
     $description = $credential->getDescription();

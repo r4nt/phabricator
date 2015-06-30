@@ -33,16 +33,24 @@ abstract class PhameController extends PhabricatorController {
     $nodata) {
     assert_instances_of($posts, 'PhamePost');
 
-    $stories = array();
-
+    $handle_phids = array();
     foreach ($posts as $post) {
-      $blogger = $this->getHandle($post->getBloggerPHID())->renderLink();
-      $bloggerURI = $this->getHandle($post->getBloggerPHID())->getURI();
-      $bloggerImage = $this->getHandle($post->getBloggerPHID())->getImageURI();
+      $handle_phids[] = $post->getBloggerPHID();
+      if ($post->getBlog()) {
+        $handle_phids[] = $post->getBlog()->getPHID();
+      }
+    }
+    $handles = $viewer->loadHandles($handle_phids);
+
+    $stories = array();
+    foreach ($posts as $post) {
+      $blogger = $handles[$post->getBloggerPHID()]->renderLink();
+      $blogger_uri = $handles[$post->getBloggerPHID()]->getURI();
+      $blogger_image = $handles[$post->getBloggerPHID()]->getImageURI();
 
       $blog = null;
       if ($post->getBlog()) {
-        $blog = $this->getHandle($post->getBlog()->getPHID())->renderLink();
+        $blog = $handles[$post->getBlog()->getPHID()]->renderLink();
       }
 
       $phame_post = '';
@@ -56,12 +64,16 @@ abstract class PhameController extends PhabricatorController {
 
       $blogger = phutil_tag('strong', array(), $blogger);
       if ($post->isDraft()) {
-        $title = pht('%s drafted a blog post on %s.',
-          $blogger, $blog);
+        $title = pht(
+          '%s drafted a blog post on %s.',
+          $blogger,
+          $blog);
         $title = phutil_tag('em', array(), $title);
       } else {
-        $title = pht('%s wrote a blog post on %s.',
-          $blogger, $blog);
+        $title = pht(
+          '%s wrote a blog post on %s.',
+          $blogger,
+          $blog);
       }
 
       $item = id(new PHUIObjectItemView())
@@ -71,9 +83,9 @@ abstract class PhameController extends PhabricatorController {
 
       $story = id(new PHUIFeedStoryView())
         ->setTitle($title)
-        ->setImage($bloggerImage)
-        ->setImageHref($bloggerURI)
-        ->setAppIcon('phame-dark')
+        ->setImage($blogger_image)
+        ->setImageHref($blogger_uri)
+        ->setAppIcon('fa-star')
         ->setUser($viewer)
         ->setPontification($phame_post, $phame_title);
 
@@ -95,8 +107,8 @@ abstract class PhameController extends PhabricatorController {
     }
 
     if (empty($stories)) {
-      return id(new AphrontErrorView())
-        ->setSeverity(AphrontErrorView::SEVERITY_NODATA)
+      return id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_NODATA)
         ->appendChild($nodata);
     }
 

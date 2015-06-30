@@ -11,24 +11,27 @@
  */
 abstract class PhabricatorEdgeType extends Phobject {
 
-  // TODO: Make this final after we remove PhabricatorLegacyEdgeType.
-  /* final */ public function getEdgeConstant() {
+  final public function getEdgeConstant() {
     $class = new ReflectionClass($this);
 
     $const = $class->getConstant('EDGECONST');
     if ($const === false) {
       throw new Exception(
         pht(
-          'EdgeType class "%s" must define an EDGECONST property.',
-          get_class($this)));
+          '%s class "%s" must define an %s property.',
+          __CLASS__,
+          get_class($this),
+          'EDGECONST'));
     }
 
     if (!is_int($const) || ($const <= 0)) {
       throw new Exception(
         pht(
-          'EdgeType class "%s" has an invalid EDGECONST property. Edge '.
-          'constants must be positive integers.',
-          get_class($this)));
+          '%s class "%s" has an invalid %s property. '.
+          'Edge constants must be positive integers.',
+          __CLASS__,
+          get_class($this),
+          'EDGECONST'));
     }
 
     return $const;
@@ -44,6 +47,12 @@ abstract class PhabricatorEdgeType extends Phobject {
 
   public function shouldWriteInverseTransactions() {
     return false;
+  }
+
+  public function getTransactionPreviewString($actor) {
+    return pht(
+      '%s edited edge metadata.',
+      $actor);
   }
 
   public function getTransactionAddString(
@@ -152,13 +161,6 @@ abstract class PhabricatorEdgeType extends Phobject {
         ->loadObjects();
 
       $map = array();
-
-
-      // TODO: Remove this once everything is migrated.
-      $exclude = mpull($types, 'getEdgeConstant');
-      $map = PhabricatorEdgeConfig::getLegacyTypes($exclude);
-      unset($types['PhabricatorLegacyEdgeType']);
-
 
       foreach ($types as $class => $type) {
         $const = $type->getEdgeConstant();

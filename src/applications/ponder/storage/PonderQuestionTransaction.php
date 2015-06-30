@@ -134,7 +134,7 @@ final class PonderQuestionTransaction
           case PonderQuestionStatus::STATUS_OPEN:
             return PhabricatorTransactions::COLOR_GREEN;
           case PonderQuestionStatus::STATUS_CLOSED:
-            return PhabricatorTransactions::COLOR_BLACK;
+            return PhabricatorTransactions::COLOR_INDIGO;
         }
     }
   }
@@ -202,7 +202,7 @@ final class PonderQuestionTransaction
     return parent::shouldHide();
   }
 
-  public function getTitleForFeed(PhabricatorFeedStory $story) {
+  public function getTitleForFeed() {
     $author_phid = $this->getAuthorPHID();
     $object_phid = $this->getObjectPHID();
 
@@ -250,7 +250,7 @@ final class PonderQuestionTransaction
         }
     }
 
-    return parent::getTitleForFeed($story);
+    return parent::getTitleForFeed();
   }
 
   public function getBodyForFeed(PhabricatorFeedStory $story) {
@@ -295,7 +295,7 @@ final class PonderQuestionTransaction
 
     if (count($add) != 1) {
       throw new Exception(
-        'There should be only one answer added at a time.');
+        pht('There should be only one answer added at a time.'));
     }
 
     return reset($add);
@@ -303,7 +303,7 @@ final class PonderQuestionTransaction
 
   /**
    * Generally, the answer object is only available if the transaction
-   * type is self::TYPE_ANSWERS.
+   * type is `self::TYPE_ANSWERS`.
    *
    * Some stories - notably ones made before D7027 - will be of the more
    * generic @{class:PhabricatorApplicationTransactionFeedStory}. These

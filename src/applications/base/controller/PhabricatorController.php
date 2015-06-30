@@ -3,6 +3,7 @@
 abstract class PhabricatorController extends AphrontController {
 
   private $handles;
+  private $extraQuicksandConfig = array();
 
   public function shouldRequireLogin() {
     return true;
@@ -53,6 +54,23 @@ abstract class PhabricatorController extends AphrontController {
     return PhabricatorEnv::getEnvConfig('security.require-multi-factor-auth');
   }
 
+  public function shouldAllowLegallyNonCompliantUsers() {
+    return false;
+  }
+
+  public function isGlobalDragAndDropUploadEnabled() {
+    return false;
+  }
+
+  public function addExtraQuicksandConfig($config) {
+    $this->extraQuicksandConfig += $config;
+    return $this;
+  }
+
+  private function getExtraQuicksandConfig() {
+    return $this->extraQuicksandConfig;
+  }
+
   public function willBeginExecution() {
     $request = $this->getRequest();
 
@@ -96,14 +114,7 @@ abstract class PhabricatorController extends AphrontController {
       $request->setUser($user);
     }
 
-    $translation = $user->getTranslation();
-    if ($translation &&
-        $translation != PhabricatorEnv::getEnvConfig('translation.provider')) {
-      $translation = newv($translation, array());
-      PhutilTranslator::getInstance()
-        ->setLanguage($translation->getLanguage())
-        ->addTranslations($translation->getTranslations());
-    }
+    PhabricatorEnv::setLocaleCode($user->getTranslation());
 
     $preferences = $user->loadPreferences();
     if (PhabricatorEnv::getEnvConfig('darkconsole.enabled')) {
@@ -225,6 +236,48 @@ abstract class PhabricatorController extends AphrontController {
       }
     }
 
+
+    if (!$this->shouldAllowLegallyNonCompliantUsers()) {
+      $legalpad_class = 'PhabricatorLegalpadApplication';
+      $legalpad = id(new PhabricatorApplicationQuery())
+        ->setViewer($user)
+        ->withClasses(array($legalpad_class))
+        ->withInstalled(true)
+        ->execute();
+      $legalpad = head($legalpad);
+
+      $doc_query = id(new LegalpadDocumentQuery())
+        ->setViewer($user)
+        ->withSignatureRequired(1)
+        ->needViewerSignatures(true);
+
+      if ($user->hasSession() &&
+          !$user->getSession()->getIsPartial() &&
+          !$user->getSession()->getSignedLegalpadDocuments() &&
+          $user->isLoggedIn() &&
+          $legalpad) {
+
+        $sign_docs = $doc_query->execute();
+        $must_sign_docs = array();
+        foreach ($sign_docs as $sign_doc) {
+          if (!$sign_doc->getUserSignature($user->getPHID())) {
+            $must_sign_docs[] = $sign_doc;
+          }
+        }
+        if ($must_sign_docs) {
+          $controller = new LegalpadDocumentSignController();
+          $this->getRequest()->setURIMap(array(
+            'id' => head($must_sign_docs)->getID(),
+          ));
+          $this->setCurrentApplication($legalpad);
+          return $this->delegateToController($controller);
+        } else {
+          $engine = id(new PhabricatorAuthSessionEngine())
+            ->signLegalpadDocuments($user, $sign_docs);
+        }
+      }
+    }
+
     // NOTE: We do this last so that users get a login page instead of a 403
     // if they need to login.
     if ($this->shouldRequireAdmin() && !$user->getIsAdmin()) {
@@ -242,14 +295,25 @@ abstract class PhabricatorController extends AphrontController {
   public function buildStandardPageResponse($view, array $data) {
     $page = $this->buildStandardPageView();
     $page->appendChild($view);
-    $response = new AphrontWebpageResponse();
-    $response->setContent($page->render());
+    return $this->buildPageResponse($page);
+  }
+
+  private function buildPageResponse($page) {
+    if ($this->getRequest()->isQuicksand()) {
+      $response = id(new AphrontAjaxResponse())
+        ->setContent($page->renderForQuicksand(
+          $this->getExtraQuicksandConfig()));
+    } else {
+      $response = id(new AphrontWebpageResponse())
+        ->setContent($page->render());
+    }
+
     return $response;
   }
 
   public function getApplicationURI($path = '') {
     if (!$this->getCurrentApplication()) {
-      throw new Exception('No application!');
+      throw new Exception(pht('No application!'));
     }
     return $this->getCurrentApplication()->getApplicationURI($path);
   }
@@ -303,8 +367,7 @@ abstract class PhabricatorController extends AphrontController {
       $page->setApplicationMenu($application_menu);
     }
 
-    $response = new AphrontWebpageResponse();
-    return $response->setContent($page->render());
+    return $this->buildPageResponse($page);
   }
 
   public function didProcessRequest($response) {
@@ -322,8 +385,8 @@ abstract class PhabricatorController extends AphrontController {
       if (isset($seen[$hash])) {
         $seen[] = get_class($response);
         throw new Exception(
-          'Cycle while reducing proxy responses: '.
-          implode(' -> ', $seen));
+          pht('Cycle while reducing proxy responses: %s',
+          implode(' -> ', $seen)));
       }
       $seen[$hash] = get_class($response);
 
@@ -331,7 +394,7 @@ abstract class PhabricatorController extends AphrontController {
     }
 
     if ($response instanceof AphrontDialogResponse) {
-      if (!$request->isAjax()) {
+      if (!$request->isAjax() && !$request->isQuicksand()) {
         $dialog = $response->getDialog();
 
         $title = $dialog->getTitle();
@@ -364,7 +427,7 @@ abstract class PhabricatorController extends AphrontController {
           ));
       }
     } else if ($response instanceof AphrontRedirectResponse) {
-      if ($request->isAjax()) {
+      if ($request->isAjax() || $request->isQuicksand()) {
         return id(new AphrontAjaxResponse())
           ->setContent(
             array(
@@ -376,24 +439,11 @@ abstract class PhabricatorController extends AphrontController {
     return $response;
   }
 
-  protected function getHandle($phid) {
-    if (empty($this->handles[$phid])) {
-      throw new Exception(
-        "Attempting to access handle which wasn't loaded: {$phid}");
-    }
-    return $this->handles[$phid];
-  }
-
-  protected function loadHandles(array $phids) {
-    $phids = array_filter($phids);
-    $this->handles = $this->loadViewerHandles($phids);
-    return $this;
-  }
-
-  protected function getLoadedHandles() {
-    return $this->handles;
-  }
-
+  /**
+   * WARNING: Do not call this in new code.
+   *
+   * @deprecated See "Handles Technical Documentation".
+   */
   protected function loadViewerHandles(array $phids) {
     return id(new PhabricatorHandleQuery())
       ->setViewer($this->getRequest()->getUser())
@@ -401,31 +451,7 @@ abstract class PhabricatorController extends AphrontController {
       ->execute();
   }
 
-  /**
-   * Render a list of links to handles, identified by PHIDs. The handles must
-   * already be loaded.
-   *
-   * @param   list<phid>  List of PHIDs to render links to.
-   * @param   string      Style, one of "\n" (to put each item on its own line)
-   *                      or "," (to list items inline, separated by commas).
-   * @return  string      Rendered list of handle links.
-   */
-  protected function renderHandlesForPHIDs(array $phids, $style = "\n") {
-    $style_map = array(
-      "\n"  => phutil_tag('br'),
-      ','   => ', ',
-    );
-
-    if (empty($style_map[$style])) {
-      throw new Exception("Unknown handle list style '{$style}'!");
-    }
-
-    return implode_selected_handle_links($style_map[$style],
-      $this->getLoadedHandles(),
-      array_filter($phids));
-  }
-
-  protected function buildApplicationMenu() {
+  public function buildApplicationMenu() {
     return null;
   }
 
@@ -434,18 +460,18 @@ abstract class PhabricatorController extends AphrontController {
 
     $application = $this->getCurrentApplication();
     if ($application) {
-      $sprite = $application->getIconName();
-      if (!$sprite) {
-        $sprite = 'application';
+      $icon = $application->getFontIcon();
+      if (!$icon) {
+        $icon = 'fa-puzzle';
       }
 
-      $crumbs[] = id(new PhabricatorCrumbView())
+      $crumbs[] = id(new PHUICrumbView())
         ->setHref($this->getApplicationURI())
-        ->setAural($application->getName())
-        ->setIcon($sprite);
+        ->setName($application->getName())
+        ->setIcon($icon);
     }
 
-    $view = new PhabricatorCrumbsView();
+    $view = new PHUICrumbsView();
     foreach ($crumbs as $crumb) {
       $view->addCrumb($crumb);
     }
@@ -545,7 +571,6 @@ abstract class PhabricatorController extends AphrontController {
       ->setViewer($viewer)
       ->withObjectPHIDs(array($object->getPHID()))
       ->needComments(true)
-      ->setReversePaging(false)
       ->executeWithCursorPager($pager);
     $xactions = array_reverse($xactions);
 
@@ -566,7 +591,9 @@ abstract class PhabricatorController extends AphrontController {
       ->setObjectPHID($object->getPHID())
       ->setTransactions($xactions)
       ->setPager($pager)
-      ->setRenderData($render_data);
+      ->setRenderData($render_data)
+      ->setQuoteTargetID($this->getRequest()->getStr('quoteTargetID'))
+      ->setQuoteRef($this->getRequest()->getStr('quoteRef'));
     $object->willRenderTimeline($timeline, $this->getRequest());
 
     return $timeline;

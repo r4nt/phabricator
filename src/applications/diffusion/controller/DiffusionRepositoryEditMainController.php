@@ -3,8 +3,7 @@
 final class DiffusionRepositoryEditMainController
   extends DiffusionRepositoryEditController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
     $drequest = $this->diffusionRequest;
     $repository = $drequest->getRepository();
@@ -31,6 +30,7 @@ final class DiffusionRepositoryEditMainController
 
     $has_branches = ($is_git || $is_hg);
     $has_local = $repository->usesLocalWorkingCopy();
+    $supports_staging = $repository->supportsStaging();
 
     $crumbs = $this->buildApplicationCrumbs($is_main = true);
 
@@ -63,6 +63,10 @@ final class DiffusionRepositoryEditMainController
     $encoding_properties =
       $this->buildEncodingProperties($repository, $encoding_actions);
 
+    $symbols_actions = $this->buildSymbolsActions($repository);
+    $symbols_properties =
+      $this->buildSymbolsProperties($repository, $symbols_actions);
+
     $hosting_properties = $this->buildHostingProperties(
       $repository,
       $this->buildHostingActions($repository));
@@ -82,11 +86,18 @@ final class DiffusionRepositoryEditMainController
         $this->buildSubversionActions($repository));
     }
 
-    $local_properties = null;
+    $storage_properties = null;
     if ($has_local) {
-      $local_properties = $this->buildLocalProperties(
+      $storage_properties = $this->buildStorageProperties(
         $repository,
-        $this->buildLocalActions($repository));
+        $this->buildStorageActions($repository));
+    }
+
+    $staging_properties = null;
+    if ($supports_staging) {
+      $staging_properties = $this->buildStagingProperties(
+        $repository,
+        $this->buildStagingActions($repository));
     }
 
     $actions_properties = $this->buildActionsProperties(
@@ -127,7 +138,15 @@ final class DiffusionRepositoryEditMainController
 
       $boxes[] = id(new PhabricatorAnchorView())->setAnchorName('mirrors');
 
+      $mirror_info = array();
+      if (PhabricatorEnv::getEnvConfig('phabricator.silent')) {
+        $mirror_info[] = pht(
+          'Phabricator is running in silent mode, so changes will not '.
+          'be pushed to mirrors.');
+      }
+
       $boxes[] = id(new PHUIObjectBoxView())
+        ->setFormErrors($mirror_info)
         ->setHeaderText(pht('Mirrors'))
         ->addPropertyList($mirror_properties);
 
@@ -140,15 +159,25 @@ final class DiffusionRepositoryEditMainController
         ->addPropertyList($remote_properties);
     }
 
-    if ($local_properties) {
+    if ($storage_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
-        ->setHeaderText(pht('Local'))
-        ->addPropertyList($local_properties);
+        ->setHeaderText(pht('Storage'))
+        ->addPropertyList($storage_properties);
+    }
+
+    if ($staging_properties) {
+      $boxes[] = id(new PHUIObjectBoxView())
+        ->setHeaderText(pht('Staging'))
+        ->addPropertyList($staging_properties);
     }
 
     $boxes[] = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Text Encoding'))
       ->addPropertyList($encoding_properties);
+
+    $boxes[] = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Symbols'))
+      ->addPropertyList($symbols_properties);
 
     if ($branches_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
@@ -258,8 +287,7 @@ final class DiffusionRepositoryEditMainController
       $repository->getPHID(),
       PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
     if ($project_phids) {
-      $this->loadHandles($project_phids);
-      $project_text = $this->renderHandlesForPHIDs($project_phids);
+      $project_text = $viewer->renderHandleList($project_phids);
     } else {
       $project_text = phutil_tag('em', array(), pht('None'));
     }
@@ -358,9 +386,17 @@ final class DiffusionRepositoryEditMainController
       $viewer,
       $repository);
 
+    $view_parts = array();
+    if (PhabricatorSpacesNamespaceQuery::getViewerSpacesExist($viewer)) {
+      $space_phid = PhabricatorSpacesNamespaceQuery::getObjectSpacePHID(
+        $repository);
+      $view_parts[] = $viewer->renderHandle($space_phid);
+    }
+    $view_parts[] = $descriptions[PhabricatorPolicyCapability::CAN_VIEW];
+
     $view->addProperty(
       pht('Visible To'),
-      $descriptions[PhabricatorPolicyCapability::CAN_VIEW]);
+      phutil_implode_html(" \xC2\xB7 ", $view_parts));
 
     $view->addProperty(
       pht('Editable By'),
@@ -539,16 +575,15 @@ final class DiffusionRepositoryEditMainController
 
     $credential_phid = $repository->getCredentialPHID();
     if ($credential_phid) {
-      $this->loadHandles(array($credential_phid));
       $view->addProperty(
         pht('Credential'),
-        $this->getHandle($credential_phid)->renderLink());
+        $viewer->renderHandle($credential_phid));
     }
 
     return $view;
   }
 
-  private function buildLocalActions(PhabricatorRepository $repository) {
+  private function buildStorageActions(PhabricatorRepository $repository) {
     $viewer = $this->getRequest()->getUser();
 
     $view = id(new PhabricatorActionListView())
@@ -557,15 +592,15 @@ final class DiffusionRepositoryEditMainController
 
     $edit = id(new PhabricatorActionView())
       ->setIcon('fa-pencil')
-      ->setName(pht('Edit Local'))
+      ->setName(pht('Edit Storage'))
       ->setHref(
-        $this->getRepositoryControllerURI($repository, 'edit/local/'));
+        $this->getRepositoryControllerURI($repository, 'edit/storage/'));
     $view->addAction($edit);
 
     return $view;
   }
 
-  private function buildLocalProperties(
+  private function buildStorageProperties(
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
@@ -575,9 +610,62 @@ final class DiffusionRepositoryEditMainController
       ->setUser($viewer)
       ->setActionList($actions);
 
+    $service_phid = $repository->getAlmanacServicePHID();
+    if ($service_phid) {
+      $v_service = $viewer->renderHandle($service_phid);
+    } else {
+      $v_service = phutil_tag(
+        'em',
+        array(),
+        pht('Local'));
+    }
+
     $view->addProperty(
-      pht('Local Path'),
+      pht('Storage Service'),
+      $v_service);
+
+    $view->addProperty(
+      pht('Storage Path'),
       $repository->getHumanReadableDetail('local-path'));
+
+    return $view;
+  }
+
+
+  private function buildStagingActions(PhabricatorRepository $repository) {
+    $viewer = $this->getViewer();
+
+    $view = id(new PhabricatorActionListView())
+      ->setObjectURI($this->getRequest()->getRequestURI())
+      ->setUser($viewer);
+
+    $edit = id(new PhabricatorActionView())
+      ->setIcon('fa-pencil')
+      ->setName(pht('Edit Staging'))
+      ->setHref(
+        $this->getRepositoryControllerURI($repository, 'edit/staging/'));
+    $view->addAction($edit);
+
+    return $view;
+  }
+
+  private function buildStagingProperties(
+    PhabricatorRepository $repository,
+    PhabricatorActionListView $actions) {
+    $viewer = $this->getViewer();
+
+    $view = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setActionList($actions);
+
+    $staging_uri = $repository->getStagingURI();
+    if (!$staging_uri) {
+      $staging_uri = phutil_tag('em', array(), pht('No Staging Area'));
+    }
+
+    $view->addProperty(
+      pht('Staging Area'),
+      $staging_uri);
 
     return $view;
   }
@@ -668,6 +756,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository) {
 
     $viewer = $this->getRequest()->getUser();
+    $is_cluster = $repository->getAlmanacServicePHID();
 
     $view = new PHUIStatusListView();
 
@@ -741,54 +830,62 @@ final class DiffusionRepositoryEditMainController
     }
 
     $binaries = array_unique($binaries);
-    foreach ($binaries as $binary) {
-      $where = Filesystem::resolveBinary($binary);
-      if (!$where) {
-        $view->addItem(
-          id(new PHUIStatusItemView())
-            ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
-            ->setTarget(
-              pht('Missing Binary %s', phutil_tag('tt', array(), $binary)))
-            ->setNote(pht(
-              "Unable to find this binary in the webserver's PATH. You may ".
-              "need to configure %s.",
-              $this->getEnvConfigLink())));
-      } else {
-        $view->addItem(
-          id(new PHUIStatusItemView())
-            ->setIcon(PHUIStatusItemView::ICON_ACCEPT, 'green')
-            ->setTarget(
-              pht('Found Binary %s', phutil_tag('tt', array(), $binary)))
-            ->setNote(phutil_tag('tt', array(), $where)));
-      }
-    }
+    if (!$is_cluster) {
+      // We're only checking for binaries if we aren't running with a cluster
+      // configuration. In theory, we could check for binaries on the
+      // repository host machine, but we'd need to make this more complicated
+      // to do that.
 
-    // This gets checked generically above. However, for svn commit hooks, we
-    // need this to be in environment.append-paths because subversion strips
-    // PATH.
-    if ($svnlook_check) {
-      $where = Filesystem::resolveBinary('svnlook');
-      if ($where) {
-        $path = substr($where, 0, strlen($where) - strlen('svnlook'));
-        $dirs = PhabricatorEnv::getEnvConfig('environment.append-paths');
-        $in_path = false;
-        foreach ($dirs as $dir) {
-          if (Filesystem::isDescendant($path, $dir)) {
-            $in_path = true;
-            break;
-          }
-        }
-        if (!$in_path) {
+      foreach ($binaries as $binary) {
+        $where = Filesystem::resolveBinary($binary);
+        if (!$where) {
           $view->addItem(
             id(new PHUIStatusItemView())
-            ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
-            ->setTarget(
-              pht('Missing Binary %s', phutil_tag('tt', array(), $binary)))
-            ->setNote(pht(
-                'Unable to find this binary in `environment.append-paths`. '.
-                'You need to configure %s and include %s.',
-                $this->getEnvConfigLink(),
-                $path)));
+              ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
+              ->setTarget(
+                pht('Missing Binary %s', phutil_tag('tt', array(), $binary)))
+              ->setNote(pht(
+                "Unable to find this binary in the webserver's PATH. You may ".
+                "need to configure %s.",
+                $this->getEnvConfigLink())));
+        } else {
+          $view->addItem(
+            id(new PHUIStatusItemView())
+              ->setIcon(PHUIStatusItemView::ICON_ACCEPT, 'green')
+              ->setTarget(
+                pht('Found Binary %s', phutil_tag('tt', array(), $binary)))
+              ->setNote(phutil_tag('tt', array(), $where)));
+        }
+      }
+
+      // This gets checked generically above. However, for svn commit hooks, we
+      // need this to be in environment.append-paths because subversion strips
+      // PATH.
+      if ($svnlook_check) {
+        $where = Filesystem::resolveBinary('svnlook');
+        if ($where) {
+          $path = substr($where, 0, strlen($where) - strlen('svnlook'));
+          $dirs = PhabricatorEnv::getEnvConfig('environment.append-paths');
+          $in_path = false;
+          foreach ($dirs as $dir) {
+            if (Filesystem::isDescendant($path, $dir)) {
+              $in_path = true;
+              break;
+            }
+          }
+          if (!$in_path) {
+            $view->addItem(
+              id(new PHUIStatusItemView())
+              ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
+              ->setTarget(
+                pht('Missing Binary %s', phutil_tag('tt', array(), $binary)))
+              ->setNote(pht(
+                  'Unable to find this binary in `%s`. '.
+                  'You need to configure %s and include %s.',
+                  'environment.append-paths',
+                  $this->getEnvConfigLink(),
+                  $path)));
+          }
         }
       }
     }
@@ -814,6 +911,12 @@ final class DiffusionRepositoryEditMainController
       ->execute();
 
     if ($pull_daemon) {
+
+      // TODO: In a cluster environment, we need a daemon on this repository's
+      // host, specifically, and we aren't checking for that right now. This
+      // is a reasonable proxy for things being more-or-less correctly set up,
+      // though.
+
       $view->addItem(
         id(new PHUIStatusItemView())
           ->setIcon(PHUIStatusItemView::ICON_ACCEPT, 'green')
@@ -846,7 +949,12 @@ final class DiffusionRepositoryEditMainController
           ->setNote($daemon_instructions));
     }
 
-    if ($repository->usesLocalWorkingCopy()) {
+
+    if ($is_cluster) {
+      // Just omit this status check for now in cluster environments. We
+      // could make a service call and pull it from the repository host
+      // eventually.
+    } else if ($repository->usesLocalWorkingCopy()) {
       $local_parent = dirname($repository->getLocalPath());
       if (Filesystem::pathExists($local_parent)) {
         $view->addItem(
@@ -930,11 +1038,34 @@ final class DiffusionRepositoryEditMainController
     if ($message) {
       switch ($message->getStatusCode()) {
         case PhabricatorRepositoryStatusMessage::CODE_ERROR:
+          $message = $message->getParameter('message');
+
+          $suggestion = null;
+          if (preg_match('/Permission denied \(publickey\)./', $message)) {
+            $suggestion = pht(
+              'Public Key Error: This error usually indicates that the '.
+              'keypair you have configured does not have permission to '.
+              'access the repository.');
+          }
+
+          $message = phutil_escape_html_newlines($message);
+
+          if ($suggestion !== null) {
+            $message = array(
+              phutil_tag('strong', array(), $suggestion),
+              phutil_tag('br'),
+              phutil_tag('br'),
+              phutil_tag('em', array(), pht('Raw Error')),
+              phutil_tag('br'),
+              $message,
+            );
+          }
+
           $view->addItem(
             id(new PHUIStatusItemView())
               ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
               ->setTarget(pht('Update Error'))
-              ->setNote($message->getParameter('message')));
+              ->setNote($message));
           return $view;
         case PhabricatorRepositoryStatusMessage::CODE_OKAY:
           $ago = (PhabricatorTime::getNow() - $message->getEpoch());
@@ -1124,6 +1255,53 @@ final class DiffusionRepositoryEditMainController
     }
 
     return $mirror_list;
+  }
+
+  private function buildSymbolsActions(PhabricatorRepository $repository) {
+    $viewer = $this->getRequest()->getUser();
+
+    $view = id(new PhabricatorActionListView())
+      ->setObjectURI($this->getRequest()->getRequestURI())
+      ->setUser($viewer);
+
+    $edit = id(new PhabricatorActionView())
+      ->setIcon('fa-pencil')
+      ->setName(pht('Edit Symbols'))
+      ->setHref(
+        $this->getRepositoryControllerURI($repository, 'edit/symbol/'));
+    $view->addAction($edit);
+
+    return $view;
+  }
+
+  private function buildSymbolsProperties(
+    PhabricatorRepository $repository,
+    PhabricatorActionListView $actions) {
+
+    $viewer = $this->getRequest()->getUser();
+
+    $view = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setActionList($actions);
+
+    $languages = $repository->getSymbolLanguages();
+
+    if ($languages) {
+      $languages = implode(', ', $languages);
+    } else {
+      $languages = phutil_tag('em', array(), pht('Any'));
+    }
+    $view->addProperty(pht('Languages'), $languages);
+
+    $sources = $repository->getSymbolSources();
+    if ($sources) {
+      $handles = $viewer->loadHandles($sources);
+      $sources = $handles->renderList();
+    } else {
+      $sources = phutil_tag('em', array(), pht('This Repository Only'));
+    }
+    $view->addProperty(pht('Use Symbols From'), $sources);
+    return $view;
   }
 
   private function getEnvConfigLink() {

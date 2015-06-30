@@ -11,7 +11,7 @@ final class DiffusionTagsQueryConduitAPIMethod
     return pht('Retrieve information about tags in a repository.');
   }
 
-  public function defineReturnType() {
+  protected function defineReturnType() {
     return 'array';
   }
 
@@ -129,7 +129,8 @@ final class DiffusionTagsQueryConduitAPIMethod
         $tag->getName());
     }
 
-    Futures($futures)->resolveAll();
+    id(new FutureIterator($futures))
+      ->resolveAll();
 
     foreach ($tags as $key => $tag) {
       $future = $futures[$key];

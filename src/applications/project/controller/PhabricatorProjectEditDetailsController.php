@@ -14,12 +14,14 @@ final class PhabricatorProjectEditDetailsController
     $viewer = $request->getUser();
 
     if ($this->id) {
-      $is_new = false;
+     $id = $request->getURIData('id');
+     $is_new = false;
 
       $project = id(new PhabricatorProjectQuery())
         ->setViewer($viewer)
         ->withIDs(array($this->id))
         ->needSlugs(true)
+        ->needImages(true)
         ->requireCapabilities(
           array(
             PhabricatorPolicyCapability::CAN_VIEW,
@@ -75,16 +77,14 @@ final class PhabricatorProjectEditDetailsController
       $v_icon = $request->getStr('icon');
       $v_locked = $request->getInt('is_membership_locked', 0);
 
-      $xactions = $field_list->buildFieldTransactionsFromRequest(
-        new PhabricatorProjectTransaction(),
-        $request);
-
       $type_name = PhabricatorProjectTransaction::TYPE_NAME;
       $type_slugs = PhabricatorProjectTransaction::TYPE_SLUGS;
       $type_edit = PhabricatorTransactions::TYPE_EDIT_POLICY;
       $type_icon = PhabricatorProjectTransaction::TYPE_ICON;
       $type_color = PhabricatorProjectTransaction::TYPE_COLOR;
       $type_locked = PhabricatorProjectTransaction::TYPE_LOCKED;
+
+      $xactions = array();
 
       $xactions[] = id(new PhabricatorProjectTransaction())
         ->setTransactionType($type_name)
@@ -118,6 +118,12 @@ final class PhabricatorProjectEditDetailsController
         ->setTransactionType($type_locked)
         ->setNewValue($v_locked);
 
+      $xactions = array_merge(
+        $xactions,
+        $field_list->buildFieldTransactionsFromRequest(
+          new PhabricatorProjectTransaction(),
+          $request));
+
       $editor = id(new PhabricatorProjectTransactionEditor())
         ->setActor($viewer)
         ->setContentSourceFromRequest($request)
@@ -128,7 +134,7 @@ final class PhabricatorProjectEditDetailsController
           ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
           ->setMetadataValue(
             'edge:type',
-            PhabricatorEdgeConfig::TYPE_PROJ_MEMBER)
+            PhabricatorProjectProjectHasMemberEdgeType::EDGECONST)
           ->setNewValue(
             array(
               '+' => array($viewer->getPHID() => $viewer->getPHID()),
@@ -147,13 +153,8 @@ final class PhabricatorProjectEditDetailsController
             ));
         }
 
-        if ($is_new) {
-          $redirect_uri =
-            $this->getApplicationURI('view/'.$project->getID().'/');
-        } else {
-          $redirect_uri =
-            $this->getApplicationURI('edit/'.$project->getID().'/');
-        }
+        $redirect_uri =
+          $this->getApplicationURI('profile/'.$project->getID().'/');
 
         return id(new AphrontRedirectResponse())->setURI($redirect_uri);
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
@@ -220,12 +221,17 @@ final class PhabricatorProjectEditDetailsController
           ->setLabel(pht('Color'))
           ->setName('color')
           ->setValue($v_color)
-          ->setOptions($shades))
-      ->appendChild(
+          ->setOptions($shades));
+
+    if (!$is_new) {
+      $form->appendChild(
         id(new AphrontFormStaticControl())
         ->setLabel(pht('Primary Hashtag'))
         ->setCaption(pht('The primary hashtag is derived from the name.'))
-        ->setValue($v_primary_slug))
+        ->setValue($v_primary_slug));
+    }
+
+    $form
       ->appendChild(
         id(new AphrontFormTextControl())
           ->setLabel(pht('Additional Hashtags'))
@@ -295,23 +301,16 @@ final class PhabricatorProjectEditDetailsController
       ->setValidationException($validation_exception)
       ->setForm($form);
 
-    $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView());
-    if ($is_new) {
-      $crumbs->addTextCrumb($title);
+    if (!$is_new) {
+      $nav = $this->buildIconNavView($project);
+      $nav->selectFilter("details/{$id}/");
+      $nav->appendChild($form_box);
     } else {
-      $crumbs
-        ->addTextCrumb($project->getName(),
-          $this->getApplicationURI('view/'.$project->getID().'/'))
-        ->addTextCrumb(pht('Edit'),
-          $this->getApplicationURI('edit/'.$project->getID().'/'))
-        ->addTextCrumb(pht('Details'));
+      $nav = array($form_box);
     }
 
     return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $form_box,
-      ),
+      $nav,
       array(
         'title' => $title,
       ));

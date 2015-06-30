@@ -35,6 +35,7 @@ final class PhrictionDocumentController
     $core_content = '';
     $move_notice = '';
     $properties = null;
+    $content = null;
 
     if (!$document) {
 
@@ -42,8 +43,8 @@ final class PhrictionDocumentController
 
       $create_uri = '/phriction/edit/?slug='.$slug;
 
-      $notice = new AphrontErrorView();
-      $notice->setSeverity(AphrontErrorView::SEVERITY_NODATA);
+      $notice = new PHUIInfoView();
+      $notice->setSeverity(PHUIInfoView::SEVERITY_NODATA);
       $notice->setTitle(pht('No content here!'));
       $notice->appendChild(
         pht(
@@ -67,8 +68,8 @@ final class PhrictionDocumentController
 
         if ($content->getID() != $document->getContentID()) {
           $vdate = phabricator_datetime($content->getDateCreated(), $user);
-          $version_note = new AphrontErrorView();
-          $version_note->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+          $version_note = new PHUIInfoView();
+          $version_note->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
           $version_note->appendChild(
             pht('You are viewing an older version of this document, as it '.
             'appeared on %s.', $vdate));
@@ -88,16 +89,16 @@ final class PhrictionDocumentController
 
         $core_content = $content->renderContent($user);
       } else if ($current_status == PhrictionChangeType::CHANGE_DELETE) {
-        $notice = new AphrontErrorView();
-        $notice->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+        $notice = new PHUIInfoView();
+        $notice->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
         $notice->setTitle(pht('Document Deleted'));
         $notice->appendChild(
           pht('This document has been deleted. You can edit it to put new '.
           'content here, or use history to revert to an earlier version.'));
         $core_content = $notice->render();
       } else if ($current_status == PhrictionChangeType::CHANGE_STUB) {
-        $notice = new AphrontErrorView();
-        $notice->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+        $notice = new PHUIInfoView();
+        $notice->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
         $notice->setTitle(pht('Empty Document'));
         $notice->appendChild(
           pht('This document is empty. You can edit it to put some proper '.
@@ -119,8 +120,8 @@ final class PhrictionDocumentController
           $slug_uri = PhrictionDocument::getSlugURI($new_doc->getSlug());
         }
 
-        $notice = id(new AphrontErrorView())
-          ->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+        $notice = id(new PHUIInfoView())
+          ->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
 
         if ($slug_uri) {
           $notice->appendChild(
@@ -145,7 +146,7 @@ final class PhrictionDocumentController
 
         $core_content = $notice->render();
       } else {
-        throw new Exception("Unknown document status '{$doc_status}'!");
+        throw new Exception(pht("Unknown document status '%s'!", $doc_status));
       }
 
       $move_notice = null;
@@ -164,8 +165,8 @@ final class PhrictionDocumentController
           $slug_uri = PhrictionDocument::getSlugURI($from_doc->getSlug());
         }
 
-        $move_notice = id(new AphrontErrorView())
-          ->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+        $move_notice = id(new PHUIInfoView())
+          ->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
 
         if ($slug_uri) {
           $move_notice->appendChild(
@@ -185,16 +186,29 @@ final class PhrictionDocumentController
     $actions = $this->buildActionView($user, $document);
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->setActionList($actions);
+    $crumbs->setBorder(true);
     $crumb_views = $this->renderBreadcrumbs($slug);
     foreach ($crumb_views as $view) {
       $crumbs->addCrumb($view);
     }
 
+    $action_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Actions'))
+      ->setHref('#')
+      ->setIconFont('fa-bars')
+      ->addClass('phui-mobile-menu')
+      ->setDropdownMenu($actions);
+
     $header = id(new PHUIHeaderView())
       ->setUser($user)
       ->setPolicyObject($document)
-      ->setHeader($page_title);
+      ->setHeader($page_title)
+      ->addActionLink($action_button);
+
+    if ($content) {
+      $header->setEpoch($content->getDateCreated());
+    }
 
     $prop_list = null;
     if ($properties) {
@@ -203,32 +217,21 @@ final class PhrictionDocumentController
     }
 
     $page_content = id(new PHUIDocumentView())
-      ->setOffset(true)
       ->setFontKit(PHUIDocumentView::FONT_SOURCE_SANS)
       ->setHeader($header)
       ->appendChild(
         array(
-          $actions,
           $prop_list,
           $version_note,
           $move_notice,
           $core_content,
         ));
 
-    $core_page = phutil_tag(
-      'div',
-        array(
-          'class' => 'phriction-offset',
-        ),
-        array(
-          $page_content,
-          $children,
-        ));
-
     return $this->buildApplicationPage(
       array(
         $crumbs->render(),
-        $core_page,
+        $page_content,
+        $children,
       ),
       array(
         'pageObjects' => array($document->getPHID()),
@@ -247,24 +250,9 @@ final class PhrictionDocumentController
       ->setUser($viewer)
       ->setObject($document);
 
-    $phids = array($content->getAuthorPHID());
-
-    $this->loadHandles($phids);
-
     $view->addProperty(
       pht('Last Author'),
-      $this->getHandle($content->getAuthorPHID())->renderLink());
-
-    $age = time() - $content->getDateCreated();
-    $age = floor($age / (60 * 60 * 24));
-    if ($age < 1) {
-      $when = pht('Today');
-    } else if ($age == 1) {
-      $when = pht('Yesterday');
-    } else {
-      $when = pht('%d Days Ago', $age);
-    }
-    $view->addProperty(pht('Last Updated'), $when);
+      $viewer->renderHandle($content->getAuthorPHID()));
 
     return $view;
   }
@@ -377,7 +365,8 @@ final class PhrictionDocumentController
       $child_dict = array(
         'slug' => $child->getSlug(),
         'depth' => $child->getDepth(),
-        'title' => $child->getContent()->getTitle(),);
+        'title' => $child->getContent()->getTitle(),
+      );
       if ($child->getDepth() == $d_child) {
         $children_dicts[] = $child_dict;
         continue;
@@ -442,7 +431,6 @@ final class PhrictionDocumentController
     );
 
     return id(new PHUIDocumentView())
-      ->setOffset(true)
       ->appendChild($content);
   }
 

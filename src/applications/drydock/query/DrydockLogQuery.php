@@ -15,7 +15,7 @@ final class DrydockLogQuery extends DrydockQuery {
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = new DrydockLog();
     $conn_r = $table->establishConnection('r');
 
@@ -30,7 +30,7 @@ final class DrydockLogQuery extends DrydockQuery {
     return $table->loadAllFromArray($data);
   }
 
-  public function willFilterPage(array $logs) {
+  protected function willFilterPage(array $logs) {
     $resource_ids = array_filter(mpull($logs, 'getResourceID'));
     if ($resource_ids) {
       $resources = id(new DrydockResourceQuery())
@@ -88,7 +88,7 @@ final class DrydockLogQuery extends DrydockQuery {
     return $logs;
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->resourceIDs) {

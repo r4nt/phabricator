@@ -9,6 +9,7 @@ final class PHUIListItemView extends AphrontTagView {
   const TYPE_CUSTOM   = 'type-custom';
   const TYPE_DIVIDER  = 'type-divider';
   const TYPE_ICON     = 'type-icon';
+  const TYPE_ICON_NAV = 'type-icon-nav';
 
   const STATUS_WARN   = 'phui-list-item-warn';
   const STATUS_FAIL   = 'phui-list-item-fail';
@@ -26,6 +27,19 @@ final class PHUIListItemView extends AphrontTagView {
   private $statusColor;
   private $order;
   private $aural;
+  private $profileImage;
+
+  public function setDropdownMenu(PhabricatorActionListView $actions) {
+    Javelin::initBehavior('phui-dropdown-menu');
+
+    $this->addSigil('phui-dropdown-menu');
+    $this->setMetadata(
+      array(
+        'items' => $actions,
+      ));
+
+    return $this;
+  }
 
   public function setAural($aural) {
     $this->aural = $aural;
@@ -68,8 +82,8 @@ final class PHUIListItemView extends AphrontTagView {
     return $this;
   }
 
-  public function setAppIcon($icon) {
-    $this->appIcon = $icon;
+  public function setProfileImage($image) {
+    $this->profileImage = $image;
     return $this;
   }
 
@@ -144,6 +158,10 @@ final class PHUIListItemView extends AphrontTagView {
       $classes[] = 'phui-list-item-selected';
     }
 
+    if ($this->disabled) {
+      $classes[] = 'phui-list-item-disabled';
+    }
+
     if ($this->statusColor) {
       $classes[] = $this->statusColor;
     }
@@ -170,9 +188,11 @@ final class PHUIListItemView extends AphrontTagView {
 
     if ($this->name) {
       if ($this->getRenderNameAsTooltip()) {
+        Javelin::initBehavior('phabricator-tooltips');
         $sigil = 'has-tooltip';
         $meta = array(
           'tip' => $this->name,
+          'align' => 'E',
         );
       } else {
         $external = null;
@@ -224,11 +244,16 @@ final class PHUIListItemView extends AphrontTagView {
         ->setIconFont($icon_name);
     }
 
+    if ($this->profileImage) {
+      $icon = id(new PHUIIconView())
+        ->setHeadSize(PHUIIconView::HEAD_SMALL)
+        ->setImage($this->profileImage);
+    }
+
     if ($this->appIcon) {
       $icon = id(new PHUIIconView())
         ->addClass('phui-list-item-icon')
-        ->setSpriteSheet(PHUIIconView::SPRITE_APPS)
-        ->setSpriteIcon($this->appIcon);
+        ->setIconFont($this->appIcon);
     }
 
     return javelin_tag(

@@ -41,6 +41,7 @@ final class PhabricatorUIExampleRenderController extends PhabricatorController {
     require_celerity_resource('phabricator-ui-example-css');
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setBorder(true);
     $crumbs->addTextCrumb($example->getName());
 
     $header = id(new PHUIHeaderView())
@@ -52,7 +53,6 @@ final class PhabricatorUIExampleRenderController extends PhabricatorController {
       array(
         $crumbs,
         $header,
-        phutil_tag('br'),
         $result,
       ));
 

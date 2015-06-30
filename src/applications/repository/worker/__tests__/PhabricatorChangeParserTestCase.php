@@ -203,6 +203,8 @@ final class PhabricatorChangeParserTestCase
   }
 
   public function testMercurialParser() {
+    $this->requireBinaryForTest('hg');
+
     $repository = $this->buildDiscoveredRepository('CHB');
     $viewer = PhabricatorUser::getOmnipotentUser();
 
@@ -1136,7 +1138,7 @@ final class PhabricatorChangeParserTestCase
 
     $this->assertTrue(
       isset($commits['2']),
-      'Expect rCHE2 to exist as a foreign stub.');
+      pht('Expect %s to exist as a foreign stub.', 'rCHE2'));
 
     // The foreign stub should be marked imported.
 

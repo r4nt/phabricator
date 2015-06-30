@@ -32,7 +32,7 @@ final class DrydockBlueprint extends DrydockDAO
       ->setBlueprintName('');
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_SERIALIZATION => array(
@@ -56,7 +56,9 @@ final class DrydockBlueprint extends DrydockDAO
       DrydockBlueprintImplementation::getAllBlueprintImplementations();
     if (!isset($implementations[$class])) {
       throw new Exception(
-        "Invalid class name for blueprint (got '".$class."')");
+        pht(
+          "Invalid class name for blueprint (got '%s')",
+          $class));
     }
     return id(new $class())->attachInstance($this);
   }
@@ -146,7 +148,6 @@ final class DrydockBlueprint extends DrydockDAO
     $this->customFields = $fields;
     return $this;
   }
-
 
 
 }

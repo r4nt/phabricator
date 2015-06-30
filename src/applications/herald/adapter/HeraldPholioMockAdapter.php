@@ -3,7 +3,6 @@
 final class HeraldPholioMockAdapter extends HeraldAdapter {
 
   private $mock;
-  private $ccPHIDs = array();
 
   public function getAdapterApplicationClass() {
     return 'PhabricatorPholioApplication';
@@ -11,6 +10,10 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
 
   public function getAdapterContentDescription() {
     return pht('React to mocks being created or updated.');
+  }
+
+  protected function newObject() {
+    return new PholioMock();
   }
 
   public function getObject() {
@@ -23,14 +26,6 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
   }
   public function getMock() {
     return $this->mock;
-  }
-
-  private function setCcPHIDs(array $cc_phids) {
-    $this->ccPHIDs = $cc_phids;
-    return $this;
-  }
-  public function getCcPHIDs() {
-    return $this->ccPHIDs;
   }
 
   public function getAdapterContentName() {
@@ -57,6 +52,7 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
         self::FIELD_CC,
         self::FIELD_PROJECTS,
         self::FIELD_IS_NEW_OBJECT,
+        self::FIELD_SPACE,
       ),
       parent::getFields());
   }
@@ -67,6 +63,7 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
         return array_merge(
           array(
             self::ACTION_ADD_CC,
+            self::ACTION_REMOVE_CC,
             self::ACTION_NOTHING,
           ),
           parent::getActions($rule_type));
@@ -74,6 +71,7 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
         return array_merge(
           array(
             self::ACTION_ADD_CC,
+            self::ACTION_REMOVE_CC,
             self::ACTION_FLAG,
             self::ACTION_NOTHING,
           ),
@@ -97,9 +95,6 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
         return $this->getMock()->getDescription();
       case self::FIELD_AUTHOR:
         return $this->getMock()->getAuthorPHID();
-      case self::FIELD_CC:
-        return PhabricatorSubscribersQuery::loadSubscribersForPHID(
-          $this->getMock()->getPHID());
       case self::FIELD_PROJECTS:
         return PhabricatorEdgeQuery::loadDestinationPHIDs(
           $this->getMock()->getPHID(),
@@ -116,35 +111,8 @@ final class HeraldPholioMockAdapter extends HeraldAdapter {
     foreach ($effects as $effect) {
       $action = $effect->getAction();
       switch ($action) {
-        case self::ACTION_NOTHING:
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('Great success at doing nothing.'));
-          break;
-        case self::ACTION_ADD_CC:
-          foreach ($effect->getTarget() as $phid) {
-            $this->ccPHIDs[] = $phid;
-          }
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('Added address to cc list.'));
-          break;
-        case self::ACTION_FLAG:
-          $result[] = parent::applyFlagEffect(
-            $effect,
-            $this->getMock()->getPHID());
-          break;
         default:
-          $custom_result = parent::handleCustomHeraldEffect($effect);
-          if ($custom_result === null) {
-            throw new Exception(pht(
-              "No rules to handle action '%s'.",
-              $action));
-          }
-
-          $result[] = $custom_result;
+          $result[] = $this->applyStandardEffect($effect);
           break;
       }
     }

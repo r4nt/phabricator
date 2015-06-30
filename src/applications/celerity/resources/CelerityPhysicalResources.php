@@ -21,11 +21,12 @@ abstract class CelerityPhysicalResources extends CelerityResources {
 
   public static function getAll() {
     static $resources_map;
+
     if ($resources_map === null) {
       $resources_map = array();
 
       $resources_list = id(new PhutilSymbolLoader())
-        ->setAncestorClass('CelerityPhysicalResources')
+        ->setAncestorClass(__CLASS__)
         ->loadObjects();
 
       foreach ($resources_list as $resources) {

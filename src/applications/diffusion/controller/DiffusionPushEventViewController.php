@@ -3,23 +3,16 @@
 final class DiffusionPushEventViewController
   extends DiffusionPushLogController {
 
-  private $id;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
 
     $event = id(new PhabricatorRepositoryPushEventQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($request->getURIData('id')))
       ->needLogs(true)
       ->executeOne();
     if (!$event) {
@@ -77,9 +70,6 @@ final class DiffusionPushEventViewController
 
   private function buildPropertyList(PhabricatorRepositoryPushEvent $event) {
     $viewer = $this->getRequest()->getUser();
-
-    $this->loadHandles(array($event->getPusherPHID()));
-
     $view = new PHUIPropertyListView();
 
     $view->addProperty(
@@ -88,7 +78,7 @@ final class DiffusionPushEventViewController
 
     $view->addProperty(
       pht('Pushed By'),
-      $this->getHandle($event->getPusherPHID())->renderLink());
+      $viewer->renderHandle($event->getPusherPHID()));
 
     $view->addProperty(
       pht('Pushed Via'),

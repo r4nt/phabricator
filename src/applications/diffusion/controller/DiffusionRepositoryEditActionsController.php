@@ -3,8 +3,7 @@
 final class DiffusionRepositoryEditActionsController
   extends DiffusionRepositoryEditController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
     $drequest = $this->diffusionRequest;
     $repository = $drequest->getRepository();
@@ -76,8 +75,7 @@ final class DiffusionRepositoryEditActionsController
           "new commits. You can disable publishing for this repository by ".
           "turning off **Notify/Publish**. This will disable notifications, ".
           "feed, and Herald (including audits and build plans) for this ".
-          "repository.".
-          "\n\n".
+          "repository.\n\n".
           "When Phabricator discovers a new commit, it can automatically ".
           "close associated revisions and tasks. If you don't want ".
           "Phabricator to close objects when it discovers new commits in ".

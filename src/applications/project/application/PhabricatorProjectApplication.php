@@ -18,8 +18,8 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
     return '/project/';
   }
 
-  public function getIconName() {
-    return 'projects';
+  public function getFontIcon() {
+    return 'fa-briefcase';
   }
 
   public function getFlavorText() {
@@ -43,7 +43,6 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
       '/project/' => array(
         '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorProjectListController',
         'filter/(?P<filter>[^/]+)/' => 'PhabricatorProjectListController',
-        'edit/(?P<id>[1-9]\d*)/' => 'PhabricatorProjectEditMainController',
         'details/(?P<id>[1-9]\d*)/'
           => 'PhabricatorProjectEditDetailsController',
         'archive/(?P<id>[1-9]\d*)/'
@@ -52,8 +51,12 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
           => 'PhabricatorProjectMembersEditController',
         'members/(?P<id>[1-9]\d*)/remove/'
           => 'PhabricatorProjectMembersRemoveController',
-        'view/(?P<id>[1-9]\d*)/'
+        'profile/(?P<id>[1-9]\d*)/'
           => 'PhabricatorProjectProfileController',
+        'feed/(?P<id>[1-9]\d*)/'
+          => 'PhabricatorProjectFeedController',
+        'view/(?P<id>[1-9]\d*)/'
+          => 'PhabricatorProjectViewController',
         'picture/(?P<id>[1-9]\d*)/'
           => 'PhabricatorProjectEditPictureController',
         'icon/(?P<id>[1-9]\d*)/'
@@ -83,10 +86,9 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
         'history/(?P<id>[1-9]\d*)/' => 'PhabricatorProjectHistoryController',
         '(?P<action>watch|unwatch)/(?P<id>[1-9]\d*)/'
           => 'PhabricatorProjectWatchController',
-        'wiki/' => 'PhabricatorProjectWikiExplainController',
       ),
       '/tag/' => array(
-        '(?P<slug>[^/]+)/' => 'PhabricatorProjectProfileController',
+        '(?P<slug>[^/]+)/' => 'PhabricatorProjectViewController',
         '(?P<slug>[^/]+)/board/' => 'PhabricatorProjectBoardViewController',
       ),
     );
@@ -117,17 +119,26 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
         'default' => PhabricatorPolicies::POLICY_ADMIN,
       ),
       ProjectDefaultViewCapability::CAPABILITY => array(
-        'caption' => pht(
-          'Default view policy for newly created projects.'),
+        'caption' => pht('Default view policy for newly created projects.'),
+        'template' => PhabricatorProjectProjectPHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_VIEW,
       ),
       ProjectDefaultEditCapability::CAPABILITY => array(
-        'caption' => pht(
-          'Default edit policy for newly created projects.'),
+        'caption' => pht('Default edit policy for newly created projects.'),
+        'template' => PhabricatorProjectProjectPHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_EDIT,
       ),
       ProjectDefaultJoinCapability::CAPABILITY => array(
-        'caption' => pht(
-          'Default join policy for newly created projects.'),
+        'caption' => pht('Default join policy for newly created projects.'),
+        'template' => PhabricatorProjectProjectPHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_JOIN,
       ),
+    );
+  }
+
+  public function getApplicationSearchDocumentTypes() {
+    return array(
+      PhabricatorProjectProjectPHIDType::TYPECONST,
     );
   }
 

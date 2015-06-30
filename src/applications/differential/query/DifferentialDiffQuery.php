@@ -7,7 +7,6 @@ final class DifferentialDiffQuery
   private $phids;
   private $revisionIDs;
   private $needChangesets = false;
-  private $needArcanistProjects = false;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -29,12 +28,7 @@ final class DifferentialDiffQuery
     return $this;
   }
 
-  public function needArcanistProjects($bool) {
-    $this->needArcanistProjects = $bool;
-    return $this;
-  }
-
-  public function loadPage() {
+  protected function loadPage() {
     $table = new DifferentialDiff();
     $conn_r = $table->establishConnection('r');
 
@@ -49,7 +43,7 @@ final class DifferentialDiffQuery
     return $table->loadAllFromArray($data);
   }
 
-  public function willFilterPage(array $diffs) {
+  protected function willFilterPage(array $diffs) {
     $revision_ids = array_filter(mpull($diffs, 'getRevisionID'));
 
     $revisions = array();
@@ -79,10 +73,6 @@ final class DifferentialDiffQuery
       $diffs = $this->loadChangesets($diffs);
     }
 
-    if ($diffs && $this->needArcanistProjects) {
-      $diffs = $this->loadArcanistProjects($diffs);
-    }
-
     return $diffs;
   }
 
@@ -98,30 +88,7 @@ final class DifferentialDiffQuery
     return $diffs;
   }
 
-  private function loadArcanistProjects(array $diffs) {
-    $phids = array_filter(mpull($diffs, 'getArcanistProjectPHID'));
-    $projects = array();
-    $project_map = array();
-    if ($phids) {
-      $projects = id(new PhabricatorRepositoryArcanistProject())
-        ->loadAllWhere(
-          'phid IN (%Ls)',
-          $phids);
-      $project_map = mpull($projects, null, 'getPHID');
-    }
-
-    foreach ($diffs as $diff) {
-      $project = null;
-      if ($diff->getArcanistProjectPHID()) {
-        $project = idx($project_map, $diff->getArcanistProjectPHID());
-      }
-      $diff->attachArcanistProject($project);
-    }
-
-    return $diffs;
-  }
-
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->ids) {

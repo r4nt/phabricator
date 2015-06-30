@@ -3,8 +3,6 @@
 final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
 
   private $document;
-  private $ccPHIDs = array();
-  private $emailPHIDs = array();
 
   public function getAdapterApplicationClass() {
     return 'PhabricatorPhrictionApplication';
@@ -12,6 +10,10 @@ final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
 
   public function getAdapterContentDescription() {
     return pht('React to wiki documents being created or updated.');
+  }
+
+  protected function newObject() {
+    return new PhrictionDocument();
   }
 
   public function getObject() {
@@ -22,22 +24,10 @@ final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
     $this->document = $document;
     return $this;
   }
+
   public function getDocument() {
     return $this->document;
   }
-
-  private function setCcPHIDs(array $cc_phids) {
-    $this->ccPHIDs = $cc_phids;
-    return $this;
-  }
-  public function getCcPHIDs() {
-    return $this->ccPHIDs;
-  }
-
-  public function getEmailPHIDs() {
-    return $this->emailPHIDs;
-  }
-
 
   public function getAdapterContentName() {
     return pht('Phriction Documents');
@@ -73,6 +63,7 @@ final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
         return array_merge(
           array(
             self::ACTION_ADD_CC,
+            self::ACTION_REMOVE_CC,
             self::ACTION_EMAIL,
             self::ACTION_NOTHING,
           ),
@@ -81,6 +72,7 @@ final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
         return array_merge(
           array(
             self::ACTION_ADD_CC,
+            self::ACTION_REMOVE_CC,
             self::ACTION_EMAIL,
             self::ACTION_FLAG,
             self::ACTION_NOTHING,
@@ -105,9 +97,6 @@ final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
         return $this->getDocument()->getContent()->getContent();
       case self::FIELD_AUTHOR:
         return $this->getDocument()->getContent()->getAuthorPHID();
-      case self::FIELD_CC:
-        return PhabricatorSubscribersQuery::loadSubscribersForPHID(
-          $this->getDocument()->getPHID());
       case self::FIELD_PATH:
         return $this->getDocument()->getContent()->getSlug();
     }
@@ -120,49 +109,9 @@ final class PhrictionDocumentHeraldAdapter extends HeraldAdapter {
 
     $result = array();
     foreach ($effects as $effect) {
-      $action = $effect->getAction();
-      switch ($action) {
-        case self::ACTION_NOTHING:
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('Great success at doing nothing.'));
-          break;
-        case self::ACTION_ADD_CC:
-          foreach ($effect->getTarget() as $phid) {
-            $this->ccPHIDs[] = $phid;
-          }
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('Added address to cc list.'));
-          break;
-        case self::ACTION_FLAG:
-          $result[] = parent::applyFlagEffect(
-            $effect,
-            $this->getDocument()->getPHID());
-          break;
-        case self::ACTION_EMAIL:
-          foreach ($effect->getTarget() as $phid) {
-            $this->emailPHIDs[] = $phid;
-          }
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('Added addresses to email list.'));
-          break;
-        default:
-          $custom_result = parent::handleCustomHeraldEffect($effect);
-          if ($custom_result === null) {
-            throw new Exception(pht(
-              "No rules to handle action '%s'.",
-              $action));
-          }
-
-          $result[] = $custom_result;
-          break;
-      }
+      $result[] = $this->applyStandardEffect($effect);
     }
+
     return $result;
   }
 

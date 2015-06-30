@@ -6,7 +6,7 @@ final class PHUIObjectBoxView extends AphrontView {
   private $headerColor;
   private $formErrors = null;
   private $formSaved = false;
-  private $errorView;
+  private $infoView;
   private $form;
   private $validationException;
   private $header;
@@ -14,6 +14,7 @@ final class PHUIObjectBoxView extends AphrontView {
   private $id;
   private $sigils = array();
   private $metadata;
+  private $actionListID;
 
   private $tabs = array();
   private $propertyLists = array();
@@ -71,6 +72,12 @@ final class PHUIObjectBoxView extends AphrontView {
 
     $this->propertyLists[$key][] = $property_list;
 
+    $action_list = $property_list->getActionList();
+    if ($action_list) {
+      $this->actionListID = celerity_generate_unique_node_id();
+      $action_list->setId($this->actionListID);
+    }
+
     return $this;
   }
 
@@ -86,7 +93,7 @@ final class PHUIObjectBoxView extends AphrontView {
 
   public function setFormErrors(array $errors, $title = null) {
     if ($errors) {
-      $this->formErrors = id(new AphrontErrorView())
+      $this->formErrors = id(new PHUIInfoView())
         ->setTitle($title)
         ->setErrors($errors);
     }
@@ -98,16 +105,16 @@ final class PHUIObjectBoxView extends AphrontView {
       $text = pht('Changes saved.');
     }
     if ($saved) {
-      $save = id(new AphrontErrorView())
-        ->setSeverity(AphrontErrorView::SEVERITY_NOTICE)
+      $save = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_NOTICE)
         ->appendChild($text);
       $this->formSaved = $save;
     }
     return $this;
   }
 
-  public function setErrorView(AphrontErrorView $view) {
-    $this->errorView = $view;
+  public function setInfoView(PHUIInfoView $view) {
+    $this->infoView = $view;
     return $this;
   }
 
@@ -156,6 +163,28 @@ final class PHUIObjectBoxView extends AphrontView {
         ->setHeaderColor($header_color);
     }
 
+    if ($this->actionListID) {
+      $icon_id = celerity_generate_unique_node_id();
+      $icon = id(new PHUIIconView())
+        ->setIconFont('fa-bars');
+      $meta = array(
+        'map' => array(
+          $this->actionListID => 'phabricator-action-list-toggle',
+          $icon_id => 'phuix-dropdown-open',
+        ),
+      );
+      $mobile_menu = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setText(pht('Actions'))
+        ->setHref('#')
+        ->setIcon($icon)
+        ->addClass('phui-mobile-menu')
+        ->setID($icon_id)
+        ->addSigil('jx-toggle-class')
+        ->setMetadata($meta);
+      $header->addActionLink($mobile_menu);
+    }
+
     $ex = $this->validationException;
     $exception_errors = null;
     if ($ex) {
@@ -164,7 +193,7 @@ final class PHUIObjectBoxView extends AphrontView {
         $messages[] = $error->getMessage();
       }
       if ($messages) {
-        $exception_errors = id(new AphrontErrorView())
+        $exception_errors = id(new PHUIInfoView())
           ->setErrors($messages);
       }
     }
@@ -241,7 +270,7 @@ final class PHUIObjectBoxView extends AphrontView {
       ->appendChild(
         array(
           $header,
-          $this->errorView,
+          $this->infoView,
           $this->formErrors,
           $this->formSaved,
           $exception_errors,

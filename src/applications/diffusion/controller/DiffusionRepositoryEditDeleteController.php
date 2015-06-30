@@ -3,8 +3,7 @@
 final class DiffusionRepositoryEditDeleteController
   extends DiffusionRepositoryEditController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
     $drequest = $this->diffusionRequest;
     $repository = $drequest->getRepository();
@@ -31,8 +30,9 @@ final class DiffusionRepositoryEditDeleteController
     $command = csprintf(
       'phabricator/ $ ./bin/remove destroy %R',
       $repository->getMonogram());
-    $text_2 = pht('Repositories touch many objects and as such deletes are '.
-                  'prohibitively expensive to run from the web UI.');
+    $text_2 = pht(
+      'Repositories touch many objects and as such deletes are '.
+      'prohibitively expensive to run from the web UI.');
     $body = phutil_tag(
       'div',
       array(

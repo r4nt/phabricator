@@ -3,6 +3,16 @@
 final class AlmanacInterfaceDatasource
   extends PhabricatorTypeaheadDatasource {
 
+  public function isBrowsable() {
+    // TODO: We should make this browsable, but need to make the result set
+    // orderable by device name.
+    return false;
+  }
+
+  public function getBrowseTitle() {
+    return pht('Browse Interfaces');
+  }
+
   public function getPlaceholderText() {
     return pht('Type an interface name...');
   }
@@ -17,7 +27,7 @@ final class AlmanacInterfaceDatasource
 
     $devices = id(new AlmanacDeviceQuery())
       ->setViewer($viewer)
-      ->withDatasourceQuery($raw_query)
+      ->withNamePrefix($raw_query)
       ->execute();
 
     if ($devices) {

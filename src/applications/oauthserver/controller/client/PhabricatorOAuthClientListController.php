@@ -22,13 +22,18 @@ final class PhabricatorOAuthClientListController
     return $this->delegateToController($controller);
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
+
+    $can_create = $this->hasApplicationCapability(
+        PhabricatorOAuthServerCreateClientsCapability::CAPABILITY);
 
     $crumbs->addAction(
       id(new PHUIListItemView())
         ->setHref($this->getApplicationURI('client/create/'))
         ->setName(pht('Create Application'))
+        ->setDisabled(!$can_create)
+        ->setWorkflow(!$can_create)
         ->setIcon('fa-plus-square'));
 
     return $crumbs;

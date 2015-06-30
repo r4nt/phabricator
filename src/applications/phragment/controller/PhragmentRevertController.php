@@ -47,7 +47,7 @@ final class PhragmentRevertController extends PhragmentController {
           ->executeOne();
         if ($file === null) {
           throw new Exception(
-            'The file associated with this version was not found.');
+            pht('The file associated with this version was not found.'));
         }
       }
 
@@ -64,7 +64,7 @@ final class PhragmentRevertController extends PhragmentController {
     return $this->createDialog($fragment, $version);
   }
 
-  function createDialog(
+  public function createDialog(
     PhragmentFragment $fragment,
     PhragmentFragmentVersion $version) {
 

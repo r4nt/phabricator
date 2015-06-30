@@ -28,7 +28,7 @@ final class PhrictionContent extends PhrictionDAO
       $viewer);
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_COLUMN_SCHEMA => array(
         'version' => 'uint32',
@@ -98,10 +98,13 @@ final class PhrictionContent extends PhrictionDAO
     $output,
     PhutilMarkupEngine $engine) {
 
+    $classes = array();
+    $classes[] = 'phabricator-remarkup';
     $toc = PhutilRemarkupHeaderBlockRule::renderTableOfContents(
       $engine);
 
     if ($toc) {
+      $classes[] = 'remarkup-has-toc';
       $toc = phutil_tag_div('phabricator-remarkup-toc', array(
         phutil_tag_div(
           'phabricator-remarkup-toc-header',
@@ -110,7 +113,12 @@ final class PhrictionContent extends PhrictionDAO
       ));
     }
 
-    return phutil_tag_div('phabricator-remarkup', array($toc, $output));
+    return phutil_tag(
+      'div',
+      array(
+        'class' => implode(' ', $classes),
+      ),
+      array($toc, $output));
   }
 
 

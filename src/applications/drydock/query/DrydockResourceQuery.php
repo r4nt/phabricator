@@ -33,7 +33,7 @@ final class DrydockResourceQuery extends DrydockQuery {
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = new DrydockResource();
     $conn_r = $table->establishConnection('r');
 
@@ -50,7 +50,7 @@ final class DrydockResourceQuery extends DrydockQuery {
     return $resources;
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->ids) {

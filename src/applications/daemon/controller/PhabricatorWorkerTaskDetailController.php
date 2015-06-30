@@ -15,19 +15,22 @@ final class PhabricatorWorkerTaskDetailController
 
     $task = id(new PhabricatorWorkerActiveTask())->load($this->id);
     if (!$task) {
-      $task = id(new PhabricatorWorkerArchiveTask())->load($this->id);
+      $tasks = id(new PhabricatorWorkerArchiveTaskQuery())
+        ->withIDs(array($this->id))
+        ->execute();
+      $task = reset($tasks);
     }
 
     if (!$task) {
       $title = pht('Task Does Not Exist');
 
-      $error_view = new AphrontErrorView();
+      $error_view = new PHUIInfoView();
       $error_view->setTitle(pht('No Such Task'));
       $error_view->appendChild(phutil_tag(
         'p',
         array(),
         pht('This task may have recently been garbage collected.')));
-      $error_view->setSeverity(AphrontErrorView::SEVERITY_NODATA);
+      $error_view->setSeverity(PHUIInfoView::SEVERITY_NODATA);
 
       $content = $error_view;
     } else {
@@ -92,7 +95,7 @@ final class PhabricatorWorkerTaskDetailController
           $status = pht('Cancelled');
           break;
         default:
-          throw new Exception('Unknown task status!');
+          throw new Exception(pht('Unknown task status!'));
       }
     } else {
       $status = pht('Queued');
@@ -138,7 +141,7 @@ final class PhabricatorWorkerTaskDetailController
       $expires);
 
     if ($task->isArchived()) {
-      $duration = number_format($task->getDuration()).' us';
+      $duration = pht('%s us', new PhutilNumber($task->getDuration()));
     } else {
       $duration = phutil_tag('em', array(), pht('Not Completed'));
     }

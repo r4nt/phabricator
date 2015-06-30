@@ -9,6 +9,7 @@ final class HarbormasterBuild extends HarbormasterDAO
   protected $buildPlanPHID;
   protected $buildStatus;
   protected $buildGeneration;
+  protected $planAutoKey;
 
   private $buildable = self::ATTACHABLE;
   private $buildPlan = self::ATTACHABLE;
@@ -142,12 +143,13 @@ final class HarbormasterBuild extends HarbormasterDAO
     return $result;
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
         'buildStatus' => 'text32',
         'buildGeneration' => 'uint32',
+        'planAutoKey' => 'text32?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_buildable' => array(
@@ -158,6 +160,10 @@ final class HarbormasterBuild extends HarbormasterDAO
         ),
         'key_status' => array(
           'columns' => array('buildStatus'),
+        ),
+        'key_planautokey' => array(
+          'columns' => array('buildablePHID', 'planAutoKey'),
+          'unique' => true,
         ),
       ),
     ) + parent::getConfiguration();
@@ -214,7 +220,7 @@ final class HarbormasterBuild extends HarbormasterDAO
     $log_type) {
 
     $log_source = id(new PhutilUTF8StringTruncator())
-      ->setMaximumCodepoints(250)
+      ->setMaximumBytes(250)
       ->truncateString($log_source);
 
     $log = HarbormasterBuildLog::initializeNewBuildLog($build_target)
@@ -250,7 +256,7 @@ final class HarbormasterBuild extends HarbormasterDAO
         array($name))
       ->executeOne();
     if ($artifact === null) {
-      throw new Exception('Artifact not found!');
+      throw new Exception(pht('Artifact not found!'));
     }
     return $artifact;
   }

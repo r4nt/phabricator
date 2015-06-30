@@ -6,8 +6,8 @@ final class PhabricatorCountdownApplication extends PhabricatorApplication {
     return '/countdown/';
   }
 
-  public function getIconName() {
-    return 'countdown';
+  public function getFontIcon() {
+    return 'fa-rocket';
   }
 
   public function getName() {
@@ -48,10 +48,12 @@ final class PhabricatorCountdownApplication extends PhabricatorApplication {
     );
   }
 
-  public function getCustomCapabilities() {
+  protected function getCustomCapabilities() {
     return array(
       PhabricatorCountdownDefaultViewCapability::CAPABILITY => array(
         'caption' => pht('Default view policy for new countdowns.'),
+        'template' => PhabricatorCountdownCountdownPHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_VIEW,
       ),
     );
   }

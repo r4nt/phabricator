@@ -14,6 +14,11 @@
   margin: 16px auto;
 }
 
+.device-desktop .phui-document-fluid .phui-document-view {
+  max-width: none;
+  margin: 16px;
+}
+
 .device-desktop .phui-document-view.phui-offset-view {
   max-width: 800px;
 }
@@ -39,7 +44,7 @@
 }
 
 .device-phone .phui-sidenav-view .phui-document-inner {
- margin: 0;
+  margin: 0;
 }
 
 .phui-sidenav-view .phui-document-inner {
@@ -81,12 +86,12 @@
 .phui-document-content
   .phui-header-shell.phui-header-no-backgound
   .phui-header-view {
- padding: 8px 0 4px;
- font-size: 15px;
+  padding: 8px 0 4px;
+  font-size: 15px;
 }
 
 .phui-document-content .phui-header-view {
-  color: {$bluetext};
+  color: {$darkbluetext};
   text-shadow: 0 1px 2px #fff;
 }
 
@@ -102,23 +107,16 @@
 }
 
 .phui-document-content {
-  min-height: 240px;
   background: #fff;
-
-  /* NOTE: This fixes margins, not floats, and can not be replaced with
-     the ".group" class. See T3150.
-  */
   overflow: hidden;
-}
-
-.device-phone .phui-document-content .phabricator-action-list-view {
-  margin: 0;
-  border-bottom: 1px solid #c0c5d1;
-  background: {$lightgreybackground};
 }
 
 .phui-document-content .phabricator-remarkup {
   padding: 16px;
+}
+
+.phui-document-view .phui-header-action-links .phui-mobile-menu {
+  display: block;
 }
 
 .device-phone .phui-document-content .phabricator-remarkup {
@@ -126,14 +124,7 @@
 }
 
 .device-desktop .phui-document-content .phabricator-action-list-view {
-  position: absolute;
-  top: 16px;
-  right: -160px;
-  float: none;
-  border-radius: 0;
-  box-shadow: none;
-  border: none;
-  width: 160px;
+  display: none;
 }
 
 .device-phone .phui-document-content .phabricator-remarkup-toc {
@@ -151,4 +142,31 @@
 
 .phui-document-view .phui-property-list-view {
   border-bottom: 1px solid {$thinblueborder};
+}
+
+.phui-document-view .phui-info-severity-nodata {
+  background-color: {$lightgreybackground};
+}
+
+.phui-document-view .phabricator-remarkup.remarkup-has-toc {
+  position: relative;
+  margin-right: 192px;
+}
+
+.phui-document-view .remarkup-has-toc .phabricator-remarkup-toc {
+  position: absolute;
+  top: 0;
+  right: -186px;
+  bottom: 0;
+  border-left: 1px solid {$thinblueborder};
+  padding: 16px 12px;
+  margin: 0;
+}
+
+.device-phone .phui-document-view .phabricator-remarkup.remarkup-has-toc {
+  margin-right: 0;
+}
+
+.device-phone .phui-document-view .remarkup-has-toc .phabricator-remarkup-toc {
+  display: none;
 }

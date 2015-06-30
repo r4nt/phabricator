@@ -90,6 +90,7 @@ final class PHUIObjectItemListView extends AphrontTagView {
   }
 
   protected function getTagContent() {
+    $viewer = $this->getUser();
     require_celerity_resource('phui-object-item-list-view-css');
 
     $header = null;
@@ -103,13 +104,18 @@ final class PHUIObjectItemListView extends AphrontTagView {
     }
 
     if ($this->items) {
+      if ($viewer) {
+        foreach ($this->items as $item) {
+          $item->setUser($viewer);
+        }
+      }
       $items = $this->items;
     } else if ($this->allowEmptyList) {
       $items = null;
     } else {
       $string = nonempty($this->noDataString, pht('No data.'));
-      $string = id(new AphrontErrorView())
-        ->setSeverity(AphrontErrorView::SEVERITY_NODATA)
+      $string = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_NODATA)
         ->appendChild($string);
       $items = phutil_tag(
         'li',

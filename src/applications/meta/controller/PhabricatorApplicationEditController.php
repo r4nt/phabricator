@@ -3,23 +3,13 @@
 final class PhabricatorApplicationEditController
   extends PhabricatorApplicationsController {
 
-  private $application;
-
-  public function shouldRequireAdmin() {
-    return true;
-  }
-
-  public function willProcessRequest(array $data) {
-    $this->application = $data['application'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
+  public function handleRequest(AphrontRequest $request) {
     $user = $request->getUser();
+    $application = $request->getURIData('application');
 
     $application = id(new PhabricatorApplicationQuery())
       ->setViewer($user)
-      ->withClasses(array($this->application))
+      ->withClasses(array($application))
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
@@ -107,7 +97,7 @@ final class PhabricatorApplicationEditController
           $user,
           $config_entry,
           $value,
-          PhabricatorContentSource::newFromRequest($this->getRequest()));
+          PhabricatorContentSource::newFromRequest($request));
       }
 
       return id(new AphrontRedirectResponse())->setURI($view_uri);
@@ -120,27 +110,50 @@ final class PhabricatorApplicationEditController
     $form = id(new AphrontFormView())
       ->setUser($user);
 
+    $locked_policies = PhabricatorEnv::getEnvConfig('policy.locked');
     foreach ($application->getCapabilities() as $capability) {
       $label = $application->getCapabilityLabel($capability);
       $can_edit = $application->isCapabilityEditable($capability);
+      $locked = idx($locked_policies, $capability);
       $caption = $application->getCapabilityCaption($capability);
 
-      if (!$can_edit) {
+      if (!$can_edit || $locked) {
         $form->appendChild(
           id(new AphrontFormStaticControl())
             ->setLabel($label)
             ->setValue(idx($descriptions, $capability))
             ->setCaption($caption));
       } else {
-        $form->appendChild(
-          id(new AphrontFormPolicyControl())
+        $control = id(new AphrontFormPolicyControl())
           ->setUser($user)
+          ->setDisabled($locked)
           ->setCapability($capability)
           ->setPolicyObject($application)
           ->setPolicies($policies)
           ->setLabel($label)
           ->setName('policy:'.$capability)
-          ->setCaption($caption));
+          ->setCaption($caption);
+
+        $template = $application->getCapabilityTemplatePHIDType($capability);
+        if ($template) {
+          $phid_types = PhabricatorPHIDType::getAllTypes();
+          $phid_type = idx($phid_types, $template);
+          if ($phid_type) {
+            $template_object = $phid_type->newObject();
+            if ($template_object) {
+              $template_policies = id(new PhabricatorPolicyQuery())
+                ->setViewer($user)
+                ->setObject($template_object)
+                ->execute();
+              $control->setPolicies($template_policies);
+              $control->setTemplateObject($template_object);
+            }
+          }
+
+          $control->setTemplatePHIDType($template);
+        }
+
+        $form->appendControl($control);
       }
 
     }

@@ -38,6 +38,14 @@ final class AlmanacBindingViewController
       ->setHeader($header)
       ->addPropertyList($property_list);
 
+    if ($binding->getService()->getIsLocked()) {
+      $this->addLockMessage(
+        $box,
+        pht(
+          'This service for this binding is locked, so the binding can '.
+          'not be edited.'));
+    }
+
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($service->getName(), $service_uri);
     $crumbs->addTextCrumb($title);
@@ -65,24 +73,17 @@ final class AlmanacBindingViewController
     $properties = id(new PHUIPropertyListView())
       ->setUser($viewer);
 
-    $handles = $this->loadViewerHandles(
-      array(
-        $binding->getServicePHID(),
-        $binding->getDevicePHID(),
-        $binding->getInterface()->getNetworkPHID(),
-      ));
-
     $properties->addProperty(
       pht('Service'),
-      $handles[$binding->getServicePHID()]->renderLink());
+      $viewer->renderHandle($binding->getServicePHID()));
 
     $properties->addProperty(
       pht('Device'),
-      $handles[$binding->getDevicePHID()]->renderLink());
+      $viewer->renderHandle($binding->getDevicePHID()));
 
     $properties->addProperty(
       pht('Network'),
-      $handles[$binding->getInterface()->getNetworkPHID()]->renderLink());
+      $viewer->renderHandle($binding->getInterface()->getNetworkPHID()));
 
     $properties->addProperty(
       pht('Interface'),

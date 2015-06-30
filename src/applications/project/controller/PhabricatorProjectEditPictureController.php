@@ -12,10 +12,12 @@ final class PhabricatorProjectEditPictureController
   public function processRequest() {
     $request = $this->getRequest();
     $viewer = $request->getUser();
+    $id = $request->getURIData('id');
 
     $project = id(new PhabricatorProjectQuery())
       ->setViewer($viewer)
       ->withIDs(array($this->id))
+      ->needImages(true)
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
@@ -26,8 +28,8 @@ final class PhabricatorProjectEditPictureController
       return new Aphront404Response();
     }
 
-    $edit_uri = $this->getApplicationURI('edit/'.$project->getID().'/');
-    $view_uri = $this->getApplicationURI('view/'.$project->getID().'/');
+    $edit_uri = $this->getApplicationURI('profile/'.$project->getID().'/');
+    $view_uri = $this->getApplicationURI('profile/'.$project->getID().'/');
 
     $supported_formats = PhabricatorFile::getTransformableImageFormats();
     $e_file = true;
@@ -66,12 +68,9 @@ final class PhabricatorProjectEditPictureController
             'This server only supports these image formats: %s.',
             implode(', ', $supported_formats));
         } else {
-          $xformer = new PhabricatorImageTransformer();
-          $xformed = $xformer->executeProfileTransform(
-            $file,
-            $width = 50,
-            $min_height = 50,
-            $max_height = 50);
+          $xform = PhabricatorFileTransform::getTransformByKey(
+            PhabricatorFileThumbnailTransform::TRANSFORM_PROFILE);
+          $xformed = $xform->executeTransform($file);
         }
       }
 
@@ -100,10 +99,6 @@ final class PhabricatorProjectEditPictureController
     }
 
     $title = pht('Edit Project Picture');
-    $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb($project->getName(), $view_uri);
-    $crumbs->addTextCrumb(pht('Edit'), $edit_uri);
-    $crumbs->addTextCrumb(pht('Picture'));
 
     $form = id(new PHUIFormLayoutView())
       ->setUser($viewer);
@@ -236,6 +231,38 @@ final class PhabricatorProjectEditPictureController
         ->setLabel(pht('Quick Create'))
         ->setValue($compose_form));
 
+    $default_button = javelin_tag(
+      'button',
+      array(
+        'class' => 'grey',
+      ),
+      pht('Use Project Icon'));
+
+    $default_input = javelin_tag(
+      'input',
+      array(
+        'type' => 'hidden',
+        'name' => 'projectPHID',
+        'value' => $project->getPHID(),
+      ));
+
+    $default_form = phabricator_form(
+      $viewer,
+      array(
+        'class' => 'profile-image-form',
+        'method' => 'POST',
+        'action' => '/file/compose/',
+       ),
+      array(
+        $default_input,
+        $default_button,
+      ));
+
+    $form->appendChild(
+      id(new AphrontFormMarkupControl())
+        ->setLabel(pht('Use Default'))
+        ->setValue($default_form));
+
     $upload_form = id(new AphrontFormView())
       ->setUser($viewer)
       ->setEncType('multipart/form-data')
@@ -260,12 +287,13 @@ final class PhabricatorProjectEditPictureController
       ->setHeaderText(pht('Upload New Picture'))
       ->setForm($upload_form);
 
+    $nav = $this->buildIconNavView($project);
+    $nav->selectFilter("edit/{$id}/");
+    $nav->appendChild($form_box);
+    $nav->appendChild($upload_box);
+
     return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $form_box,
-        $upload_box,
-      ),
+      $nav,
       array(
         'title' => $title,
       ));

@@ -9,10 +9,45 @@
   line-height: 20px;
 }
 
+.phui-font-source-sans.conpherence-message-pane,
+.phui-font-source-sans.conpherence-message-pane .remarkup-assist-textarea,
+.conpherence-durable-column-body,
+.conpherence-durable-column-body .remarkup-assist-textarea  {
+  font-family: 'Source Sans Pro', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.PhabricatorMonospaced .phui-document-view .phui-font-source-sans,
+.phui-document-view .phui-font-source-sans .phabricator-remarkup
+  .remarkup-code-block .remarkup-code {
+  font-size: 11px;
+  line-height: 1.3em;
+}
+
+.platform-windows .PhabricatorMonospaced .phui-document-view
+  .phui-font-source-sans,
+.platform-windows .phui-document-view .phui-font-source-sans
+  .phabricator-remarkup .remarkup-code-block .remarkup-code {
+  font-size: 12px;
+  line-height: 1.3em;
+}
+
+.phui-font-source-sans .phabricator-remarkup h1.remarkup-header,
+.phui-font-source-sans .phabricator-remarkup h2.remarkup-header,
+.phui-font-source-sans .phabricator-remarkup h3.remarkup-header,
+.phui-font-source-sans .phabricator-remarkup h4.remarkup-header,
+.phui-font-source-sans .phabricator-remarkup h5.remarkup-header,
+.phui-font-source-sans .phabricator-remarkup h6.remarkup-header {
+  color: {$darkbluetext};
+  font-weight: 600;
+}
+
 .phui-font-source-sans .phabricator-remarkup h2.remarkup-header {
-  padding: 8px 24px 8px 0;
+  padding: 24px 24px 8px 0;
   border-bottom: 1px solid {$thinblueborder};
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 400;
   color: {$bluetext};
   margin: 0 0 16px;
@@ -42,26 +77,30 @@
 
 .phui-font-source-sans .phui-property-list-container {
   padding-bottom: 6px;
-  font-family: 'Helvetica Neue', Arial, sans-serif;
-  font-size: 13px;
+  font: {$basefont};
   line-height: 16px;
 }
 
 .phui-font-source-sans .phabricator-action-view {
-  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font: {$basefont};
+  font-size: 12px;
 }
 
-.phui-font-source-sans a.remarkup-link {
+.phui-font-source-sans a.atom-ref,
+.phui-font-source-sans a.remarkup-link,
+.phui-font-source-sans a.phriction-link,
+.phui-font-source-sans a.phabricator-remarkup-embed-layout-link {
   color: {$blue};
 }
 
 body .phui-font-source-sans
   .phui-header-shell.phui-bleed-header .phui-header-view {
   font-size: 18px;
+  font-weight: normal;
 }
 
 .phui-font-source-sans .phui-form-view {
-  font: 13px/1.231 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font: {$basefont};
   font-weight: normal;
 }
 

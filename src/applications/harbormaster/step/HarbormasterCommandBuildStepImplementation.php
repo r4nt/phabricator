@@ -65,7 +65,7 @@ final class HarbormasterCommandBuildStepImplementation
     $build_update = 5;
 
     // Read the next amount of available output every second.
-    $futures = Futures(array($future));
+    $futures = new FutureIterator(array($future));
     foreach ($futures->setUpdateInterval(1) as $key => $future_iter) {
       if ($future_iter === null) {
 
@@ -130,8 +130,8 @@ final class HarbormasterCommandBuildStepImplementation
         'type' => 'text',
         'required' => true,
         'caption' => pht(
-          'Under Windows, this is executed under PowerShell.'.
-          'Under UNIX, this is executed using the user\'s shell.'),
+          "Under Windows, this is executed under PowerShell. ".
+          "Under UNIX, this is executed using the user's shell."),
       ),
       'hostartifact' => array(
         'name' => pht('Host'),

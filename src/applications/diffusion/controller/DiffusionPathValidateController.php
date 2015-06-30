@@ -2,12 +2,11 @@
 
 final class DiffusionPathValidateController extends DiffusionController {
 
-  public function willProcessRequest(array $data) {
-    // Don't build a DiffusionRequest.
+  protected function shouldLoadDiffusionRequest() {
+    return false;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
 
     $repository_phid = $request->getStr('repositoryPHID');
     $repository = id(new PhabricatorRepositoryQuery())
@@ -59,7 +58,7 @@ final class DiffusionPathValidateController extends DiffusionController {
       if ($branch) {
         $message = pht('Not found in %s', $branch);
       } else {
-        $message = pht('Not found at HEAD');
+        $message = pht('Not found at %s', 'HEAD');
       }
     } else {
       $message = pht('OK');

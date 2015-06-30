@@ -5,7 +5,6 @@ final class PhabricatorDifferentialRevisionTestDataGenerator
 
   public function generate() {
     $author = $this->loadPhabrictorUser();
-    $authorPHID = $author->getPHID();
 
     $revision = DifferentialRevision::initializeNewRevision($author);
     $revision->attachReviewerStatus(array());
@@ -54,10 +53,10 @@ final class PhabricatorDifferentialRevisionTestDataGenerator
     $diff = id(new PhabricatorDifferenceEngine())
       ->generateRawDiffFromFileContent($code, $newcode);
      $call = new ConduitCall(
-        'differential.createrawdiff',
-        array(
-          'diff' => $diff,
-        ));
+      'differential.createrawdiff',
+      array(
+        'diff' => $diff,
+      ));
     $call->setUser($author);
     $result = $call->execute();
     $thediff = id(new DifferentialDiff())->load(

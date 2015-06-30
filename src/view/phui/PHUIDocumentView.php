@@ -16,6 +16,7 @@ final class PHUIDocumentView extends AphrontTagView {
   private $bookdescription;
   private $mobileview;
   private $fontKit;
+  private $fluid;
 
   public function setOffset($offset) {
     $this->offset = $offset;
@@ -57,19 +58,28 @@ final class PHUIDocumentView extends AphrontTagView {
     return $this;
   }
 
-  public function getTagAttributes() {
+  public function setFluid($fluid) {
+    $this->fluid = $fluid;
+    return $this;
+  }
+
+  protected function getTagAttributes() {
     $classes = array();
 
     if ($this->offset) {
       $classes[] = 'phui-document-offset';
-    };
+    }
+
+    if ($this->fluid) {
+      $classes[] = 'phui-document-fluid';
+    }
 
     return array(
       'class' => $classes,
     );
   }
 
-  public function getTagContent() {
+  protected function getTagContent() {
     require_celerity_resource('phui-document-view-css');
     if ($this->fontKit) {
       require_celerity_resource('phui-fontkit-css');

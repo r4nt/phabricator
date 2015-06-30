@@ -40,21 +40,17 @@ final class PhabricatorCountdownSearchEngine
   public function buildSearchForm(
     AphrontFormView $form,
     PhabricatorSavedQuery $saved_query) {
-    $phids = $saved_query->getParameter('authorPHIDs', array());
-    $author_handles = id(new PhabricatorHandleQuery())
-      ->setViewer($this->requireViewer())
-      ->withPHIDs($phids)
-      ->execute();
 
+    $author_phids = $saved_query->getParameter('authorPHIDs', array());
     $upcoming = $saved_query->getParameter('upcoming');
 
     $form
-      ->appendChild(
+      ->appendControl(
         id(new AphrontFormTokenizerControl())
           ->setDatasource(new PhabricatorPeopleDatasource())
           ->setName('authors')
           ->setLabel(pht('Authors'))
-          ->setValue($author_handles))
+          ->setValue($author_phids))
       ->appendChild(
         id(new AphrontFormCheckboxControl())
           ->addCheckbox(
@@ -68,7 +64,7 @@ final class PhabricatorCountdownSearchEngine
     return '/countdown/'.$path;
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array(
       'upcoming' => pht('Upcoming'),
       'all' => pht('All'),

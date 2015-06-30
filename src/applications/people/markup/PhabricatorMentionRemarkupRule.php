@@ -26,7 +26,7 @@ final class PhabricatorMentionRemarkupRule extends PhutilRemarkupRule {
       $text);
   }
 
-  protected function markupMention($matches) {
+  protected function markupMention(array $matches) {
     $engine = $this->getEngine();
 
     if ($engine->isTextMode()) {
@@ -72,15 +72,8 @@ final class PhabricatorMentionRemarkupRule extends PhutilRemarkupRule {
     $users = id(new PhabricatorPeopleQuery())
       ->setViewer($this->getEngine()->getConfig('viewer'))
       ->withUsernames($usernames)
+      ->needAvailability(true)
       ->execute();
-
-    if ($users) {
-      $user_statuses = id(new PhabricatorCalendarEvent())
-        ->loadCurrentStatuses(mpull($users, 'getPHID'));
-      $user_statuses = mpull($user_statuses, null, 'getUserPHID');
-    } else {
-      $user_statuses = array();
-    }
 
     $actual_users = array();
 
@@ -92,27 +85,52 @@ final class PhabricatorMentionRemarkupRule extends PhutilRemarkupRule {
     }
 
     $engine->setTextMetadata($mentioned_key, $mentioned);
+    $context_object = $engine->getConfig('contextObject');
 
     foreach ($metadata as $username => $tokens) {
       $exists = isset($actual_users[$username]);
+      $user_has_no_permission = false;
 
       if ($exists) {
         $user = $actual_users[$username];
         Javelin::initBehavior('phabricator-hovercards');
 
+        // Check if the user has view access to the object she was mentioned in
+        if ($context_object
+          && $context_object instanceof PhabricatorPolicyInterface) {
+          if (!PhabricatorPolicyFilter::hasCapability(
+            $user,
+            $context_object,
+            PhabricatorPolicyCapability::CAN_VIEW)) {
+            // User mentioned has no permission to this object
+            $user_has_no_permission = true;
+          }
+        }
+
         $user_href = '/p/'.$user->getUserName().'/';
 
         if ($engine->isHTMLMailMode()) {
           $user_href = PhabricatorEnv::getProductionURI($user_href);
+
+          if ($user_has_no_permission) {
+            $colors = '
+              border-color: #92969D;
+              color: #92969D;
+              background-color: #F7F7F7;';
+          } else {
+            $colors = '
+              border-color: #f1f7ff;
+              color: #19558d;
+              background-color: #f1f7ff;';
+          }
+
           $tag = phutil_tag(
             'a',
             array(
               'href' => $user_href,
-              'style' => 'background-color: #f1f7ff;
-                border-color: #f1f7ff;
+              'style' => $colors.'
                 border: 1px solid transparent;
                 border-radius: 3px;
-                color: #19558d;
                 font-weight: bold;
                 padding: 0 4px;',
             ),
@@ -124,17 +142,15 @@ final class PhabricatorMentionRemarkupRule extends PhutilRemarkupRule {
             ->setName('@'.$user->getUserName())
             ->setHref($user_href);
 
+          if ($user_has_no_permission) {
+            $tag->addClass('phabricator-remarkup-mention-nopermission');
+          }
+
           if (!$user->isUserActivated()) {
             $tag->setDotColor(PHUITagView::COLOR_GREY);
           } else {
-            $status = idx($user_statuses, $user->getPHID());
-            if ($status) {
-              $status = $status->getStatus();
-              if ($status == PhabricatorCalendarEvent::STATUS_AWAY) {
-                $tag->setDotColor(PHUITagView::COLOR_RED);
-              } else if ($status == PhabricatorCalendarEvent::STATUS_AWAY) {
-                $tag->setDotColor(PHUITagView::COLOR_ORANGE);
-              }
+            if ($user->getAwayUntil()) {
+              $tag->setDotColor(PHUITagView::COLOR_RED);
             }
           }
         }

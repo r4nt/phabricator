@@ -14,7 +14,14 @@ class PhabricatorApplicationTransactionView extends AphrontView {
   private $quoteTargetID;
   private $quoteRef;
   private $pager;
+  private $renderAsFeed;
   private $renderData = array();
+  private $hideCommentOptions = false;
+
+  public function setRenderAsFeed($feed) {
+    $this->renderAsFeed = $feed;
+    return $this;
+  }
 
   public function setQuoteRef($quote_ref) {
     $this->quoteRef = $quote_ref;
@@ -101,6 +108,15 @@ class PhabricatorApplicationTransactionView extends AphrontView {
     return $this->renderData;
   }
 
+  public function setHideCommentOptions($hide_comment_options) {
+    $this->hideCommentOptions = $hide_comment_options;
+    return $this;
+  }
+
+  public function getHideCommentOptions() {
+    return $this->hideCommentOptions;
+  }
+
   public function buildEvents($with_hiding = false) {
     $user = $this->getUser();
 
@@ -178,7 +194,7 @@ class PhabricatorApplicationTransactionView extends AphrontView {
 
   public function render() {
     if (!$this->getObjectPHID()) {
-      throw new Exception('Call setObjectPHID() before render()!');
+      throw new PhutilInvalidStateException('setObjectPHID');
     }
 
     $view = $this->buildPHUITimelineView();
@@ -192,12 +208,13 @@ class PhabricatorApplicationTransactionView extends AphrontView {
 
   public function buildPHUITimelineView($with_hiding = true) {
     if (!$this->getObjectPHID()) {
-      throw new Exception(
-        'Call setObjectPHID() before buildPHUITimelineView()!');
+      throw new PhutilInvalidStateException('setObjectPHID');
     }
 
     $view = new PHUITimelineView();
     $view->setShouldTerminate($this->shouldTerminate);
+    $view->setQuoteTargetID($this->getQuoteTargetID());
+    $view->setQuoteRef($this->getQuoteRef());
     $events = $this->buildEvents($with_hiding);
     foreach ($events as $event) {
       $view->addEvent($event);
@@ -380,7 +397,8 @@ class PhabricatorApplicationTransactionView extends AphrontView {
       ->setTransactionPHID($xaction->getPHID())
       ->setUserHandle($xaction->getHandle($xaction->getAuthorPHID()))
       ->setIcon($xaction->getIcon())
-      ->setColor($xaction->getColor());
+      ->setColor($xaction->getColor())
+      ->setHideCommentOptions($this->getHideCommentOptions());
 
     list($token, $token_removed) = $xaction->getToken();
     if ($token) {
@@ -388,7 +406,11 @@ class PhabricatorApplicationTransactionView extends AphrontView {
     }
 
     if (!$this->shouldSuppressTitle($xaction, $group)) {
-      $title = $xaction->getTitle();
+      if ($this->renderAsFeed) {
+        $title = $xaction->getTitleForFeed();
+      } else {
+        $title = $xaction->getTitle();
+      }
       if ($xaction->hasChangeDetails()) {
         if (!$this->isPreview) {
           $details = $this->buildChangeDetailsLink($xaction);
@@ -437,6 +459,10 @@ class PhabricatorApplicationTransactionView extends AphrontView {
 
       if ($xaction->getCommentVersion() > 1 && !$has_removed_comment) {
         $event->setIsEdited(true);
+      }
+
+      if (!$has_removed_comment) {
+        $event->setIsNormalComment(true);
       }
 
       // If we have a place for quoted text to go and this is a quotable

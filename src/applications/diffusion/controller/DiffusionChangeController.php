@@ -6,9 +6,9 @@ final class DiffusionChangeController extends DiffusionController {
     return true;
   }
 
-  public function processRequest() {
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $drequest = $this->diffusionRequest;
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $request->getUser();
 
     $content = array();
 
@@ -22,8 +22,7 @@ final class DiffusionChangeController extends DiffusionController {
     $drequest->updateSymbolicCommit($data['effectiveCommit']);
 
     $raw_changes = ArcanistDiffChange::newFromConduit($data['changes']);
-    $diff = DifferentialDiff::newFromRawChanges(
-      $viewer,
+    $diff = DifferentialDiff::newEphemeralFromRawChanges(
       $raw_changes);
     $changesets = $diff->getChangesets();
     $changeset = reset($changesets);
@@ -63,7 +62,7 @@ final class DiffusionChangeController extends DiffusionController {
     $changeset_view->setRenderURI('/diffusion/'.$callsign.'/diff/');
     $changeset_view->setWhitespace(
       DifferentialChangesetParser::WHITESPACE_SHOW_ALL);
-    $changeset_view->setUser($this->getRequest()->getUser());
+    $changeset_view->setUser($viewer);
 
     // TODO: This is pretty awkward, unify the CSS between Diffusion and
     // Differential better.

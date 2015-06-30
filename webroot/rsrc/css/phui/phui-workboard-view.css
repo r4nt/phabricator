@@ -15,6 +15,18 @@
   right: 0;
 }
 
+.device-desktop .page-has-warning .phui-workboard-view-shadow {
+  top: 148px;
+}
+
+.device-desktop.with-durable-column .phui-workboard-view-shadow {
+  right: 300px;
+}
+
+.device-desktop.with-durable-margin .phui-workboard-view-shadow {
+  right: 312px;
+}
+
 .phui-workboard-view-shadow::-webkit-scrollbar {
   height: 12px;
   width: 12px;
@@ -71,6 +83,15 @@
   height: 35px;
   width: 35px;
   margin: 0 3px;
+}
+
+.device-desktop .project-board-wrapper .phui-workboard-view-shadow {
+  left: 53px;
+}
+
+.device-desktop .phui-workboard-view .aphront-multi-column-fixed
+  .aphront-multi-column-inner {
+    margin-left: 0;
 }
 
 .device-tablet .project-board-wrapper {

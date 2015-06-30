@@ -69,7 +69,7 @@ final class HeraldRuleQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table = new HeraldRule();
     $conn_r = $table->establishConnection('r');
 
@@ -84,7 +84,7 @@ final class HeraldRuleQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $table->loadAllFromArray($data);
   }
 
-  public function willFilterPage(array $rules) {
+  protected function willFilterPage(array $rules) {
     $rule_ids = mpull($rules, 'getID');
 
     // Filter out any rules that have invalid adapters, or have adapters the
@@ -174,7 +174,7 @@ final class HeraldRuleQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $rules;
   }
 
-  private function buildWhereClause($conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->ids) {

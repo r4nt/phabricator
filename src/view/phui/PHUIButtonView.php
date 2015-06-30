@@ -4,9 +4,12 @@ final class PHUIButtonView extends AphrontTagView {
 
   const GREEN = 'green';
   const GREY = 'grey';
-  const BLACK = 'black';
   const DISABLED = 'disabled';
+
   const SIMPLE = 'simple';
+  const SIMPLE_YELLOW = 'simple simple-yellow';
+  const SIMPLE_GREY = 'simple simple-grey';
+  const SIMPLE_BLUE = 'simple simple-blue';
 
   const SMALL = 'small';
   const BIG = 'big';
@@ -18,10 +21,12 @@ final class PHUIButtonView extends AphrontTagView {
   private $tag = 'button';
   private $dropdown;
   private $icon;
+  private $iconFont;
   private $href = null;
   private $title = null;
   private $disabled;
   private $name;
+  private $tooltip;
 
   public function setName($name) {
     $this->name = $name;
@@ -77,13 +82,37 @@ final class PHUIButtonView extends AphrontTagView {
     return $this;
   }
 
+  public function setTooltip($text) {
+    $this->tooltip = $text;
+    return $this;
+  }
+
   public function setIcon(PHUIIconView $icon) {
     $this->icon = $icon;
     return $this;
   }
 
-  public function getTagName() {
+  public function setIconFont($icon) {
+    $icon = id(new PHUIIconView())
+      ->setIconFont($icon);
+    $this->setIcon($icon);
+    return $this;
+  }
+
+  protected function getTagName() {
     return $this->tag;
+  }
+
+  public function setDropdownMenu(PhabricatorActionListView $actions) {
+    Javelin::initBehavior('phui-dropdown-menu');
+
+    $this->addSigil('phui-dropdown-menu');
+    $this->setMetadata(
+      array(
+        'items' => $actions,
+      ));
+
+    return $this;
   }
 
   protected function getTagAttributes() {
@@ -113,11 +142,24 @@ final class PHUIButtonView extends AphrontTagView {
       $classes[] = 'disabled';
     }
 
+    $sigil = null;
+    $meta = null;
+    if ($this->tooltip) {
+      Javelin::initBehavior('phabricator-tooltips');
+      require_celerity_resource('aphront-tooltip-css');
+      $sigil = 'has-tooltip';
+      $meta = array(
+        'tip' => $this->tooltip,
+      );
+    }
+
     return array(
       'class'  => $classes,
       'href'   => $this->href,
       'name'   => $this->name,
       'title'  => $this->title,
+      'sigil'  => $sigil,
+      'meta'   => $meta,
     );
   }
 

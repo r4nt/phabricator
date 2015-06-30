@@ -12,7 +12,7 @@ final class AlmanacProperty
     return 'almanac';
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     $config = parent::getConfiguration();
 
     $config[self::CONFIG_COLUMN_SCHEMA] += array(
@@ -30,6 +30,40 @@ final class AlmanacProperty
     $this->object = $object;
     return $this;
   }
+
+  public static function buildTransactions(
+    AlmanacPropertyInterface $object,
+    array $properties) {
+
+    $template = $object->getApplicationTransactionTemplate();
+
+    $attached_properties = $object->getAlmanacProperties();
+    foreach ($properties as $key => $value) {
+      if (empty($attached_properties[$key])) {
+        $attached_properties[] = id(new AlmanacProperty())
+          ->setObjectPHID($object->getPHID())
+          ->setFieldName($key);
+      }
+    }
+    $object->attachAlmanacProperties($attached_properties);
+
+    $field_list = PhabricatorCustomField::getObjectFields(
+      $object,
+      PhabricatorCustomField::ROLE_DEFAULT);
+    $fields = $field_list->getFields();
+
+    $xactions = array();
+    foreach ($properties as $name => $property) {
+      $xactions[] = id(clone $template)
+        ->setTransactionType(PhabricatorTransactions::TYPE_CUSTOMFIELD)
+        ->setMetadataValue('customfield:key', $name)
+        ->setOldValue($object->getAlmanacPropertyValue($name))
+        ->setNewValue($property);
+    }
+
+    return $xactions;
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 

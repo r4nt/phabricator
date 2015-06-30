@@ -37,11 +37,11 @@ final class DifferentialDiff
 
   private $unsavedChangesets = array();
   private $changesets = self::ATTACHABLE;
-  private $arcanistProject = self::ATTACHABLE;
   private $revision = self::ATTACHABLE;
   private $properties = array();
+  private $buildable = self::ATTACHABLE;
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
@@ -108,25 +108,6 @@ final class DifferentialDiff
       $this->getID());
   }
 
-  public function attachArcanistProject(
-    PhabricatorRepositoryArcanistProject $project = null) {
-    $this->arcanistProject = $project;
-    return $this;
-  }
-
-  public function getArcanistProject() {
-    return $this->assertAttached($this->arcanistProject);
-  }
-
-  public function getArcanistProjectName() {
-    $name = '';
-    if ($this->arcanistProject) {
-      $project = $this->getArcanistProject();
-      $name = $project->getName();
-    }
-    return $name;
-  }
-
   public function save() {
     $this->openTransaction();
       $ret = parent::save();
@@ -159,6 +140,20 @@ final class DifferentialDiff
     assert_instances_of($changes, 'ArcanistDiffChange');
 
     $diff = self::initializeNewDiff($actor);
+    return self::buildChangesetsFromRawChanges($diff, $changes);
+  }
+
+  public static function newEphemeralFromRawChanges(array $changes) {
+    assert_instances_of($changes, 'ArcanistDiffChange');
+
+    $diff = id(new DifferentialDiff())->makeEphemeral();
+    return self::buildChangesetsFromRawChanges($diff, $changes);
+  }
+
+  private static function buildChangesetsFromRawChanges(
+    DifferentialDiff $diff,
+    array $changes) {
+
     // There may not be any changes; initialize the changesets list so that
     // we don't throw later when accessing it.
     $diff->attachChangesets(array());
@@ -179,7 +174,7 @@ final class DifferentialDiff
       $hunks = $change->getHunks();
       if ($hunks) {
         foreach ($hunks as $hunk) {
-          $dhunk = new DifferentialHunkModern();
+          $dhunk = new DifferentialModernHunk();
           $dhunk->setOldOffset($hunk->getOldOffset());
           $dhunk->setOldLen($hunk->getOldLength());
           $dhunk->setNewOffset($hunk->getNewOffset());
@@ -248,7 +243,6 @@ final class DifferentialDiff
       'lintStatus' => $this->getLintStatus(),
       'changes' => array(),
       'properties' => array(),
-      'projectName' => $this->getArcanistProjectName(),
     );
 
     $dict['changes'] = $this->buildChangesList();
@@ -330,6 +324,15 @@ final class DifferentialDiff
     return $this->assertAttachedKey($this->properties, $key);
   }
 
+  public function attachBuildable(HarbormasterBuildable $buildable = null) {
+    $this->buildable = $buildable;
+    return $this;
+  }
+
+  public function getBuildable() {
+    return $this->assertAttached($this->buildable);
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -388,14 +391,16 @@ final class DifferentialDiff
     $results = array();
 
     $results['buildable.diff'] = $this->getID();
-    $revision = $this->getRevision();
-    $results['buildable.revision'] = $revision->getID();
-    $repo = $revision->getRepository();
+    if ($this->revisionID) {
+      $revision = $this->getRevision();
+      $results['buildable.revision'] = $revision->getID();
+      $repo = $revision->getRepository();
 
-    if ($repo) {
-      $results['repository.callsign'] = $repo->getCallsign();
-      $results['repository.vcs'] = $repo->getVersionControlSystem();
-      $results['repository.uri'] = $repo->getPublicCloneURI();
+      if ($repo) {
+        $results['repository.callsign'] = $repo->getCallsign();
+        $results['repository.vcs'] = $repo->getVersionControlSystem();
+        $results['repository.uri'] = $repo->getPublicCloneURI();
+      }
     }
 
     return $results;

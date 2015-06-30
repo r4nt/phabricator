@@ -50,19 +50,17 @@ final class PhabricatorApplicationSearchController
 
     if (!$parent) {
       throw new Exception(
-        'You must delegate to this controller, not invoke it directly.');
+        pht('You must delegate to this controller, not invoke it directly.'));
     }
 
     $engine = $this->getSearchEngine();
     if (!$engine) {
-      throw new Exception(
-        'Call setEngine() before delegating to this controller!');
+      throw new PhutilInvalidStateException('setEngine');
     }
 
     $nav = $this->getNavigation();
     if (!$nav) {
-      throw new Exception(
-        'Call setNavigation() before delegating to this controller!');
+      throw new PhutilInvalidStateException('setNavigation');
     }
 
     $engine->setViewer($this->getRequest()->getUser());
@@ -161,9 +159,6 @@ final class PhabricatorApplicationSearchController
     $errors = $engine->getErrors();
     if ($errors) {
       $run_query = false;
-      $errors = id(new AphrontErrorView())
-        ->setTitle(pht('Query Errors'))
-        ->setErrors($errors);
     }
 
     $submit = id(new AphrontFormSubmitControl())
@@ -210,43 +205,55 @@ final class PhabricatorApplicationSearchController
         $anchor = id(new PhabricatorAnchorView())
           ->setAnchorName('R'));
 
-      $query = $engine->buildQueryFromSavedQuery($saved_query);
+      try {
+        $query = $engine->buildQueryFromSavedQuery($saved_query);
 
-      $pager = $engine->newPagerForSavedQuery($saved_query);
-      $pager->readFromRequest($request);
+        $pager = $engine->newPagerForSavedQuery($saved_query);
+        $pager->readFromRequest($request);
 
-      $objects = $engine->executeQuery($query, $pager);
+        $objects = $engine->executeQuery($query, $pager);
 
-      // TODO: To support Dashboard panels, rendering is moving into
-      // SearchEngines. Move it all the way in and then get rid of this.
+        // TODO: To support Dashboard panels, rendering is moving into
+        // SearchEngines. Move it all the way in and then get rid of this.
 
-      $interface = 'PhabricatorApplicationSearchResultsControllerInterface';
-      if ($parent instanceof $interface) {
-        $list = $parent->renderResultsList($objects, $saved_query);
-      } else {
-        $engine->setRequest($request);
+        $interface = 'PhabricatorApplicationSearchResultsControllerInterface';
+        if ($parent instanceof $interface) {
+          $list = $parent->renderResultsList($objects, $saved_query);
+        } else {
+          $engine->setRequest($request);
 
-        $list = $engine->renderResults(
-          $objects,
-          $saved_query);
-      }
-
-      $nav->appendChild($list);
-
-      // TODO: This is a bit hacky.
-      if ($list instanceof PHUIObjectItemListView) {
-        $list->setNoDataString(pht('No results found for this query.'));
-        $list->setPager($pager);
-      } else {
-        if ($pager->willShowPagingControls()) {
-          $pager_box = id(new PHUIBoxView())
-            ->addPadding(PHUI::PADDING_MEDIUM)
-            ->addMargin(PHUI::MARGIN_LARGE)
-            ->setBorder(true)
-            ->appendChild($pager);
-          $nav->appendChild($pager_box);
+          $list = $engine->renderResults(
+            $objects,
+            $saved_query);
         }
+
+        $nav->appendChild($list);
+
+        // TODO: This is a bit hacky.
+        if ($list instanceof PHUIObjectItemListView) {
+          $list->setNoDataString(pht('No results found for this query.'));
+          $list->setPager($pager);
+        } else {
+          if ($pager->willShowPagingControls()) {
+            $pager_box = id(new PHUIBoxView())
+              ->addPadding(PHUI::PADDING_MEDIUM)
+              ->addMargin(PHUI::MARGIN_LARGE)
+              ->setBorder(true)
+              ->appendChild($pager);
+            $nav->appendChild($pager_box);
+          }
+        }
+      } catch (PhabricatorTypeaheadInvalidTokenException $ex) {
+        $errors[] = pht(
+          'This query specifies an invalid parameter. Review the '.
+          'query parameters and correct errors.');
       }
+    }
+
+    if ($errors) {
+      $errors = id(new PHUIInfoView())
+        ->setTitle(pht('Query Errors'))
+        ->setErrors($errors);
     }
 
     if ($errors) {
@@ -254,13 +261,14 @@ final class PhabricatorApplicationSearchController
     }
 
     if ($named_query) {
-      $title = pht('Query: %s', $named_query->getQueryName());
+      $title = $named_query->getQueryName();
     } else {
       $title = pht('Advanced Search');
     }
 
     $crumbs = $parent
       ->buildApplicationCrumbs()
+      ->setBorder(true)
       ->addTextCrumb($title);
 
     $nav->setCrumbs($crumbs);
@@ -268,7 +276,7 @@ final class PhabricatorApplicationSearchController
     return $this->buildApplicationPage(
       $nav,
       array(
-        'title' => $title,
+        'title' => pht('Query: %s', $title),
       ));
   }
 
@@ -355,7 +363,7 @@ final class PhabricatorApplicationSearchController
       ));
   }
 
-  protected function buildApplicationMenu() {
+  public function buildApplicationMenu() {
     return $this->getDelegatingController()->buildApplicationMenu();
   }
 

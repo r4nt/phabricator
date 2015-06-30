@@ -3,15 +3,10 @@
 final class HeraldDifferentialRevisionAdapter
   extends HeraldDifferentialAdapter {
 
+  protected $diff;
   protected $revision;
 
-  protected $explicitCCs;
   protected $explicitReviewers;
-  protected $forbiddenCCs;
-
-  protected $newCCs = array();
-  protected $remCCs = array();
-  protected $emailPHIDs = array();
   protected $addReviewerPHIDs = array();
   protected $blockingReviewerPHIDs = array();
   protected $buildPlans = array();
@@ -23,6 +18,10 @@ final class HeraldDifferentialRevisionAdapter
 
   public function getAdapterApplicationClass() {
     return 'PhabricatorDifferentialApplication';
+  }
+
+  protected function newObject() {
+    return new DifferentialRevision();
   }
 
   public function getObject() {
@@ -77,7 +76,6 @@ final class HeraldDifferentialRevisionAdapter
         self::FIELD_AFFECTED_PACKAGE,
         self::FIELD_AFFECTED_PACKAGE_OWNER,
         self::FIELD_IS_NEW_OBJECT,
-        self::FIELD_ARCANIST_PROJECT,
       ),
       parent::getFields());
   }
@@ -108,31 +106,9 @@ final class HeraldDifferentialRevisionAdapter
     return $object;
   }
 
-  public function setExplicitCCs($explicit_ccs) {
-    $this->explicitCCs = $explicit_ccs;
-    return $this;
-  }
-
   public function setExplicitReviewers($explicit_reviewers) {
     $this->explicitReviewers = $explicit_reviewers;
     return $this;
-  }
-
-  public function setForbiddenCCs($forbidden_ccs) {
-    $this->forbiddenCCs = $forbidden_ccs;
-    return $this;
-  }
-
-  public function getCCsAddedByHerald() {
-    return array_diff_key($this->newCCs, $this->remCCs);
-  }
-
-  public function getCCsRemovedByHerald() {
-    return $this->remCCs;
-  }
-
-  public function getEmailPHIDsAddedByHerald() {
-    return $this->emailPHIDs;
   }
 
   public function getReviewersAddedByHerald() {
@@ -223,12 +199,6 @@ final class HeraldDifferentialRevisionAdapter
         return mpull($projects, 'getPHID');
       case self::FIELD_DIFF_FILE:
         return $this->loadAffectedPaths();
-      case self::FIELD_CC:
-        if (isset($this->explicitCCs)) {
-          return array_keys($this->explicitCCs);
-        } else {
-          return $this->revision->getCCPHIDs();
-        }
       case self::FIELD_REVIEWERS:
         if (isset($this->explicitReviewers)) {
           return array_keys($this->explicitReviewers);
@@ -260,8 +230,6 @@ final class HeraldDifferentialRevisionAdapter
         $packages = $this->loadAffectedPackages();
         return PhabricatorOwnersOwner::loadAffiliatedUserPHIDs(
           mpull($packages, 'getID'));
-      case self::FIELD_ARCANIST_PROJECT:
-        return $this->revision->getArcanistProjectPHID();
     }
 
     return parent::getHeraldField($field);
@@ -301,86 +269,10 @@ final class HeraldDifferentialRevisionAdapter
     assert_instances_of($effects, 'HeraldEffect');
 
     $result = array();
-    if ($this->explicitCCs) {
-      $effect = new HeraldEffect();
-      $effect->setAction(self::ACTION_ADD_CC);
-      $effect->setTarget(array_keys($this->explicitCCs));
-      $effect->setReason(
-        pht('CCs provided explicitly by revision author or carried over '.
-        'from a previous version of the revision.'));
-      $result[] = new HeraldApplyTranscript(
-        $effect,
-        true,
-        pht('Added addresses to CC list.'));
-    }
-
-    $forbidden_ccs = array_fill_keys(
-      nonempty($this->forbiddenCCs, array()),
-      true);
 
     foreach ($effects as $effect) {
       $action = $effect->getAction();
       switch ($action) {
-        case self::ACTION_NOTHING:
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('OK, did nothing.'));
-          break;
-        case self::ACTION_FLAG:
-          $result[] = parent::applyFlagEffect(
-            $effect,
-            $this->revision->getPHID());
-          break;
-        case self::ACTION_EMAIL:
-        case self::ACTION_ADD_CC:
-          $op = ($action == self::ACTION_EMAIL) ? 'email' : 'CC';
-          $base_target = $effect->getTarget();
-          $forbidden = array();
-          foreach ($base_target as $key => $fbid) {
-            if (isset($forbidden_ccs[$fbid])) {
-              $forbidden[] = $fbid;
-              unset($base_target[$key]);
-            } else {
-              if ($action == self::ACTION_EMAIL) {
-                $this->emailPHIDs[$fbid] = true;
-              } else {
-                $this->newCCs[$fbid] = true;
-              }
-            }
-          }
-
-          if ($forbidden) {
-            $failed = clone $effect;
-            $failed->setTarget($forbidden);
-            if ($base_target) {
-              $effect->setTarget($base_target);
-              $result[] = new HeraldApplyTranscript(
-                $effect,
-                true,
-                pht('Added these addresses to %s list. '.
-                'Others could not be added.', $op));
-            }
-            $result[] = new HeraldApplyTranscript(
-              $failed,
-              false,
-              pht('%s forbidden, these addresses have unsubscribed.', $op));
-          } else {
-            $result[] = new HeraldApplyTranscript(
-              $effect,
-              true,
-              pht('Added addresses to %s list.', $op));
-          }
-          break;
-        case self::ACTION_REMOVE_CC:
-          foreach ($effect->getTarget() as $fbid) {
-            $this->remCCs[$fbid] = true;
-          }
-          $result[] = new HeraldApplyTranscript(
-            $effect,
-            true,
-            pht('Removed addresses from CC list.'));
-          break;
         case self::ACTION_ADD_REVIEWERS:
           foreach ($effect->getTarget() as $phid) {
             $this->addReviewerPHIDs[$phid] = true;
@@ -420,14 +312,7 @@ final class HeraldDifferentialRevisionAdapter
             pht('Required signatures.'));
           break;
         default:
-          $custom_result = parent::handleCustomHeraldEffect($effect);
-          if ($custom_result === null) {
-            throw new Exception(pht(
-              "No rules to handle action '%s'.",
-              $action));
-          }
-
-          $result[] = $custom_result;
+          $result[] = $this->applyStandardEffect($effect);
           break;
       }
     }

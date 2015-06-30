@@ -35,6 +35,17 @@ final class AlmanacServiceViewController
       ->setHeader($header)
       ->addPropertyList($property_list);
 
+    $messages = $service->getServiceType()->getStatusMessages($service);
+    if ($messages) {
+      $box->setFormErrors($messages);
+    }
+
+    if ($service->getIsLocked()) {
+      $this->addLockMessage(
+        $box,
+        pht('This service is locked, and can not be edited.'));
+    }
+
     $bindings = $this->buildBindingList($service);
 
     $crumbs = $this->buildApplicationCrumbs();
@@ -64,6 +75,10 @@ final class AlmanacServiceViewController
     $properties = id(new PHUIPropertyListView())
       ->setUser($viewer)
       ->setObject($service);
+
+    $properties->addProperty(
+      pht('Service Type'),
+      $service->getServiceType()->getServiceTypeShortName());
 
     return $properties;
   }
@@ -105,20 +120,11 @@ final class AlmanacServiceViewController
       ->withServicePHIDs(array($service->getPHID()))
       ->execute();
 
-    $phids = array();
-    foreach ($bindings as $binding) {
-      $phids[] = $binding->getServicePHID();
-      $phids[] = $binding->getDevicePHID();
-      $phids[] = $binding->getInterface()->getNetworkPHID();
-    }
-    $handles = $this->loadViewerHandles($phids);
-
     $table = id(new AlmanacBindingTableView())
       ->setNoDataString(
         pht('This service has not been bound to any device interfaces yet.'))
       ->setUser($viewer)
-      ->setBindings($bindings)
-      ->setHandles($handles);
+      ->setBindings($bindings);
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Service Bindings'))

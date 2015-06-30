@@ -29,8 +29,8 @@ final class HeraldRuleViewController extends HeraldController {
     if ($rule->getIsDisabled()) {
       $header->setStatus(
         'fa-ban',
-        'dark',
-        pht('Disabled'));
+        'red',
+        pht('Archived'));
     } else {
       $header->setStatus(
         'fa-check',
@@ -45,7 +45,6 @@ final class HeraldRuleViewController extends HeraldController {
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb("H{$id}");
-    $crumbs->setActionList($actions);
 
     $object_box = id(new PHUIObjectBoxView())
       ->setHeader($header)
@@ -54,6 +53,7 @@ final class HeraldRuleViewController extends HeraldController {
     $timeline = $this->buildTransactionTimeline(
       $rule,
       new HeraldTransactionQuery());
+    $timeline->setShouldTerminate(true);
 
     return $this->buildApplicationPage(
       array(
@@ -90,12 +90,12 @@ final class HeraldRuleViewController extends HeraldController {
 
     if ($rule->getIsDisabled()) {
       $disable_uri = "disable/{$id}/enable/";
-      $disable_icon = 'fa-check-circle-o';
-      $disable_name = pht('Enable Rule');
+      $disable_icon = 'fa-check';
+      $disable_name = pht('Activate Rule');
     } else {
       $disable_uri = "disable/{$id}/disable/";
       $disable_icon = 'fa-ban';
-      $disable_name = pht('Disable Rule');
+      $disable_name = pht('Archive Rule');
     }
 
     $view->addAction(
@@ -116,8 +116,6 @@ final class HeraldRuleViewController extends HeraldController {
 
     $viewer = $this->getRequest()->getUser();
 
-    $this->loadHandles(HeraldAdapter::getHandlePHIDs($rule));
-
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
       ->setObject($rule)
@@ -130,9 +128,8 @@ final class HeraldRuleViewController extends HeraldController {
     if ($rule->isPersonalRule()) {
       $view->addProperty(
         pht('Author'),
-        $this->getHandle($rule->getAuthorPHID())->renderLink());
+        $viewer->renderHandle($rule->getAuthorPHID()));
     }
-
 
     $adapter = HeraldAdapter::getAdapterForContentType($rule->getContentType());
     if ($adapter) {
@@ -145,7 +142,7 @@ final class HeraldRuleViewController extends HeraldController {
       if ($rule->isObjectRule()) {
         $view->addProperty(
           pht('Trigger Object'),
-          $this->getHandle($rule->getTriggerObjectPHID())->renderLink());
+          $viewer->renderHandle($rule->getTriggerObjectPHID()));
       }
 
       $view->invokeWillRenderEvent();
@@ -153,8 +150,9 @@ final class HeraldRuleViewController extends HeraldController {
       $view->addSectionHeader(
         pht('Rule Description'),
         PHUIPropertyListView::ICON_SUMMARY);
-      $view->addTextContent(
-        $adapter->renderRuleAsText($rule, $this->getLoadedHandles()));
+
+      $handles = $viewer->loadHandles(HeraldAdapter::getHandlePHIDs($rule));
+      $view->addTextContent($adapter->renderRuleAsText($rule, $handles));
     }
 
     return $view;

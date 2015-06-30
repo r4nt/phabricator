@@ -6,9 +6,8 @@ final class DiffusionLintController extends DiffusionController {
     return true;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $this->getRequest()->getUser();
+  protected function processDiffusionRequest(AphrontRequest $request) {
+    $user = $request->getUser();
     $drequest = $this->diffusionRequest;
 
     if ($request->getStr('lint') !== null) {
@@ -25,7 +24,6 @@ final class DiffusionLintController extends DiffusionController {
       } else {
         $owners = array(head($request->getArr('owner')));
       }
-      $owner_handles = $this->loadViewerHandles($owners);
     }
 
     $codes = $this->loadLintCodes($owners);
@@ -105,27 +103,25 @@ final class DiffusionLintController extends DiffusionController {
 
     $content = array();
 
-    $link = null;
     if (!$this->diffusionRequest) {
       $form = id(new AphrontFormView())
         ->setUser($user)
         ->setMethod('GET')
-        ->appendChild(
+        ->appendControl(
           id(new AphrontFormTokenizerControl())
             ->setDatasource(new PhabricatorPeopleDatasource())
             ->setLimit(1)
             ->setName('owner')
             ->setLabel(pht('Owner'))
-            ->setValue($owner_handles))
+            ->setValue($owners))
         ->appendChild(
           id(new AphrontFormSubmitControl())
-            ->setValue('Filter'));
+            ->setValue(pht('Filter')));
       $content[] = id(new AphrontListFilterView())->appendChild($form);
     }
 
-    $content[] = id(new AphrontPanelView())
-      ->setNoBackground(true)
-      ->setCaption($link)
+    $content[] = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Lint'))
       ->appendChild($table);
 
     $title = array('Lint');

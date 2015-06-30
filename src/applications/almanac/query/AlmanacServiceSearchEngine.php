@@ -7,31 +7,37 @@ final class AlmanacServiceSearchEngine
     return pht('Almanac Services');
   }
 
-  protected function getApplicationClassName() {
+  public function getApplicationClassName() {
     return 'PhabricatorAlmanacApplication';
   }
 
-  public function buildSavedQueryFromRequest(AphrontRequest $request) {
-    $saved = new PhabricatorSavedQuery();
-
-    return $saved;
+  public function newQuery() {
+    return new AlmanacServiceQuery();
   }
 
-  public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
-    $query = id(new AlmanacServiceQuery());
+  public function newResultObject() {
+    // NOTE: We need to attach a service type in order to generate custom
+    // field definitions.
+    return AlmanacService::initializeNewService()
+      ->attachServiceType(new AlmanacCustomServiceType());
+  }
+
+  protected function buildQueryFromParameters(array $map) {
+    $query = $this->newQuery();
 
     return $query;
   }
 
-  public function buildSearchForm(
-    AphrontFormView $form,
-    PhabricatorSavedQuery $saved_query) {}
+
+  protected function buildCustomSearchFields() {
+    return array();
+  }
 
   protected function getURI($path) {
     return '/almanac/service/'.$path;
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array(
       'all' => pht('All Services'),
     );
@@ -52,12 +58,6 @@ final class AlmanacServiceSearchEngine
     return parent::buildSavedQueryFromBuiltin($query_key);
   }
 
-  protected function getRequiredHandlePHIDsForResultList(
-    array $services,
-    PhabricatorSavedQuery $query) {
-    return array();
-  }
-
   protected function renderResultList(
     array $services,
     PhabricatorSavedQuery $query,
@@ -73,7 +73,19 @@ final class AlmanacServiceSearchEngine
         ->setObjectName(pht('Service %d', $service->getID()))
         ->setHeader($service->getName())
         ->setHref($service->getURI())
-        ->setObject($service);
+        ->setObject($service)
+        ->addIcon(
+          $service->getServiceType()->getServiceTypeIcon(),
+          $service->getServiceType()->getServiceTypeShortName());
+
+      if ($service->getIsLocked() ||
+          $service->getServiceType()->isClusterServiceType()) {
+        if ($service->getIsLocked()) {
+          $item->addIcon('fa-lock', pht('Locked'));
+        } else {
+          $item->addIcon('fa-unlock-alt red', pht('Unlocked'));
+        }
+      }
 
       $list->addItem($item);
     }

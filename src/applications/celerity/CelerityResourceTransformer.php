@@ -1,6 +1,6 @@
 <?php
 
-final class CelerityResourceTransformer {
+final class CelerityResourceTransformer extends Phobject {
 
   private $minify;
   private $rawURIMap;
@@ -171,6 +171,13 @@ final class CelerityResourceTransformer {
 
   public static function getCSSVariableMap() {
     return array(
+      // Fonts
+      'basefont' => "13px/1.231 'Segoe UI', 'Segoe UI Web Regular', ".
+        "'Segoe UI Symbol', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+
+      // Drop Shadow
+      'dropshadow' => '0 1px 6px rgba(0, 0, 0, .25)',
+
       // Base Colors
       'red'           => '#c0392b',
       'lightred'      => '#f4dddb',
@@ -325,7 +332,10 @@ final class CelerityResourceTransformer {
     if (empty($map[$var_name])) {
       $path = $this->currentPath;
       throw new Exception(
-        "CSS file '{$path}' has unknown variable '{$var_name}'.");
+        pht(
+          "CSS file '%s' has unknown variable '%s'.",
+          $path,
+          $var_name));
     }
 
     return $map[$var_name];

@@ -1,19 +1,14 @@
 <?php
 
-final class CeleritySpriteGenerator {
+final class CeleritySpriteGenerator extends Phobject {
 
   public function buildMenuSheet() {
     $sprites = array();
 
     $sources = array(
-      'arrow-right' => array(
-        'x' => 9,
-        'y' => 31,
-        'css' => '.phabricator-crumb-divider',
-      ),
       'logo' => array(
         'x' => 96,
-        'y' => 26,
+        'y' => 40,
         'css' => '.phabricator-main-menu-logo',
       ),
       'eye' => array(
@@ -109,114 +104,6 @@ final class CeleritySpriteGenerator {
     }
 
     $sheet = $this->buildSheet('projects', true);
-    $sheet->setScales($scales);
-    foreach ($sprites as $sprite) {
-      $sheet->addSprite($sprite);
-    }
-
-    return $sheet;
-  }
-
-  public function buildPaymentsSheet() {
-    $icons = $this->getDirectoryList('payments_2x');
-    $scales = array(
-      '2x' => 1,
-    );
-    $template = id(new PhutilSprite())
-      ->setSourceSize(60, 32);
-
-    $sprites = array();
-    $prefix = 'payments_';
-    foreach ($icons as $icon) {
-      $sprite = id(clone $template)
-        ->setName('payments-'.$icon)
-        ->setTargetCSS('.payments-'.$icon);
-
-      foreach ($scales as $scale_key => $scale) {
-        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
-        $sprite->setSourceFile($path, $scale);
-      }
-      $sprites[] = $sprite;
-    }
-
-    $sheet = $this->buildSheet('payments', true);
-    $sheet->setScales($scales);
-    foreach ($sprites as $sprite) {
-      $sheet->addSprite($sprite);
-    }
-
-    return $sheet;
-  }
-
-
-  public function buildConpherenceSheet() {
-    $name = 'conpherence';
-    $icons = $this->getDirectoryList($name.'_1x');
-    $scales = array(
-      '1x' => 1,
-      '2x' => 2,
-    );
-    $template = id(new PhutilSprite())
-      ->setSourceSize(32, 32);
-
-    $sprites = array();
-    foreach ($icons as $icon) {
-      $color = preg_match('/_on/', $icon) ? 'on' : 'off';
-
-      $prefix = $name.'_';
-
-      $sprite = id(clone $template)
-        ->setName($prefix.$icon);
-
-      $tcss = array();
-      $tcss[] = '.'.$prefix.$icon;
-      if ($color == 'on') {
-        $class = str_replace('_on', '_off', $prefix.$icon);
-        $tcss[] = '.device-desktop .'.$class.':hover ';
-      }
-
-      $sprite->setTargetCSS(implode(', ', $tcss));
-
-      foreach ($scales as $scale_key => $scale) {
-        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
-        $sprite->setSourceFile($path, $scale);
-      }
-      $sprites[] = $sprite;
-    }
-
-    $sheet = $this->buildSheet($name, true);
-    $sheet->setScales($scales);
-    foreach ($sprites as $sprite) {
-      $sheet->addSprite($sprite);
-    }
-
-    return $sheet;
-  }
-
-  public function buildDocsSheet() {
-    $icons = $this->getDirectoryList('docs_1x');
-    $scales = array(
-      '1x' => 1,
-      '2x' => 2,
-    );
-    $template = id(new PhutilSprite())
-      ->setSourceSize(32, 32);
-
-    $sprites = array();
-    $prefix = 'docs_';
-    foreach ($icons as $icon) {
-      $sprite = id(clone $template)
-        ->setName($prefix.$icon)
-        ->setTargetCSS('.'.$prefix.$icon);
-
-      foreach ($scales as $scale_key => $scale) {
-        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
-        $sprite->setSourceFile($path, $scale);
-      }
-      $sprites[] = $sprite;
-    }
-
-    $sheet = $this->buildSheet('docs', true);
     $sheet->setScales($scales);
     foreach ($sprites as $sprite) {
       $sheet->addSprite($sprite);
@@ -322,96 +209,6 @@ final class CeleritySpriteGenerator {
     return $sheet;
   }
 
-
-  public function buildAppsSheet() {
-    return $this->buildAppsSheetVariant(1);
-  }
-
-  public function buildAppsLargeSheet() {
-    return $this->buildAppsSheetVariant(2);
-  }
-
-  public function buildAppsXLargeSheet() {
-    return $this->buildAppsSheetVariant(3);
-  }
-
-  private function buildAppsSheetVariant($variant) {
-
-    if ($variant == 1) {
-      $scales = array(
-        '1x' => 1,
-        '2x' => 2,
-        '4x' => 4,
-      );
-      $variant_name = 'apps';
-      $variant_short = '';
-      $size_x = 14;
-      $size_y = 14;
-
-      $colors = array(
-        'dark'  => 'dark',
-      );
-    } else if ($variant == 2) {
-      $scales = array(
-        '2x' => 1,
-        '4x' => 2,
-      );
-      $variant_name = 'apps-large';
-      $variant_short = '-large';
-      $size_x = 28;
-      $size_y = 28;
-
-      $colors = array(
-        'dark'  => 'dark',
-      );
-    } else {
-      $scales = array(
-        '4x' => 1,
-      );
-      $variant_name = 'apps-xlarge';
-      $variant_short = '-xlarge';
-      $size_x = 56;
-      $size_y = 56;
-
-      $colors = array(
-        'dark'  => 'dark',
-      );
-    }
-
-    $apps = $this->getDirectoryList('apps_dark_1x');
-
-    $template = id(new PhutilSprite())
-      ->setSourceSize($size_x, $size_y);
-
-    $sprites = array();
-    foreach ($apps as $app) {
-      foreach ($colors as $color => $color_path) {
-
-        $css = '.apps-'.$app.'-'.$color.$variant_short;
-        $sprite = id(clone $template)
-          ->setName('apps-'.$app.'-'.$color.$variant_short)
-          ->setTargetCSS($css);
-
-        foreach ($scales as $scale_name => $scale) {
-          $path = $this->getPath(
-            'apps_'.$color_path.'_'.$scale_name.'/'.$app.'.png');
-          $sprite->setSourceFile($path, $scale);
-        }
-
-        $sprites[] = $sprite;
-      }
-    }
-
-    $sheet = $this->buildSheet($variant_name, count($scales) > 1);
-    $sheet->setScales($scales);
-    foreach ($sprites as $sprite) {
-      $sheet->addSprite($sprite);
-    }
-
-    return $sheet;
-  }
-
-
   private function getPath($to_path = null) {
     $root = dirname(phutil_get_library_root('phabricator'));
     return $root.'/resources/sprite/'.$to_path;
@@ -426,8 +223,11 @@ final class CeleritySpriteGenerator {
     foreach ($images as $image) {
       if (!preg_match('/\.png$/', $image)) {
         throw new Exception(
-          "Expected file '{$image}' in '{$path}' to be a sprite source ".
-          "ending in '.png'.");
+          pht(
+            "Expected file '%s' in '%s' to be a sprite source ending in '%s'.",
+            $image,
+            $path,
+            '.png'));
       }
       $result[] = substr($image, 0, -4);
     }

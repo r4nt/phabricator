@@ -17,7 +17,7 @@ final class ManiphestSearchIndexer extends PhabricatorSearchDocumentIndexer {
     $doc->setDocumentModified($task->getDateModified());
 
     $doc->addField(
-      PhabricatorSearchField::FIELD_BODY,
+      PhabricatorSearchDocumentFieldType::FIELD_BODY,
       $task->getDescription());
 
     $doc->addRelationship(
@@ -52,21 +52,6 @@ final class ManiphestSearchIndexer extends PhabricatorSearchDocumentIndexer {
         $task->getPHID(),
         PhabricatorPHIDConstants::PHID_TYPE_VOID,
         $task->getDateCreated());
-    }
-
-    // We need to load handles here since non-users may subscribe (mailing
-    // lists, e.g.)
-    $ccs = $task->getCCPHIDs();
-    $handles = id(new PhabricatorHandleQuery())
-      ->setViewer(PhabricatorUser::getOmnipotentUser())
-      ->withPHIDs($ccs)
-      ->execute();
-    foreach ($ccs as $cc) {
-      $doc->addRelationship(
-        PhabricatorSearchRelationship::RELATIONSHIP_SUBSCRIBER,
-        $handles[$cc]->getPHID(),
-        $handles[$cc]->getType(),
-        time());
     }
 
     return $doc;

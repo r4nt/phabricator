@@ -2,7 +2,7 @@
 
 final class PhabricatorFileTestCase extends PhabricatorTestCase {
 
-  public function getPhabricatorTestCaseConfiguration() {
+  protected function getPhabricatorTestCaseConfiguration() {
     return array(
       self::PHABRICATOR_TESTCONFIG_BUILD_STORAGE_FIXTURES => true,
     );
@@ -161,7 +161,7 @@ final class PhabricatorFileTestCase extends PhabricatorTestCase {
 
     $second_file = PhabricatorFile::newFromFileData($other_data, $params);
 
-    // Test that the the second file uses  different storage handle from
+    // Test that the second file uses  different storage handle from
     // the first file.
     $first_handle = $first_file->getStorageHandle();
     $second_handle = $second_file->getStorageHandle();
@@ -185,7 +185,7 @@ final class PhabricatorFileTestCase extends PhabricatorTestCase {
 
     $second_file = PhabricatorFile::newFromFileData($data, $params);
 
-    // Test that the the second file uses the same storage handle as
+    // Test that the second file uses the same storage handle as
     // the first file.
     $handle = $first_file->getStorageHandle();
     $second_handle = $second_file->getStorageHandle();

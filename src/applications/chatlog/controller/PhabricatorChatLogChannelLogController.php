@@ -29,9 +29,9 @@ final class PhabricatorChatLogChannelLogController
       ->withChannelIDs(array($this->channelID));
 
     $channel = id(new PhabricatorChatLogChannelQuery())
-              ->setViewer($user)
-              ->withIDs(array($this->channelID))
-              ->executeOne();
+      ->setViewer($user)
+      ->withIDs(array($this->channelID))
+      ->executeOne();
 
     if (!$channel) {
       return new Aphront404Response();
@@ -191,6 +191,7 @@ final class PhabricatorChatLogChannelLogController
 
     $crumbs = $this
       ->buildApplicationCrumbs()
+      ->setBorder(true)
       ->addTextCrumb($channel->getChannelName(), $uri);
 
     $form = id(new AphrontFormView())

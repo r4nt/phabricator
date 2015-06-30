@@ -8,6 +8,8 @@ final class PHUITimelineView extends AphrontView {
   private $shouldAddSpacers = true;
   private $pager;
   private $renderData = array();
+  private $quoteTargetID;
+  private $quoteRef;
 
   public function setID($id) {
     $this->id = $id;
@@ -43,6 +45,24 @@ final class PHUITimelineView extends AphrontView {
     return $this;
   }
 
+  public function setQuoteTargetID($quote_target_id) {
+    $this->quoteTargetID = $quote_target_id;
+    return $this;
+  }
+
+  public function getQuoteTargetID() {
+    return $this->quoteTargetID;
+  }
+
+  public function setQuoteRef($quote_ref) {
+    $this->quoteRef = $quote_ref;
+    return $this;
+  }
+
+  public function getQuoteRef() {
+    return $this->quoteRef;
+  }
+
   public function render() {
     if ($this->getPager()) {
       if ($this->id === null) {
@@ -74,6 +94,9 @@ final class PHUITimelineView extends AphrontView {
     $hide = array();
     $show = array();
 
+    // Bucket timeline events into events we'll hide by default (because they
+    // predate your most recent interaction with the object) and events we'll
+    // show by default.
     foreach ($this->events as $event) {
       if ($event->getHideByDefault()) {
         $hide[] = $event;
@@ -82,8 +105,21 @@ final class PHUITimelineView extends AphrontView {
       }
     }
 
+    // If you've never interacted with the object, all the events will be shown
+    // by default. We may still need to paginate if there are a large number
+    // of events.
+    $more = (bool)$hide;
+    if ($this->getPager()) {
+      if ($this->getPager()->getHasMoreResults()) {
+        $more = true;
+      }
+    }
+
     $events = array();
-    if ($hide && $this->getPager()) {
+    if ($more && $this->getPager()) {
+      $uri = $this->getPager()->getNextPageURI();
+      $uri->setQueryParam('quoteTargetID', $this->getQuoteTargetID());
+      $uri->setQueryParam('quoteRef', $this->getQuoteRef());
       $events[] = javelin_tag(
         'div',
         array(
@@ -96,16 +132,16 @@ final class PHUITimelineView extends AphrontView {
           javelin_tag(
             'a',
             array(
-              'href' => (string) $this->getPager()->getNextPageURI(),
+              'href' => (string)$uri,
               'mustcapture' => true,
               'sigil' => 'show-older-link',
             ),
             pht('Show older changes.')),
         ));
-    }
 
-    if ($hide && $show) {
-      $events[] = $spacer;
+      if ($show) {
+        $events[] = $spacer;
+      }
     }
 
     if ($show) {

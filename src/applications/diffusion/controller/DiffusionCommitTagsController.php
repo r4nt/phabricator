@@ -6,30 +6,25 @@ final class DiffusionCommitTagsController extends DiffusionController {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $data['user'] = $this->getRequest()->getUser();
-    $this->diffusionRequest = DiffusionRequest::newFromDictionary($data);
-  }
+  protected function processDiffusionRequest(AphrontRequest $request) {
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
 
-  public function processRequest() {
-    $request = $this->getDiffusionRequest();
     $tag_limit = 10;
-
-    $tags = array();
-    try {
-      $tags = DiffusionRepositoryTag::newFromConduit(
-        $this->callConduitWithDiffusionRequest(
-          'diffusion.tagsquery',
-          array(
-            'commit' => $request->getCommit(),
-            'limit' => $tag_limit + 1,
-          )));
-    } catch (ConduitException $ex) {
-      if ($ex->getMessage() != 'ERR-UNSUPPORTED-VCS') {
-        throw $ex;
-      }
+    switch ($repository->getVersionControlSystem()) {
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+        $tags = array();
+        break;
+      default:
+        $tags = DiffusionRepositoryTag::newFromConduit(
+          $this->callConduitWithDiffusionRequest(
+            'diffusion.tagsquery',
+            array(
+              'commit' => $drequest->getCommit(),
+              'limit' => $tag_limit + 1,
+            )));
+        break;
     }
-
     $has_more_tags = (count($tags) > $tag_limit);
     $tags = array_slice($tags, 0, $tag_limit);
 
@@ -38,7 +33,7 @@ final class DiffusionCommitTagsController extends DiffusionController {
       $tag_links[] = phutil_tag(
         'a',
         array(
-          'href' => $request->generateURI(
+          'href' => $drequest->generateURI(
             array(
               'action'  => 'browse',
               'commit'  => $tag->getName(),
@@ -51,7 +46,7 @@ final class DiffusionCommitTagsController extends DiffusionController {
       $tag_links[] = phutil_tag(
         'a',
         array(
-          'href' => $request->generateURI(
+          'href' => $drequest->generateURI(
             array(
               'action'  => 'tags',
             )),

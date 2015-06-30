@@ -72,10 +72,17 @@ final class PhabricatorDashboardPanelViewController
   private function buildHeaderView(PhabricatorDashboardPanel $panel) {
     $viewer = $this->getRequest()->getUser();
 
-    return id(new PHUIHeaderView())
+    $header = id(new PHUIHeaderView())
       ->setUser($viewer)
       ->setHeader($panel->getName())
       ->setPolicyObject($panel);
+
+    if (!$panel->getIsArchived()) {
+      $header->setStatus('fa-check', 'bluegrey', pht('Active'));
+    } else {
+      $header->setStatus('fa-ban', 'red', pht('Archived'));
+    }
+    return $header;
   }
 
   private function buildActionView(PhabricatorDashboardPanel $panel) {
@@ -101,10 +108,10 @@ final class PhabricatorDashboardPanelViewController
 
     if (!$panel->getIsArchived()) {
       $archive_text = pht('Archive Panel');
-      $archive_icon = 'fa-times';
+      $archive_icon = 'fa-ban';
     } else {
       $archive_text = pht('Activate Panel');
-      $archive_icon = 'fa-plus';
+      $archive_icon = 'fa-check';
     }
 
     $actions->addAction(
@@ -155,8 +162,7 @@ final class PhabricatorDashboardPanelViewController
 
     $dashboard_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
       $panel->getPHID(),
-      PhabricatorEdgeConfig::TYPE_PANEL_HAS_DASHBOARD);
-    $this->loadHandles($dashboard_phids);
+      PhabricatorDashboardPanelHasDashboardEdgeType::EDGECONST);
 
     $does_not_appear = pht(
       'This panel does not appear on any dashboards.');
@@ -164,7 +170,7 @@ final class PhabricatorDashboardPanelViewController
     $properties->addProperty(
       pht('Appears On'),
       $dashboard_phids
-        ? $this->renderHandlesForPHIDs($dashboard_phids)
+        ? $viewer->renderHandleList($dashboard_phids)
         : phutil_tag('em', array(), $does_not_appear));
 
     return $properties;

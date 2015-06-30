@@ -37,7 +37,7 @@ final class PhabricatorTokenGivenQuery
     return $table->loadAllFromArray($rows);
   }
 
-  private function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->authorPHIDs) {
@@ -66,7 +66,7 @@ final class PhabricatorTokenGivenQuery
     return $this->formatWhereClause($where);
   }
 
-  public function willFilterPage(array $results) {
+  protected function willFilterPage(array $results) {
     $object_phids = array_filter(mpull($results, 'getObjectPHID'));
     if (!$object_phids) {
       return array();

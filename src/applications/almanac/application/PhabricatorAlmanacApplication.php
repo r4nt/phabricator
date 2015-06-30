@@ -14,8 +14,8 @@ final class PhabricatorAlmanacApplication extends PhabricatorApplication {
     return pht('Service Directory');
   }
 
-  public function getIconName() {
-    return 'almanac';
+  public function getFontIcon() {
+    return 'fa-server';
   }
 
   public function getTitleGlyph() {
@@ -24,6 +24,15 @@ final class PhabricatorAlmanacApplication extends PhabricatorApplication {
 
   public function getApplicationGroup() {
     return self::GROUP_UTILITIES;
+  }
+
+  public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
+    return array(
+      array(
+        'name' => pht('Alamanac User Guide'),
+        'href' => PhabricatorEnv::getDoclink('Almanac User Guide'),
+      ),
+    );
   }
 
   public function isPrototype() {
@@ -57,7 +66,8 @@ final class PhabricatorAlmanacApplication extends PhabricatorApplication {
           '(?P<id>\d+)/' => 'AlmanacNetworkViewController',
         ),
         'property/' => array(
-          'edit/(?:(?P<id>\d+)/)?' => 'AlmanacPropertyEditController',
+          'edit/' => 'AlmanacPropertyEditController',
+          'delete/' => 'AlmanacPropertyDeleteController',
         ),
       ),
     );
@@ -72,6 +82,9 @@ final class PhabricatorAlmanacApplication extends PhabricatorApplication {
         'default' => PhabricatorPolicies::POLICY_ADMIN,
       ),
       AlmanacCreateNetworksCapability::CAPABILITY => array(
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
+      ),
+      AlmanacCreateClusterServicesCapability::CAPABILITY => array(
         'default' => PhabricatorPolicies::POLICY_ADMIN,
       ),
     );

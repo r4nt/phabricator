@@ -4,11 +4,11 @@ final class PhabricatorPholioMockTestDataGenerator
   extends PhabricatorTestDataGenerator {
 
   public function generate() {
-    $authorPHID = $this->loadPhabrictorUserPHID();
+    $author_phid = $this->loadPhabrictorUserPHID();
     $author = id(new PhabricatorUser())
-          ->loadOneWhere('phid = %s', $authorPHID);
-    $mock = id(new PholioMock())
-      ->setAuthorPHID($authorPHID);
+          ->loadOneWhere('phid = %s', $author_phid);
+    $mock = PholioMock::initializeNewMock($author);
+
     $content_source = PhabricatorContentSource::newForSource(
       PhabricatorContentSource::SOURCE_UNKNOWN,
       array());
@@ -17,9 +17,9 @@ final class PhabricatorPholioMockTestDataGenerator
 
     // Accumulate Transactions
     $changes = array();
-    $changes[PholioTransactionType::TYPE_NAME] =
+    $changes[PholioTransaction::TYPE_NAME] =
       $this->generateTitle();
-    $changes[PholioTransactionType::TYPE_DESCRIPTION] =
+    $changes[PholioTransaction::TYPE_DESCRIPTION] =
       $this->generateDescription();
     $changes[PhabricatorTransactions::TYPE_VIEW_POLICY] =
       PhabricatorPolicies::POLICY_PUBLIC;
@@ -27,10 +27,10 @@ final class PhabricatorPholioMockTestDataGenerator
       array('=' => $this->getCCPHIDs());
 
     // Get Files and make Images
-    $filePHIDS = $this->generateImages();
+    $file_phids = $this->generateImages();
     $files = id(new PhabricatorFileQuery())
       ->setViewer($author)
-      ->withPHIDs($filePHIDS)
+      ->withPHIDs($file_phids)
       ->execute();
     $mock->setCoverPHID(head($files)->getPHID());
     $sequence = 0;
@@ -90,11 +90,14 @@ final class PhabricatorPholioMockTestDataGenerator
     $rand_images = array();
     $quantity = rand(2, 10);
     $quantity = min($quantity, count($images));
-    foreach (array_rand($images, $quantity) as $random) {
-      $rand_images[] = $images[$random]->getPHID();
+
+    if ($quantity) {
+      foreach (array_rand($images, $quantity) as $random) {
+        $rand_images[] = $images[$random]->getPHID();
+      }
     }
-    // this means you don't have any jpegs yet. we'll
-    // just use a builtin image
+
+    // This means you don't have any JPEGs yet. We'll just use a built-in image.
     if (empty($rand_images)) {
       $default = PhabricatorFile::loadBuiltin(
         PhabricatorUser::getOmnipotentUser(),

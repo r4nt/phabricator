@@ -1,10 +1,15 @@
 <?php
 
-abstract class HarbormasterBuildStepImplementation {
+/**
+ * @task autotarget Automatic Targets
+ */
+abstract class HarbormasterBuildStepImplementation extends Phobject {
+
+  private $settings;
 
   public static function getImplementations() {
     return id(new PhutilSymbolLoader())
-      ->setAncestorClass('HarbormasterBuildStepImplementation')
+      ->setAncestorClass(__CLASS__)
       ->loadObjects();
   }
 
@@ -72,7 +77,7 @@ abstract class HarbormasterBuildStepImplementation {
    * Loads the settings for this build step implementation from a build
    * step or target.
    */
-  public final function loadSettings($build_object) {
+  final public function loadSettings($build_object) {
     $this->settings = $build_object->getDetails();
     return $this;
   }
@@ -234,7 +239,7 @@ abstract class HarbormasterBuildStepImplementation {
     HarbormasterBuildTarget $target,
     Future $future) {
 
-    $futures = Futures(array($future));
+    $futures = new FutureIterator(array($future));
     foreach ($futures->setUpdateInterval(5) as $key => $future) {
       if ($future === null) {
         $build->reload();
@@ -245,6 +250,22 @@ abstract class HarbormasterBuildStepImplementation {
         return $future->resolve();
       }
     }
+  }
+
+
+/* -(  Automatic Targets  )-------------------------------------------------- */
+
+
+  public function getBuildStepAutotargetStepKey() {
+    return null;
+  }
+
+  public function getBuildStepAutotargetPlanKey() {
+    throw new PhutilMethodNotImplementedException();
+  }
+
+  public function shouldRequireAutotargeting() {
+    return false;
   }
 
 }

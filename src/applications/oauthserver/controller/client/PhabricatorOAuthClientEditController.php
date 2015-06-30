@@ -64,6 +64,8 @@ final class PhabricatorOAuthClientEditController
         $e_redirect = pht('Invalid');
       }
 
+      $client->setViewPolicy($request->getStr('viewPolicy'));
+      $client->setEditPolicy($request->getStr('editPolicy'));
       if (!$errors) {
         $client->save();
         $view_uri = $client->getViewURI();
@@ -71,20 +73,39 @@ final class PhabricatorOAuthClientEditController
       }
     }
 
+    $policies = id(new PhabricatorPolicyQuery())
+      ->setViewer($viewer)
+      ->setObject($client)
+      ->execute();
+
     $form = id(new AphrontFormView())
       ->setUser($viewer)
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Name')
+          ->setLabel(pht('Name'))
           ->setName('name')
           ->setValue($client->getName())
           ->setError($e_name))
       ->appendChild(
         id(new AphrontFormTextControl())
-          ->setLabel('Redirect URI')
+          ->setLabel(pht('Redirect URI'))
           ->setName('redirect_uri')
           ->setValue($client->getRedirectURI())
           ->setError($e_redirect))
+      ->appendChild(
+        id(new AphrontFormPolicyControl())
+          ->setUser($viewer)
+          ->setCapability(PhabricatorPolicyCapability::CAN_VIEW)
+          ->setPolicyObject($client)
+          ->setPolicies($policies)
+          ->setName('viewPolicy'))
+      ->appendChild(
+        id(new AphrontFormPolicyControl())
+          ->setUser($viewer)
+          ->setCapability(PhabricatorPolicyCapability::CAN_EDIT)
+          ->setPolicyObject($client)
+          ->setPolicies($policies)
+          ->setName('editPolicy'))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->addCancelButton($cancel_uri)

@@ -22,7 +22,7 @@ final class PhabricatorOAuthClientAuthorizationQuery
     return $this;
   }
 
-  public function loadPage() {
+  protected function loadPage() {
     $table  = new PhabricatorOAuthClientAuthorization();
     $conn_r = $table->establishConnection('r');
 
@@ -37,7 +37,7 @@ final class PhabricatorOAuthClientAuthorizationQuery
     return $table->loadAllFromArray($data);
   }
 
-  public function willFilterPage(array $authorizations) {
+  protected function willFilterPage(array $authorizations) {
     $client_phids = mpull($authorizations, 'getClientPHID');
 
     $clients = id(new PhabricatorOAuthServerClientQuery())
@@ -59,7 +59,7 @@ final class PhabricatorOAuthClientAuthorizationQuery
     return $authorizations;
   }
 
-  private function buildWhereClause($conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
     $where = array();
 
     if ($this->phids) {

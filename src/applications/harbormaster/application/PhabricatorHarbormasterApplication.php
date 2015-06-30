@@ -14,8 +14,8 @@ final class PhabricatorHarbormasterApplication extends PhabricatorApplication {
     return pht('Build/CI');
   }
 
-  public function getIconName() {
-    return 'harbormaster';
+  public function getFontIcon() {
+    return 'fa-ship';
   }
 
   public function getTitleGlyph() {
@@ -77,11 +77,17 @@ final class PhabricatorHarbormasterApplication extends PhabricatorApplication {
           'run/(?P<id>\d+)/' => 'HarbormasterPlanRunController',
           '(?P<id>\d+)/' => 'HarbormasterPlanViewController',
         ),
+        'unit/' => array(
+          '(?P<id>\d+)/' => 'HarbormasterUnitMessagesController',
+        ),
+        'lint/' => array(
+          '(?P<id>\d+)/' => 'HarbormasterLintMessagesController',
+        ),
       ),
     );
   }
 
-  public function getCustomCapabilities() {
+  protected function getCustomCapabilities() {
     return array(
       HarbormasterManagePlansCapability::CAPABILITY => array(
         'caption' => pht('Can create and manage build plans.'),

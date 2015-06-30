@@ -222,6 +222,12 @@ final class PhabricatorDashboardPanelRenderingEngine extends Phobject {
         $header = id(new PHUIActionHeaderView())
           ->setHeaderTitle($panel->getName())
           ->setHeaderColor(PHUIActionHeaderView::HEADER_LIGHTBLUE);
+        $panel_type = $panel->getImplementation();
+        $header = $panel_type->adjustPanelHeader(
+          $this->getViewer(),
+          $panel,
+          $this,
+          $header);
         break;
     }
     return $header;
@@ -240,7 +246,7 @@ final class PhabricatorDashboardPanelRenderingEngine extends Phobject {
     $action_edit = id(new PHUIIconView())
       ->setIconFont('fa-pencil')
       ->setWorkflow(true)
-      ->setHref((string) $edit_uri);
+      ->setHref((string)$edit_uri);
     $header->addAction($action_edit);
 
     if ($dashboard_id) {
@@ -249,12 +255,13 @@ final class PhabricatorDashboardPanelRenderingEngine extends Phobject {
         ->setQueryParam('panelPHID', $panel->getPHID());
       $action_remove = id(new PHUIIconView())
         ->setIconFont('fa-trash-o')
-        ->setHref((string) $uri)
+        ->setHref((string)$uri)
         ->setWorkflow(true);
       $header->addAction($action_remove);
     }
     return $header;
   }
+
 
   /**
    * Detect graph cycles in panels, and deeply nested panels.
@@ -270,9 +277,7 @@ final class PhabricatorDashboardPanelRenderingEngine extends Phobject {
    */
   private function detectRenderingCycle(PhabricatorDashboardPanel $panel) {
     if ($this->parentPanelPHIDs === null) {
-      throw new Exception(
-        pht(
-          'You must call setParentPanelPHIDs() before rendering panels.'));
+      throw new PhutilInvalidStateException('setParentPanelPHIDs');
     }
 
     $max_depth = 4;

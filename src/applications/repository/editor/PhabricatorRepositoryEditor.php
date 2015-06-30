@@ -40,6 +40,10 @@ final class PhabricatorRepositoryEditor
     $types[] = PhabricatorRepositoryTransaction::TYPE_CREDENTIAL;
     $types[] = PhabricatorRepositoryTransaction::TYPE_DANGEROUS;
     $types[] = PhabricatorRepositoryTransaction::TYPE_CLONE_NAME;
+    $types[] = PhabricatorRepositoryTransaction::TYPE_SERVICE;
+    $types[] = PhabricatorRepositoryTransaction::TYPE_SYMBOLS_LANGUAGE;
+    $types[] = PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES;
+    $types[] = PhabricatorRepositoryTransaction::TYPE_STAGING_URI;
 
     $types[] = PhabricatorTransactions::TYPE_EDGE;
     $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
@@ -95,6 +99,14 @@ final class PhabricatorRepositoryEditor
         return $object->shouldAllowDangerousChanges();
       case PhabricatorRepositoryTransaction::TYPE_CLONE_NAME:
         return $object->getDetail('clone-name');
+      case PhabricatorRepositoryTransaction::TYPE_SERVICE:
+        return $object->getAlmanacServicePHID();
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_LANGUAGE:
+        return $object->getSymbolLanguages();
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES:
+        return $object->getSymbolSources();
+      case PhabricatorRepositoryTransaction::TYPE_STAGING_URI:
+        return $object->getDetail('staging-uri');
     }
   }
 
@@ -127,6 +139,10 @@ final class PhabricatorRepositoryEditor
       case PhabricatorRepositoryTransaction::TYPE_CREDENTIAL:
       case PhabricatorRepositoryTransaction::TYPE_DANGEROUS:
       case PhabricatorRepositoryTransaction::TYPE_CLONE_NAME:
+      case PhabricatorRepositoryTransaction::TYPE_SERVICE:
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_LANGUAGE:
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES:
+      case PhabricatorRepositoryTransaction::TYPE_STAGING_URI:
         return $xaction->getNewValue();
       case PhabricatorRepositoryTransaction::TYPE_NOTIFY:
       case PhabricatorRepositoryTransaction::TYPE_AUTOCLOSE:
@@ -198,6 +214,18 @@ final class PhabricatorRepositoryEditor
       case PhabricatorRepositoryTransaction::TYPE_CLONE_NAME:
         $object->setDetail('clone-name', $xaction->getNewValue());
         return;
+      case PhabricatorRepositoryTransaction::TYPE_SERVICE:
+        $object->setAlmanacServicePHID($xaction->getNewValue());
+        return;
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_LANGUAGE:
+        $object->setDetail('symbol-languages', $xaction->getNewValue());
+        return;
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES:
+        $object->setDetail('symbol-sources', $xaction->getNewValue());
+        return;
+      case PhabricatorRepositoryTransaction::TYPE_STAGING_URI:
+        $object->setDetail('staging-uri', $xaction->getNewValue());
+        return;
       case PhabricatorRepositoryTransaction::TYPE_ENCODING:
         // Make sure the encoding is valid by converting to UTF-8. This tests
         // that the user has mbstring installed, and also that they didn't type
@@ -235,7 +263,7 @@ final class PhabricatorRepositoryEditor
 
         $editor = new PhabricatorEdgeEditor();
 
-        $edge_type = PhabricatorEdgeConfig::TYPE_OBJECT_USES_CREDENTIAL;
+        $edge_type = PhabricatorObjectUsesCredentialsEdgeType::EDGECONST;
         $src_phid = $object->getPHID();
 
         if ($old_phid) {
@@ -306,6 +334,10 @@ final class PhabricatorRepositoryEditor
       case PhabricatorRepositoryTransaction::TYPE_CREDENTIAL:
       case PhabricatorRepositoryTransaction::TYPE_DANGEROUS:
       case PhabricatorRepositoryTransaction::TYPE_CLONE_NAME:
+      case PhabricatorRepositoryTransaction::TYPE_SERVICE:
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES:
+      case PhabricatorRepositoryTransaction::TYPE_SYMBOLS_LANGUAGE:
+      case PhabricatorRepositoryTransaction::TYPE_STAGING_URI:
         PhabricatorPolicyFilter::requireCapability(
           $this->requireActor(),
           $object,

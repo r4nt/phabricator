@@ -5,16 +5,11 @@ final class DiffusionRepositoryEditHostingController
 
   private $serve;
 
-  public function willProcessRequest(array $data) {
-    parent::willProcessRequest($data);
-    $this->serve = idx($data, 'serve');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $user = $request->getUser();
     $drequest = $this->diffusionRequest;
     $repository = $drequest->getRepository();
+    $this->serve = $request->getURIData('serve');
 
     $repository = id(new PhabricatorRepositoryQuery())
       ->setViewer($user)
@@ -186,7 +181,7 @@ final class DiffusionRepositoryEditHostingController
           '%s: This repository is hosted elsewhere, so Phabricator can not '.
           'perform writes. This mode will act like "Read Only" for '.
           'repositories hosted elsewhere.',
-          phutil_tag('strong', array(), 'WARNING')),
+          phutil_tag('strong', array(), pht('WARNING'))),
       );
     }
 

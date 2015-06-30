@@ -2,8 +2,7 @@
 
 final class DiffusionRepositoryNewController extends DiffusionController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
 
     $this->requireApplicationCapability(
@@ -54,11 +53,11 @@ final class DiffusionRepositoryNewController extends DiffusionController {
             'import',
             pht('Import an Existing External Repository'),
             pht(
-              'Import a repository hosted somewhere else, like GitHub, '.
-              'Bitbucket, or your organization\'s existing servers. '.
-              'Phabricator will read changes from the repository but will '.
-              'not host or manage it. The authoritative master version of '.
-              'the repository will stay where it is now.')))
+              "Import a repository hosted somewhere else, like GitHub, ".
+              "Bitbucket, or your organization's existing servers. ".
+              "Phabricator will read changes from the repository but will ".
+              "not host or manage it. The authoritative master version of ".
+              "the repository will stay where it is now.")))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue(pht('Continue'))
