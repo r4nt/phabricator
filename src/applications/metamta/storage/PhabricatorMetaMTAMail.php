@@ -567,7 +567,7 @@ final class PhabricatorMetaMTAMail
                   $add_re);
               }
 
-              if ($add_re) {
+              if ($add_re && !$is_first) {
                 $subject[] = 'Re:';
               }
             }
