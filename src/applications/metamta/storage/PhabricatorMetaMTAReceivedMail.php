@@ -308,6 +308,8 @@ final class PhabricatorMetaMTAReceivedMail extends PhabricatorMetaMTADAO {
   }
 
   private function sendExceptionMail(Exception $ex) {
+    return;
+
     $from = $this->getHeader('from');
     if (!strlen($from)) {
       return;
