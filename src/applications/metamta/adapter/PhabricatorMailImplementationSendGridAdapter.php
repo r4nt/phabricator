@@ -51,6 +51,10 @@ final class PhabricatorMailImplementationSendGridAdapter
     return $this;
   }
 
+  public function setSender($sender) {
+    $this->addHeader('List-Id', $sender);
+  }
+
   public function setBody($body) {
     $this->params['body'] = $body;
     return $this;

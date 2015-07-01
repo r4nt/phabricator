@@ -107,6 +107,11 @@ final class PhabricatorMailImplementationPHPMailerAdapter
     return $this;
   }
 
+  public function setSender($sender) {
+    $this->addHeader('List-Id', $sender);
+    return $this;
+  }
+
   public function setSubject($subject) {
     $this->mailer->Subject = $subject;
     return $this;

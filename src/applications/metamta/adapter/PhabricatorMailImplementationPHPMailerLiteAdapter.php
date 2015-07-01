@@ -36,6 +36,11 @@ class PhabricatorMailImplementationPHPMailerLiteAdapter
     return $this;
   }
 
+  public function setSender($sender) {
+    $this->mailer->Sender = $sender;
+    $this->mailer->AddCustomHeader('List-Id:' . $sender);
+  }
+
   public function addReplyTo($email, $name = '') {
     $this->mailer->AddReplyTo($email, $name);
     return $this;
