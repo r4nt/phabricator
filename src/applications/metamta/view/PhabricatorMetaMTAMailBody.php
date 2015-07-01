@@ -115,20 +115,29 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
   }
 
   public function addPlaintextSection($header, $text) {
-    $this->sections[] = $header."\n".$this->indent($text);
+    if (empty($header)) {
+      $this->sections[] = $text;
+    } else {
+      $this->sections[] = $header."\n".$this->indent($text);
+    }
     return $this;
   }
 
   public function addHTMLSection($header, $html_fragment) {
-    $this->htmlSections[] = array(
-      phutil_tag(
-        'div',
-        array(),
-        array(
-          phutil_tag('strong', array(), $header),
-          phutil_tag('div', array(), $html_fragment),
-        )),
-    );
+    if (empty($header)) {
+      $this->htmlSections[] = array(
+        phutil_tag('div', array(), $html_fragment));
+    } else {
+      $this->htmlSections[] = array(
+        phutil_tag(
+          'div',
+          array(),
+          array(
+            phutil_tag('strong', array(), $header),
+            phutil_tag('div', array(), $html_fragment),
+          )),
+      );
+    }
     return $this;
   }
 
