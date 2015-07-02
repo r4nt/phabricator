@@ -2600,7 +2600,9 @@ abstract class PhabricatorApplicationTransactionEditor
         $comments[] = $comment;
       }
     }
-    $body->addRawSection(implode("\n", $headers));
+    if (PhabricatorEnv::getEnvConfig('metamta.email-headers')) {
+      $body->addRawSection(implode("\n", $headers));
+    }
 
     foreach ($comments as $comment) {
       $body->addRemarkupSection($comment);

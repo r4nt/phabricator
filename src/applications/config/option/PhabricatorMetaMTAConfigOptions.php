@@ -116,6 +116,11 @@ emails.
 EODOC
 ));
 
+    $email_headers_description = $this->deformat(pht(<<<EODOC
+You can disable printing headers in emails if users prefer smaller emails.
+EODOC
+));
+
     $re_prefix_description = $this->deformat(pht(<<<EODOC
 Mail.app on OS X Lion won't respect threading headers unless the subject is
 prefixed with "Re:". If you enable this option, Phabricator will add "Re:" to
@@ -276,6 +281,14 @@ EODOC
           ))
         ->setSummary(pht('Show email preferences link in email.'))
         ->setDescription($email_preferences_description),
+      $this->newOption('metamta.email-headers', 'bool', true)
+        ->setBoolOptions(
+          array(
+            pht('Print headers in emails'),
+            pht('Do not print headers in emails'),
+          ))
+        ->setSummary(pht('Print headers in emails.'))
+        ->setDescription($email_headers_description),
       $this->newOption('metamta.re-prefix', 'bool', false)
         ->setBoolOptions(
           array(
