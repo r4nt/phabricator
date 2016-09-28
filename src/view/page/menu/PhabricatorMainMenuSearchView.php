@@ -24,7 +24,7 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
   }
 
   public function render() {
-    $user = $this->user;
+    $viewer = $this->getViewer();
 
     $target_id = celerity_generate_unique_node_id();
     $search_id = $this->getID();
@@ -50,7 +50,7 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
       '');
 
     $search_datasource = new PhabricatorSearchDatasource();
-    $scope_key = PhabricatorUserPreferences::PREFERENCE_SEARCH_SCOPE;
+    $scope_key = PhabricatorSearchScopeSetting::SETTINGKEY;
 
     Javelin::initBehavior(
       'phabricator-search-typeahead',
@@ -86,7 +86,7 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
     $selector = $this->buildModeSelector($selector_id, $application_id);
 
     $form = phabricator_form(
-      $user,
+      $viewer,
       array(
         'action' => '/search/',
         'method' => 'POST',
@@ -109,7 +109,7 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
   }
 
   private function buildModeSelector($selector_id, $application_id) {
-    $viewer = $this->getUser();
+    $viewer = $this->getViewer();
 
     $items = array();
     $items[] = array(
@@ -128,7 +128,7 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
     if ($application) {
       $application_value = get_class($application);
       if ($application->getApplicationSearchDocumentTypes()) {
-        $application_icon = $application->getFontIcon();
+        $application_icon = $application->getIcon();
       }
     }
 
@@ -177,10 +177,8 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
       'href' => PhabricatorEnv::getDoclink('Search User Guide'),
     );
 
-    $scope_key = PhabricatorUserPreferences::PREFERENCE_SEARCH_SCOPE;
-    $current_value = $viewer->loadPreferences()->getPreference(
-      $scope_key,
-      'all');
+    $scope_key = PhabricatorSearchScopeSetting::SETTINGKEY;
+    $current_value = $viewer->getUserSetting($scope_key);
 
     $current_icon = 'fa-globe';
     foreach ($items as $item) {
@@ -203,7 +201,7 @@ final class PhabricatorMainMenuSearchView extends AphrontView {
       ->setIcon(
         id(new PHUIIconView())
           ->addSigil('global-search-dropdown-icon')
-          ->setIconFont($current_icon))
+          ->setIcon($current_icon))
       ->setDropdown(true);
 
     $input = javelin_tag(

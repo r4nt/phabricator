@@ -224,36 +224,11 @@ abstract class PhabricatorFileStorageEngine extends Phobject {
    * @task load
    */
   public static function loadAllEngines() {
-    static $engines;
-
-    if ($engines === null) {
-      $objects = id(new PhutilSymbolLoader())
-        ->setAncestorClass(__CLASS__)
-        ->loadObjects();
-
-      $map = array();
-      foreach ($objects as $engine) {
-        $key = $engine->getEngineIdentifier();
-        if (empty($map[$key])) {
-          $map[$key] = $engine;
-        } else {
-          throw new Exception(
-            pht(
-              'Storage engines "%s" and "%s" have the same engine '.
-              'identifier "%s". Each storage engine must have a unique '.
-              'identifier.',
-              get_class($engine),
-              get_class($map[$key]),
-              $key));
-        }
-      }
-
-      $map = msort($map, 'getEnginePriority');
-
-      $engines = $map;
-    }
-
-    return $engines;
+    return id(new PhutilClassMapQuery())
+      ->setAncestorClass(__CLASS__)
+      ->setUniqueMethod('getEngineIdentifier')
+      ->setSortMethod('getEnginePriority')
+      ->execute();
   }
 
 
@@ -350,10 +325,10 @@ abstract class PhabricatorFileStorageEngine extends Phobject {
     return $engine->getChunkSize();
   }
 
-  public function getFileDataIterator(PhabricatorFile $file, $begin, $end) {
+  public function getRawFileDataIterator(PhabricatorFile $file, $begin, $end) {
     // The default implementation is trivial and just loads the entire file
     // upfront.
-    $data = $file->loadFileData();
+    $data = $this->readFile($file->getStorageHandle());
 
     if ($begin !== null && $end !== null) {
       $data = substr($data, $begin, ($end - $begin));

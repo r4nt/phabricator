@@ -37,6 +37,7 @@ abstract class PhabricatorTypeaheadCompositeDatasource
     }
 
     $stack = $this->getFunctionStack();
+    $is_browse = $this->getIsBrowse();
 
     $results = array();
     foreach ($this->getUsableDatasources() as $source) {
@@ -68,6 +69,10 @@ abstract class PhabricatorTypeaheadCompositeDatasource
 
       if ($limit) {
         $source->setLimit($offset + $limit);
+      }
+
+      if ($is_browse) {
+        $source->setIsBrowse(true);
       }
 
       $source_results = $source->loadResults();
@@ -140,6 +145,14 @@ abstract class PhabricatorTypeaheadCompositeDatasource
     }
 
     return parent::canEvaluateFunction($function);
+  }
+
+  protected function evaluateValues(array $values) {
+    foreach ($this->getUsableDatasources() as $source) {
+      $values = $source->evaluateValues($values);
+    }
+
+    return parent::evaluateValues($values);
   }
 
   protected function evaluateFunction($function, array $argv) {

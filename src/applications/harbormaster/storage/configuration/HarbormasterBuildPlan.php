@@ -7,11 +7,15 @@ final class HarbormasterBuildPlan extends HarbormasterDAO
   implements
     PhabricatorApplicationTransactionInterface,
     PhabricatorPolicyInterface,
-    PhabricatorSubscribableInterface {
+    PhabricatorSubscribableInterface,
+    PhabricatorNgramsInterface,
+    PhabricatorProjectInterface {
 
   protected $name;
   protected $planStatus;
   protected $planAutoKey;
+  protected $viewPolicy;
+  protected $editPolicy;
 
   const STATUS_ACTIVE   = 'active';
   const STATUS_DISABLED = 'disabled';
@@ -19,10 +23,22 @@ final class HarbormasterBuildPlan extends HarbormasterDAO
   private $buildSteps = self::ATTACHABLE;
 
   public static function initializeNewBuildPlan(PhabricatorUser $actor) {
+    $app = id(new PhabricatorApplicationQuery())
+      ->setViewer($actor)
+      ->withClasses(array('PhabricatorHarbormasterApplication'))
+      ->executeOne();
+
+    $view_policy = $app->getPolicy(
+      HarbormasterBuildPlanDefaultViewCapability::CAPABILITY);
+    $edit_policy = $app->getPolicy(
+      HarbormasterBuildPlanDefaultEditCapability::CAPABILITY);
+
     return id(new HarbormasterBuildPlan())
       ->setName('')
       ->setPlanStatus(self::STATUS_ACTIVE)
-      ->attachBuildSteps(array());
+      ->attachBuildSteps(array())
+      ->setViewPolicy($view_policy)
+      ->setEditPolicy($edit_policy);
   }
 
   protected function getConfiguration() {
@@ -85,6 +101,15 @@ final class HarbormasterBuildPlan extends HarbormasterDAO
   }
 
 
+  public function canRunManually() {
+    if ($this->isAutoplan()) {
+      return false;
+    }
+
+    return true;
+  }
+
+
   public function getName() {
     $autoplan = $this->getAutoplan();
     if ($autoplan) {
@@ -100,14 +125,6 @@ final class HarbormasterBuildPlan extends HarbormasterDAO
 
   public function isAutomaticallySubscribed($phid) {
     return false;
-  }
-
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
   }
 
 
@@ -147,16 +164,15 @@ final class HarbormasterBuildPlan extends HarbormasterDAO
   public function getPolicy($capability) {
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
-        return PhabricatorPolicies::getMostOpenPolicy();
+        if ($this->isAutoplan()) {
+          return PhabricatorPolicies::getMostOpenPolicy();
+        }
+        return $this->getViewPolicy();
       case PhabricatorPolicyCapability::CAN_EDIT:
-        // NOTE: In practice, this policy is always limited by the "Mangage
-        // Build Plans" policy.
-
         if ($this->isAutoplan()) {
           return PhabricatorPolicies::POLICY_NOONE;
         }
-
-        return PhabricatorPolicies::getMostOpenPolicy();
+        return $this->getEditPolicy();
     }
   }
 
@@ -178,6 +194,17 @@ final class HarbormasterBuildPlan extends HarbormasterDAO
     }
 
     return $messages;
+  }
+
+
+/* -(  PhabricatorNgramsInterface  )----------------------------------------- */
+
+
+  public function newNgrams() {
+    return array(
+      id(new HarbormasterBuildPlanNameNgrams())
+        ->setValue($this->getName()),
+    );
   }
 
 }

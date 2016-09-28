@@ -7,6 +7,7 @@ final class PhabricatorWorkerArchiveTaskQuery
   private $dateModifiedSince;
   private $dateCreatedBefore;
   private $objectPHIDs;
+  private $classNames;
   private $limit;
 
   public function withIDs(array $ids) {
@@ -29,6 +30,11 @@ final class PhabricatorWorkerArchiveTaskQuery
     return $this;
   }
 
+  public function withClassNames(array $names) {
+    $this->classNames = $names;
+    return $this;
+  }
+
   public function setLimit($limit) {
     $this->limit = $limit;
     return $this;
@@ -41,9 +47,10 @@ final class PhabricatorWorkerArchiveTaskQuery
 
     $rows = queryfx_all(
       $conn_r,
-      'SELECT * FROM %T %Q ORDER BY id DESC %Q',
+      'SELECT * FROM %T %Q %Q %Q',
       $task_table->getTableName(),
       $this->buildWhereClause($conn_r),
+      $this->buildOrderClause($conn_r),
       $this->buildLimitClause($conn_r));
 
     return $task_table->loadAllFromArray($rows);
@@ -66,21 +73,42 @@ final class PhabricatorWorkerArchiveTaskQuery
         $this->objectPHIDs);
     }
 
-    if ($this->dateModifiedSince) {
+    if ($this->dateModifiedSince !== null) {
       $where[] = qsprintf(
         $conn_r,
         'dateModified > %d',
         $this->dateModifiedSince);
     }
 
-    if ($this->dateCreatedBefore) {
+    if ($this->dateCreatedBefore !== null) {
       $where[] = qsprintf(
         $conn_r,
         'dateCreated < %d',
         $this->dateCreatedBefore);
     }
 
+    if ($this->classNames !== null) {
+      $where[] = qsprintf(
+        $conn_r,
+        'taskClass IN (%Ls)',
+        $this->classNames);
+    }
+
     return $this->formatWhereClause($where);
+  }
+
+  private function buildOrderClause(AphrontDatabaseConnection $conn_r) {
+    // NOTE: The garbage collector executes this query with a date constraint,
+    // and the query is inefficient if we don't use the same key for ordering.
+    // See T9808 for discussion.
+
+    if ($this->dateCreatedBefore) {
+      return qsprintf($conn_r, 'ORDER BY dateCreated DESC, id DESC');
+    } else if ($this->dateModifiedSince) {
+      return qsprintf($conn_r, 'ORDER BY dateModified DESC, id DESC');
+    } else {
+      return qsprintf($conn_r, 'ORDER BY id DESC');
+    }
   }
 
   private function buildLimitClause(AphrontDatabaseConnection $conn_r) {

@@ -12,6 +12,7 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
   private $limit;
   private $parameters = array();
   private $functionStack = array();
+  private $isBrowse;
 
   public function setLimit($limit) {
     $this->limit = $limit;
@@ -71,6 +72,15 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
     return idx($this->parameters, $name, $default);
   }
 
+  public function setIsBrowse($is_browse) {
+    $this->isBrowse = $is_browse;
+    return $this;
+  }
+
+  public function getIsBrowse() {
+    return $this->isBrowse;
+  }
+
   public function getDatasourceURI() {
     $uri = new PhutilURI('/typeahead/class/'.get_class($this).'/');
     $uri->setQueryParams($this->parameters);
@@ -107,7 +117,7 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
       return array();
     }
 
-    $tokens = preg_split('/\s+|[-\[\]]/', $string);
+    $tokens = preg_split('/\s+|[-\[\]]/u', $string);
     return array_unique($tokens);
   }
 
@@ -199,7 +209,8 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
   protected function newFunctionResult() {
     return id(new PhabricatorTypeaheadResult())
       ->setTokenType(PhabricatorTypeaheadTokenView::TYPE_FUNCTION)
-      ->setIcon('fa-asterisk');
+      ->setIcon('fa-asterisk')
+      ->addAttribute(pht('Function'));
   }
 
   public function newInvalidToken($name) {
@@ -334,6 +345,14 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
   /**
    * @task functions
    */
+  protected function evaluateValues(array $values) {
+    return $values;
+  }
+
+
+  /**
+   * @task functions
+   */
   public function evaluateTokens(array $tokens) {
     $results = array();
     $evaluate = array();
@@ -344,6 +363,8 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
         $evaluate[] = $token;
       }
     }
+
+    $results = $this->evaluateValues($results);
 
     foreach ($evaluate as $function) {
       $function = self::parseFunction($function);
@@ -456,6 +477,27 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
     }
 
     return $tokens;
+  }
+
+  public function getWireTokens(array $values) {
+    // TODO: This is a bit hacky for now: we're sort of generating wire
+    // results, rendering them, then reverting them back to wire results. This
+    // is pretty silly. It would probably be much cleaner to make
+    // renderTokens() call this method instead, then render from the result
+    // structure.
+    $rendered = $this->renderTokens($values);
+
+    $tokens = array();
+    foreach ($rendered as $key => $render) {
+      $tokens[$key] = id(new PhabricatorTypeaheadResult())
+        ->setPHID($render->getKey())
+        ->setIcon($render->getIcon())
+        ->setColor($render->getColor())
+        ->setDisplayName($render->getValue())
+        ->setTokenType($render->getTokenType());
+    }
+
+    return mpull($tokens, 'getWireFormat', 'getPHID');
   }
 
 }

@@ -7,7 +7,7 @@ final class PhabricatorRepositoryManagementPullWorkflow
     $this
       ->setName('pull')
       ->setExamples('**pull** __repository__ ...')
-      ->setSynopsis(pht('Pull __repository__, named by callsign.'))
+      ->setSynopsis(pht('Pull __repository__.'))
       ->setArguments(
         array(
           array(
@@ -22,16 +22,20 @@ final class PhabricatorRepositoryManagementPullWorkflow
   }
 
   public function execute(PhutilArgumentParser $args) {
-    $repos = $this->loadRepositories($args, 'repos');
+    $repos = $this->loadLocalRepositories($args, 'repos');
 
     if (!$repos) {
       throw new PhutilArgumentUsageException(
-        pht('Specify one or more repositories to pull, by callsign.'));
+        pht('Specify one or more repositories to pull.'));
     }
 
     $console = PhutilConsole::getConsole();
     foreach ($repos as $repo) {
-      $console->writeOut("%s\n", pht("Pulling '%s'...", $repo->getCallsign()));
+      $console->writeOut(
+        "%s\n",
+        pht(
+          'Pulling "%s"...',
+          $repo->getDisplayName()));
 
       id(new PhabricatorRepositoryPullEngine())
         ->setRepository($repo)

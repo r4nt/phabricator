@@ -38,7 +38,7 @@ abstract class DiffusionQueryConduitAPIMethod
     return $this->defineCustomErrorTypes() +
       array(
         'ERR-UNKNOWN-REPOSITORY' =>
-          pht('There is no repository with that callsign.'),
+          pht('There is no matching repository.'),
         'ERR-UNKNOWN-VCS-TYPE' =>
           pht('Unknown repository VCS type.'),
         'ERR-UNSUPPORTED-VCS' =>
@@ -56,7 +56,8 @@ abstract class DiffusionQueryConduitAPIMethod
   final protected function defineParamTypes() {
     return $this->defineCustomParamTypes() +
       array(
-        'callsign' => 'required string',
+        'callsign' => 'optional string (deprecated)',
+        'repository' => 'optional string',
         'branch' => 'optional string',
       );
   }
@@ -95,14 +96,26 @@ abstract class DiffusionQueryConduitAPIMethod
    * should occur after @{method:getResult}, like formatting a timestamp.
    */
   final protected function execute(ConduitAPIRequest $request) {
+    $identifier = $request->getValue('repository');
+    if ($identifier === null) {
+      $identifier = $request->getValue('callsign');
+    }
+
     $drequest = DiffusionRequest::newFromDictionary(
       array(
         'user' => $request->getUser(),
-        'callsign' => $request->getValue('callsign'),
+        'repository' => $identifier,
         'branch' => $request->getValue('branch'),
         'path' => $request->getValue('path'),
         'commit' => $request->getValue('commit'),
       ));
+
+    if (!$drequest) {
+      throw new Exception(
+        pht(
+          'Repository "%s" is not a valid repository.',
+          $identifier));
+    }
 
     // Figure out whether we're going to handle this request on this device,
     // or proxy it to another node in the cluster.
@@ -111,10 +124,11 @@ abstract class DiffusionQueryConduitAPIMethod
     // to prevent infinite recursion.
 
     $is_cluster_request = $request->getIsClusterRequest();
+    $viewer = $request->getUser();
 
     $repository = $drequest->getRepository();
     $client = $repository->newConduitClient(
-      $request->getUser(),
+      $viewer,
       $is_cluster_request);
     if ($client) {
       // We're proxying, so just make an intracluster call.
@@ -131,6 +145,15 @@ abstract class DiffusionQueryConduitAPIMethod
       $drequest->setIsClusterRequest($is_cluster_request);
 
       $this->setDiffusionRequest($drequest);
+
+      // TODO: Allow web UI queries opt out of this if they don't care about
+      // fetching the most up-to-date data? Synchronization can be slow, and a
+      // lot of web reads are probably fine if they're a few seconds out of
+      // date.
+      id(new DiffusionRepositoryClusterEngine())
+        ->setViewer($viewer)
+        ->setRepository($repository)
+        ->synchronizeWorkingCopyBeforeRead();
 
       return $this->getResult($request);
     }

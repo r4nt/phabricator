@@ -9,13 +9,11 @@ final class PhabricatorDashboardPanelListController
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->queryKey = idx($data, 'queryKey');
-  }
+  public function handleRequest(AphrontRequest $request) {
+    $query_key = $request->getURIData('queryKey');
 
-  public function processRequest() {
     $controller = id(new PhabricatorApplicationSearchController())
-      ->setQueryKey($this->queryKey)
+      ->setQueryKey($query_key)
       ->setSearchEngine(new PhabricatorDashboardPanelSearchEngine())
       ->setNavigation($this->buildSideNavView());
     return $this->delegateToController($controller);
@@ -48,6 +46,25 @@ final class PhabricatorDashboardPanelListController
         ->setHref($this->getApplicationURI().'panel/create/'));
 
     return $crumbs;
+  }
+
+  protected function getNewUserBody() {
+    $create_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Create a Panel'))
+      ->setHref('/dashboard/panel/create/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Build individual panels to display on your homepage dashboard.'))
+      ->addAction($create_button);
+
+      return $view;
   }
 
 }

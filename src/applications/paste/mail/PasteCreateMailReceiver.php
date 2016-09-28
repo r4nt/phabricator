@@ -21,32 +21,19 @@ final class PasteCreateMailReceiver extends PhabricatorMailReceiver {
       $title = pht('Email Paste');
     }
 
-    $file = PhabricatorPasteEditor::initializeFileForPaste(
-      $sender,
-      $title,
-      $mail->getCleanTextBody());
-
     $xactions = array();
 
     $xactions[] = id(new PhabricatorPasteTransaction())
-      ->setTransactionType(PhabricatorPasteTransaction::TYPE_CONTENT)
-      ->setNewValue($file->getPHID());
+      ->setTransactionType(PhabricatorPasteContentTransaction::TRANSACTIONTYPE)
+      ->setNewValue($mail->getCleanTextBody());
 
     $xactions[] = id(new PhabricatorPasteTransaction())
-      ->setTransactionType(PhabricatorPasteTransaction::TYPE_TITLE)
+      ->setTransactionType(PhabricatorPasteTitleTransaction::TRANSACTIONTYPE)
       ->setNewValue($title);
-
-    $xactions[] = id(new PhabricatorPasteTransaction())
-      ->setTransactionType(PhabricatorPasteTransaction::TYPE_LANGUAGE)
-      ->setNewValue(''); // auto-detect
 
     $paste = PhabricatorPaste::initializeNewPaste($sender);
 
-    $content_source = PhabricatorContentSource::newForSource(
-      PhabricatorContentSource::SOURCE_EMAIL,
-      array(
-        'id' => $mail->getID(),
-      ));
+    $content_source = $mail->newContentSource();
 
     $editor = id(new PhabricatorPasteEditor())
       ->setActor($sender)
@@ -73,5 +60,6 @@ final class PasteCreateMailReceiver extends PhabricatorMailReceiver {
       ->setBody($body->render())
       ->saveAndSend();
   }
+
 
 }

@@ -8,6 +8,7 @@ final class ConpherenceThread extends ConpherenceDAO
     PhabricatorDestructibleInterface {
 
   protected $title;
+  protected $topic;
   protected $imagePHIDs = array();
   protected $messageCount;
   protected $recentParticipantPHIDs = array();
@@ -19,8 +20,6 @@ final class ConpherenceThread extends ConpherenceDAO
   private $participants = self::ATTACHABLE;
   private $transactions = self::ATTACHABLE;
   private $handles = self::ATTACHABLE;
-  private $filePHIDs = self::ATTACHABLE;
-  private $widgetData = self::ATTACHABLE;
   private $images = self::ATTACHABLE;
 
   public static function initializeNewRoom(PhabricatorUser $sender) {
@@ -29,8 +28,8 @@ final class ConpherenceThread extends ConpherenceDAO
     return id(new ConpherenceThread())
       ->setMessageCount(0)
       ->setTitle('')
+      ->setTopic('')
       ->attachParticipants(array())
-      ->attachFilePHIDs(array())
       ->attachImages(array())
       ->setViewPolicy($default_policy)
       ->setEditPolicy($default_policy)
@@ -46,6 +45,7 @@ final class ConpherenceThread extends ConpherenceDAO
       ),
       self::CONFIG_COLUMN_SCHEMA => array(
         'title' => 'text255?',
+        'topic' => 'text255',
         'messageCount' => 'uint64',
         'mailKey' => 'text20',
         'joinPolicy' => 'policy',
@@ -154,22 +154,6 @@ final class ConpherenceThread extends ConpherenceDAO
       $this->getTransactions(),
       $length - $begin - $amount,
       $amount);
-  }
-
-  public function attachFilePHIDs(array $file_phids) {
-    $this->filePHIDs = $file_phids;
-    return $this;
-  }
-  public function getFilePHIDs() {
-    return $this->assertAttached($this->filePHIDs);
-  }
-
-  public function attachWidgetData(array $widget_data) {
-    $this->widgetData = $widget_data;
-    return $this;
-  }
-  public function getWidgetData() {
-    return $this->assertAttached($this->widgetData);
   }
 
   public function loadImageURI($size) {
@@ -342,9 +326,11 @@ final class ConpherenceThread extends ConpherenceDAO
     $unread_count = $this->getMessageCount() - $user_seen_count;
 
     $title = $this->getDisplayTitle($viewer);
+    $topic = $this->getTopic();
 
     return array(
       'title' => $title,
+      'topic' => $topic,
       'subtitle' => $subtitle,
       'unread_count' => $unread_count,
       'epoch' => $this->getDateModified(),

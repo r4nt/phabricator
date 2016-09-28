@@ -26,23 +26,21 @@ final class PhabricatorFilesApplicationStorageEnginePanel
     $rows = array();
     $rowc = array();
     foreach ($engines as $key => $engine) {
-      $limited = $no;
+      if ($engine->isTestEngine()) {
+        continue;
+      }
+
       $limit = null;
       if ($engine->hasFilesizeLimit()) {
-        $limited = $yes;
         $limit = phutil_format_bytes($engine->getFilesizeLimit());
+      } else {
+        $limit = pht('Unlimited');
       }
 
       if ($engine->canWriteFiles()) {
         $writable = $yes;
       } else {
         $writable = $no;
-      }
-
-      if ($engine->isTestEngine()) {
-        $test = $yes;
-      } else {
-        $test = $no;
       }
 
       if (isset($writable_engines[$key]) || isset($chunk_engines[$key])) {
@@ -54,9 +52,7 @@ final class PhabricatorFilesApplicationStorageEnginePanel
       $rows[] = array(
         $key,
         get_class($engine),
-        $test,
         $writable,
-        $limited,
         $limit,
       );
     }
@@ -67,9 +63,7 @@ final class PhabricatorFilesApplicationStorageEnginePanel
         array(
           pht('Key'),
           pht('Class'),
-          pht('Unit Test'),
           pht('Writable'),
-          pht('Has Limit'),
           pht('Limit'),
         ))
       ->setRowClasses($rowc)
@@ -78,14 +72,12 @@ final class PhabricatorFilesApplicationStorageEnginePanel
           '',
           'wide',
           '',
-          '',
-          '',
           'n',
         ));
 
     $box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Storage Engines'))
-      ->appendChild($table);
+      ->setTable($table);
 
     return $box;
   }

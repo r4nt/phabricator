@@ -3,6 +3,10 @@
 abstract class PhabricatorRepositoryCommitChangeParserWorker
   extends PhabricatorRepositoryCommitParserWorker {
 
+  protected function getImportStepFlag() {
+    return PhabricatorRepositoryCommit::IMPORTED_CHANGE;
+  }
+
   public function getRequiredLeaseTime() {
     // It can take a very long time to parse commits; some commits in the
     // Facebook repository affect many millions of paths. Acquire 24h leases.
@@ -17,19 +21,26 @@ abstract class PhabricatorRepositoryCommitChangeParserWorker
     PhabricatorRepository $repository,
     PhabricatorRepositoryCommit $commit) {
 
-    $identifier = $commit->getCommitIdentifier();
-    $callsign = $repository->getCallsign();
-    $full_name = 'r'.$callsign.$identifier;
+    $this->log("%s\n", pht('Parsing "%s"...', $commit->getMonogram()));
 
-    $this->log("%s\n", pht('Parsing %s...', $full_name));
-    if ($this->isBadCommit($full_name)) {
-      $this->log(pht('This commit is marked bad!'));
+    $hint = $this->loadCommitHint($commit);
+    if ($hint && $hint->isUnreadable()) {
+      $this->log(
+        pht(
+          'This commit is marked as unreadable, so changes will not be '.
+          'parsed.'));
       return;
     }
 
-    $results = $this->parseCommitChanges($repository, $commit);
-    if ($results) {
-      $this->writeCommitChanges($repository, $commit, $results);
+    if (!$this->shouldSkipImportStep()) {
+      $results = $this->parseCommitChanges($repository, $commit);
+      if ($results) {
+        $this->writeCommitChanges($repository, $commit, $results);
+      }
+
+      $commit->writeImportStatusFlag($this->getImportStepFlag());
+
+      PhabricatorSearchWorker::queueDocumentForIndexing($commit->getPHID());
     }
 
     $this->finishParse();
@@ -89,13 +100,6 @@ abstract class PhabricatorRepositoryCommitChangeParserWorker
 
   protected function finishParse() {
     $commit = $this->commit;
-
-    $commit->writeImportStatusFlag(
-      PhabricatorRepositoryCommit::IMPORTED_CHANGE);
-
-    id(new PhabricatorSearchIndexer())
-      ->queueDocumentForIndexing($commit->getPHID());
-
     if ($this->shouldQueueFollowupTasks()) {
       $this->queueTask(
         'PhabricatorRepositoryCommitOwnersWorker',

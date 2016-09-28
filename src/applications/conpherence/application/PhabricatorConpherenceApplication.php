@@ -14,7 +14,7 @@ final class PhabricatorConpherenceApplication extends PhabricatorApplication {
     return pht('Chat with Others');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-comments';
   }
 
@@ -25,12 +25,6 @@ final class PhabricatorConpherenceApplication extends PhabricatorApplication {
   public function getRemarkupRules() {
     return array(
       new ConpherenceThreadRemarkupRule(),
-    );
-  }
-
-  public function getEventListeners() {
-    return array(
-      new ConpherenceHovercardEventListener(),
     );
   }
 
@@ -48,23 +42,10 @@ final class PhabricatorConpherenceApplication extends PhabricatorApplication {
         'search/(?:query/(?P<queryKey>[^/]+)/)?'
            => 'ConpherenceRoomListController',
         'panel/'                   => 'ConpherenceNotificationPanelController',
-        'widget/(?P<id>[1-9]\d*)/' => 'ConpherenceWidgetController',
+        'participant/(?P<id>[1-9]\d*)/' => 'ConpherenceParticipantController',
         'update/(?P<id>[1-9]\d*)/' => 'ConpherenceUpdateController',
       ),
     );
-  }
-
-  public function getQuickCreateItems(PhabricatorUser $viewer) {
-    $items = array();
-
-    $item = id(new PHUIListItemView())
-      ->setName(pht('Conpherence Room'))
-      ->setIcon('fa-comments')
-      ->setWorkflow(true)
-      ->setHref($this->getBaseURI().'new/');
-    $items[] = $item;
-
-    return $items;
   }
 
   public function getQuicksandURIPatternBlacklist() {

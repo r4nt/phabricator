@@ -14,6 +14,7 @@ final class PhabricatorAuthQueryPublicKeysConduitAPIMethod
   protected function defineParamTypes() {
     return array(
       'ids' => 'optional list<id>',
+      'phids' => 'optional list<phid>',
       'objectPHIDs' => 'optional list<phid>',
       'keys' => 'optional list<string>',
     ) + self::getPagerParamTypes();
@@ -27,11 +28,17 @@ final class PhabricatorAuthQueryPublicKeysConduitAPIMethod
     $viewer = $request->getUser();
 
     $query = id(new PhabricatorAuthSSHKeyQuery())
-      ->setViewer($viewer);
+      ->setViewer($viewer)
+      ->withIsActive(true);
 
     $ids = $request->getValue('ids');
     if ($ids !== null) {
       $query->withIDs($ids);
+    }
+
+    $phids = $request->getValue('phids');
+    if ($phids !== null) {
+      $query->withPHIDs($phids);
     }
 
     $object_phids = $request->getValue('objectPHIDs');
@@ -57,6 +64,7 @@ final class PhabricatorAuthQueryPublicKeysConduitAPIMethod
       $data[] = array(
         'id' => $public_key->getID(),
         'name' => $public_key->getName(),
+        'phid' => $public_key->getPHID(),
         'objectPHID' => $public_key->getObjectPHID(),
         'isTrusted' => (bool)$public_key->getIsTrusted(),
         'key' => $public_key->getEntireKey(),

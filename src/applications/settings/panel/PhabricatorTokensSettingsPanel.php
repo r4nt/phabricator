@@ -10,12 +10,8 @@ final class PhabricatorTokensSettingsPanel extends PhabricatorSettingsPanel {
     return pht('Temporary Tokens');
   }
 
-  public function getPanelGroup() {
-    return pht('Sessions and Logs');
-  }
-
-  public function isEnabled() {
-    return true;
+  public function getPanelGroupKey() {
+    return PhabricatorSettingsLogsPanelGroup::PANELGROUPKEY;
   }
 
   public function processRequest(AphrontRequest $request) {
@@ -23,7 +19,7 @@ final class PhabricatorTokensSettingsPanel extends PhabricatorSettingsPanel {
 
     $tokens = id(new PhabricatorAuthTemporaryTokenQuery())
       ->setViewer($viewer)
-      ->withObjectPHIDs(array($viewer->getPHID()))
+      ->withTokenResources(array($viewer->getPHID()))
       ->execute();
 
     $rows = array();
@@ -75,15 +71,12 @@ final class PhabricatorTokensSettingsPanel extends PhabricatorSettingsPanel {
         'action',
       ));
 
-
-    $terminate_icon = id(new PHUIIconView())
-      ->setIconFont('fa-exclamation-triangle');
     $terminate_button = id(new PHUIButtonView())
       ->setText(pht('Revoke All'))
       ->setHref('/auth/token/revoke/all/')
       ->setTag('a')
       ->setWorkflow(true)
-      ->setIcon($terminate_icon);
+      ->setIcon('fa-exclamation-triangle');
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Temporary Tokens'))
@@ -91,7 +84,7 @@ final class PhabricatorTokensSettingsPanel extends PhabricatorSettingsPanel {
 
     $panel = id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setTable($table);
 
     return $panel;
   }

@@ -38,6 +38,11 @@ final class PhabricatorRepositorySearchEngine
         ->setLabel(pht('Types'))
         ->setKey('types')
         ->setOptions(PhabricatorRepositoryType::getAllRepositoryTypes()),
+      id(new PhabricatorSearchStringListField())
+        ->setLabel(pht('URIs'))
+        ->setKey('uris')
+        ->setDescription(
+          pht('Search for repositories by clone/checkout URI.')),
     );
   }
 
@@ -68,6 +73,10 @@ final class PhabricatorRepositorySearchEngine
 
     if (strlen($map['name'])) {
       $query->withNameContains($map['name']);
+    }
+
+    if ($map['uris']) {
+      $query->withURIs($map['uris']);
     }
 
     return $query;
@@ -155,15 +164,21 @@ final class PhabricatorRepositorySearchEngine
         ->setUser($viewer)
         ->setObject($repository)
         ->setHeader($repository->getName())
-        ->setObjectName('r'.$repository->getCallsign())
-        ->setHref($this->getApplicationURI($repository->getCallsign().'/'));
+        ->setObjectName($repository->getMonogram())
+        ->setHref($repository->getURI());
 
       $commit = $repository->getMostRecentCommit();
       if ($commit) {
-        $commit_link = DiffusionView::linkCommit(
-            $repository,
-            $commit->getCommitIdentifier(),
-            $commit->getSummary());
+        $commit_link = phutil_tag(
+          'a',
+          array(
+            'href' => $commit->getURI(),
+          ),
+          pht(
+            '%s: %s',
+            $commit->getLocalName(),
+            $commit->getSummary()));
+
         $item->setSubhead($commit_link);
         $item->setEpoch($commit->getEpoch());
       }
@@ -175,9 +190,8 @@ final class PhabricatorRepositorySearchEngine
 
       $size = $repository->getCommitCount();
       if ($size) {
-        $history_uri = DiffusionRequest::generateDiffusionURI(
+        $history_uri = $repository->generateURI(
           array(
-            'callsign' => $repository->getCallsign(),
             'action' => 'history',
           ));
 
@@ -205,12 +219,18 @@ final class PhabricatorRepositorySearchEngine
       if (!$repository->isTracked()) {
         $item->setDisabled(true);
         $item->addIcon('disable-grey', pht('Inactive'));
+      } else if ($repository->isImporting()) {
+        $item->addIcon('fa-clock-o indigo', pht('Importing...'));
       }
 
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No repositories found for this query.'));
+
+    return $result;
   }
 
   protected function willUseSavedQuery(PhabricatorSavedQuery $saved) {
@@ -227,6 +247,26 @@ final class PhabricatorRepositorySearchEngine
     }
 
     $saved->setParameter('projectPHIDs', $project_phids);
+  }
+
+  protected function getNewUserBody() {
+
+    $new_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('New Repository'))
+      ->setHref('/diffusion/edit/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Import, create, or just browse repositories in Diffusion.'))
+      ->addAction($new_button);
+
+      return $view;
   }
 
 }

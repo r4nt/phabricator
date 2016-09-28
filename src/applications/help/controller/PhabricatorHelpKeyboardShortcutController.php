@@ -7,9 +7,8 @@ final class PhabricatorHelpKeyboardShortcutController
     return true;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
 
     $keys = $request->getStr('keys');
     try {
@@ -58,14 +57,11 @@ final class PhabricatorHelpKeyboardShortcutController
       array('class' => 'keyboard-shortcut-help'),
       $rows);
 
-    $dialog = id(new AphrontDialogView())
-      ->setUser($user)
+    return $this->newDialog()
       ->setTitle(pht('Keyboard Shortcuts'))
       ->appendChild($table)
       ->addCancelButton('#', pht('Close'));
 
-    return id(new AphrontDialogResponse())
-      ->setDialog($dialog);
   }
 
 }

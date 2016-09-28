@@ -2,8 +2,6 @@
 
 final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
 
-  const TEMPORARY_TOKEN_TYPE = 'mfa:totp:key';
-
   public function getFactorKey() {
     return 'totp';
   }
@@ -24,6 +22,8 @@ final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
     AphrontRequest $request,
     PhabricatorUser $user) {
 
+    $totp_token_type = PhabricatorAuthTOTPKeyTemporaryTokenType::TOKENTYPE;
+
     $key = $request->getStr('totpkey');
     if (strlen($key)) {
       // If the user is providing a key, make sure it's a key we generated.
@@ -36,8 +36,8 @@ final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
 
       $temporary_token = id(new PhabricatorAuthTemporaryTokenQuery())
         ->setViewer($user)
-        ->withObjectPHIDs(array($user->getPHID()))
-        ->withTokenTypes(array(self::TEMPORARY_TOKEN_TYPE))
+        ->withTokenResources(array($user->getPHID()))
+        ->withTokenTypes(array($totp_token_type))
         ->withExpired(false)
         ->withTokenCodes(array(PhabricatorHash::digest($key)))
         ->executeOne();
@@ -55,8 +55,8 @@ final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
 
       $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
         id(new PhabricatorAuthTemporaryToken())
-          ->setObjectPHID($user->getPHID())
-          ->setTokenType(self::TEMPORARY_TOKEN_TYPE)
+          ->setTokenResource($user->getPHID())
+          ->setTokenType($totp_token_type)
           ->setTokenExpires(time() + phutil_units('1 hour in seconds'))
           ->setTokenCode(PhabricatorHash::digest($key))
           ->save();
@@ -132,7 +132,7 @@ final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
         'the authenticator correctly:'));
 
     $form->appendChild(
-      id(new AphrontFormTextControl())
+      id(new PHUIFormNumberControl())
         ->setLabel(pht('TOTP Code'))
         ->setName('totpcode')
         ->setValue($code)
@@ -151,7 +151,7 @@ final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
     }
 
     $form->appendChild(
-      id(new AphrontFormTextControl())
+      id(new PHUIFormNumberControl())
         ->setName($this->getParameterName($config, 'totpcode'))
         ->setLabel(pht('App Code'))
         ->setCaption(pht('Factor Name: %s', $config->getFactorName()))
@@ -192,16 +192,13 @@ final class PhabricatorTOTPAuthFactor extends PhabricatorAuthFactor {
     PhutilOpaqueEnvelope $key,
     $code) {
 
-    // TODO: This should use rate limiting to prevent multiple attempts in a
-    // short period of time.
-
     $now = (int)(time() / 30);
 
     // Allow the user to enter a code a few minutes away on either side, in
     // case the server or client has some clock skew.
     for ($offset = -2; $offset <= 2; $offset++) {
       $real = self::getTOTPCode($key, $now + $offset);
-      if ($real === $code) {
+      if (phutil_hashes_are_identical($real, $code)) {
         return true;
       }
     }

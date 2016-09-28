@@ -85,7 +85,7 @@ final class PhabricatorNotificationSearchEngine
     $viewer = $this->requireViewer();
 
     $image = id(new PHUIIconView())
-      ->setIconFont('fa-eye-slash');
+      ->setIcon('fa-eye-slash');
 
     $button = id(new PHUIButtonView())
       ->setTag('a')
@@ -127,13 +127,11 @@ final class PhabricatorNotificationSearchEngine
       ->addClass('phabricator-notification-list')
       ->appendChild($view);
 
-    $notif_header = id(new PHUIHeaderView())
-      ->setHeader($header)
-      ->addActionLink($button);
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->addAction($button);
+    $result->setContent($view);
 
-    return id(new PHUIObjectBoxView())
-      ->setHeader($notif_header)
-      ->appendChild($view);
+    return $result;
   }
 
   public function shouldUseOffsetPaging() {

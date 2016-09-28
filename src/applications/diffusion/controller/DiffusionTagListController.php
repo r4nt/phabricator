@@ -6,22 +6,25 @@ final class DiffusionTagListController extends DiffusionController {
     return true;
   }
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $drequest = $this->getDiffusionRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContext();
+    if ($response) {
+      return $response;
+    }
 
+    $viewer = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
     $repository = $drequest->getRepository();
 
-    $pager = new AphrontPagerView();
-    $pager->setURI($request->getRequestURI(), 'offset');
-    $pager->setOffset($request->getInt('offset'));
+    $pager = id(new PHUIPagerView())
+      ->readFromRequest($request);
 
     $params = array(
       'limit' => $pager->getPageSize() + 1,
       'offset' => $pager->getOffset(),
     );
 
-    if ($drequest->getSymbolicCommit()) {
+    if (strlen($drequest->getSymbolicCommit())) {
       $is_commit = true;
       $params['commit'] = $drequest->getSymbolicCommit();
     } else {
@@ -42,6 +45,11 @@ final class DiffusionTagListController extends DiffusionController {
     $tags = $pager->sliceResults($tags);
 
     $content = null;
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Tags'))
+      ->setHeaderIcon('fa-tags');
+
     if (!$tags) {
       $content = $this->renderStatusMessage(
         pht('No Tags'),
@@ -66,11 +74,7 @@ final class DiffusionTagListController extends DiffusionController {
       $handles = $this->loadViewerHandles($phids);
       $view->setHandles($handles);
 
-      $panel = id(new PHUIObjectBoxView())
-        ->setHeaderText(pht('Tags'))
-        ->appendChild($view);
-
-      $content = $panel;
+      $content = $view;
     }
 
     $crumbs = $this->buildCrumbs(
@@ -78,19 +82,30 @@ final class DiffusionTagListController extends DiffusionController {
         'tags' => true,
         'commit' => $drequest->getSymbolicCommit(),
       ));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $content,
-        $pager,
-      ),
-      array(
-        'title' => array(
-          pht('Tags'),
-          pht('%s Repository', $repository->getCallsign()),
-        ),
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText($repository->getDisplayName())
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($view);
+
+    $pager_box = $this->renderTablePagerBox($pager);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $box,
+        $pager_box,
       ));
+
+    return $this->newPage()
+      ->setTitle(
+        array(
+          pht('Tags'),
+          $repository->getDisplayName(),
+        ))
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

@@ -4,37 +4,98 @@ final class PhabricatorOwnersPackage
   extends PhabricatorOwnersDAO
   implements
     PhabricatorPolicyInterface,
-    PhabricatorApplicationTransactionInterface {
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorCustomFieldInterface,
+    PhabricatorDestructibleInterface,
+    PhabricatorConduitResultInterface,
+    PhabricatorFulltextInterface,
+    PhabricatorNgramsInterface {
 
   protected $name;
   protected $originalName;
   protected $auditingEnabled;
+  protected $autoReview;
   protected $description;
   protected $primaryOwnerPHID;
   protected $mailKey;
+  protected $status;
+  protected $viewPolicy;
+  protected $editPolicy;
+  protected $dominion;
+
+  private $paths = self::ATTACHABLE;
+  private $owners = self::ATTACHABLE;
+  private $customFields = self::ATTACHABLE;
+
+  const STATUS_ACTIVE = 'active';
+  const STATUS_ARCHIVED = 'archived';
+
+  const AUTOREVIEW_NONE = 'none';
+  const AUTOREVIEW_SUBSCRIBE = 'subscribe';
+  const AUTOREVIEW_REVIEW = 'review';
+  const AUTOREVIEW_BLOCK = 'block';
+
+  const DOMINION_STRONG = 'strong';
+  const DOMINION_WEAK = 'weak';
 
   public static function initializeNewPackage(PhabricatorUser $actor) {
+    $app = id(new PhabricatorApplicationQuery())
+      ->setViewer($actor)
+      ->withClasses(array('PhabricatorOwnersApplication'))
+      ->executeOne();
+
+    $view_policy = $app->getPolicy(
+      PhabricatorOwnersDefaultViewCapability::CAPABILITY);
+    $edit_policy = $app->getPolicy(
+      PhabricatorOwnersDefaultEditCapability::CAPABILITY);
+
     return id(new PhabricatorOwnersPackage())
       ->setAuditingEnabled(0)
-      ->setPrimaryOwnerPHID($actor->getPHID());
+      ->setAutoReview(self::AUTOREVIEW_NONE)
+      ->setDominion(self::DOMINION_STRONG)
+      ->setViewPolicy($view_policy)
+      ->setEditPolicy($edit_policy)
+      ->attachPaths(array())
+      ->setStatus(self::STATUS_ACTIVE)
+      ->attachOwners(array())
+      ->setDescription('');
   }
 
-  public function getCapabilities() {
+  public static function getStatusNameMap() {
     return array(
-      PhabricatorPolicyCapability::CAN_VIEW,
+      self::STATUS_ACTIVE => pht('Active'),
+      self::STATUS_ARCHIVED => pht('Archived'),
     );
   }
 
-  public function getPolicy($capability) {
-    return PhabricatorPolicies::POLICY_USER;
+  public static function getAutoreviewOptionsMap() {
+    return array(
+      self::AUTOREVIEW_NONE => array(
+        'name' => pht('No Autoreview'),
+      ),
+      self::AUTOREVIEW_SUBSCRIBE => array(
+        'name' => pht('Subscribe to Changes'),
+      ),
+      self::AUTOREVIEW_REVIEW => array(
+        'name' => pht('Review Changes'),
+      ),
+      self::AUTOREVIEW_BLOCK => array(
+        'name' => pht('Review Changes (Blocking)'),
+      ),
+    );
   }
 
-  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
-    return false;
-  }
-
-  public function describeAutomaticCapability($capability) {
-    return null;
+  public static function getDominionOptionsMap() {
+    return array(
+      self::DOMINION_STRONG => array(
+        'name' => pht('Strong (Control All Paths)'),
+        'short' => pht('Strong'),
+      ),
+      self::DOMINION_WEAK => array(
+        'name' => pht('Weak (Control Unowned Paths)'),
+        'short' => pht('Weak'),
+      ),
+    );
   }
 
   protected function getConfiguration() {
@@ -43,23 +104,15 @@ final class PhabricatorOwnersPackage
       self::CONFIG_TIMESTAMPS => false,
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
-        'name' => 'text128',
+        'name' => 'sort128',
         'originalName' => 'text255',
         'description' => 'text',
         'primaryOwnerPHID' => 'phid?',
         'auditingEnabled' => 'bool',
         'mailKey' => 'bytes20',
-      ),
-      self::CONFIG_KEY_SCHEMA => array(
-        'key_phid' => null,
-        'phid' => array(
-          'columns' => array('phid'),
-          'unique' => true,
-        ),
-        'name' => array(
-          'columns' => array('name'),
-          'unique' => true,
-        ),
+        'status' => 'text32',
+        'autoReview' => 'text32',
+        'dominion' => 'text32',
       ),
     ) + parent::getConfiguration();
   }
@@ -75,6 +128,10 @@ final class PhabricatorOwnersPackage
     }
 
     return parent::save();
+  }
+
+  public function isArchived() {
+    return ($this->getStatus() == self::STATUS_ARCHIVED);
   }
 
   public function setName($name) {
@@ -152,12 +209,15 @@ final class PhabricatorOwnersPackage
     foreach (array_chunk(array_keys($fragments), 128) as $chunk) {
       $rows[] = queryfx_all(
         $conn,
-        'SELECT pkg.id, p.excluded, p.path
+        'SELECT pkg.id, pkg.dominion, p.excluded, p.path
           FROM %T pkg JOIN %T p ON p.packageID = pkg.id
-          WHERE p.path IN (%Ls) %Q',
+          WHERE p.path IN (%Ls) AND pkg.status IN (%Ls) %Q',
         $package->getTableName(),
         $path->getTableName(),
         $chunk,
+        array(
+          self::STATUS_ACTIVE,
+        ),
         $repository_clause);
     }
     $rows = array_mergev($rows);
@@ -194,48 +254,195 @@ final class PhabricatorOwnersPackage
   }
 
   public static function findLongestPathsPerPackage(array $rows, array $paths) {
-    $ids = array();
 
-    foreach (igroup($rows, 'id') as $id => $package_paths) {
-      $relevant_paths = array_select_keys(
-        $paths,
-        ipull($package_paths, 'path'));
+    // Build a map from each path to all the package paths which match it.
+    $path_hits = array();
+    $weak = array();
+    foreach ($rows as $row) {
+      $id = $row['id'];
+      $path = $row['path'];
+      $length = strlen($path);
+      $excluded = $row['excluded'];
 
-      // For every package, remove all excluded paths.
-      $remove = array();
-      foreach ($package_paths as $package_path) {
-        if ($package_path['excluded']) {
-          $remove += idx($relevant_paths, $package_path['path'], array());
-          unset($relevant_paths[$package_path['path']]);
-        }
+      if ($row['dominion'] === self::DOMINION_WEAK) {
+        $weak[$id] = true;
       }
 
-      if ($remove) {
-        foreach ($relevant_paths as $fragment => $fragment_paths) {
-          $relevant_paths[$fragment] = array_diff_key($fragment_paths, $remove);
-        }
-      }
-
-      $relevant_paths = array_filter($relevant_paths);
-      if ($relevant_paths) {
-        $ids[$id] = max(array_map('strlen', array_keys($relevant_paths)));
+      $matches = $paths[$path];
+      foreach ($matches as $match => $ignored) {
+        $path_hits[$match][] = array(
+          'id' => $id,
+          'excluded' => $excluded,
+          'length' => $length,
+        );
       }
     }
 
-    return $ids;
+    // For each path, process the matching package paths to figure out which
+    // packages actually own it.
+    $path_packages = array();
+    foreach ($path_hits as $match => $hits) {
+      $hits = isort($hits, 'length');
+
+      $packages = array();
+      foreach ($hits as $hit) {
+        $package_id = $hit['id'];
+        if ($hit['excluded']) {
+          unset($packages[$package_id]);
+        } else {
+          $packages[$package_id] = $hit;
+        }
+      }
+
+      $path_packages[$match] = $packages;
+    }
+
+    // Remove packages with weak dominion rules that should cede control to
+    // a more specific package.
+    if ($weak) {
+      foreach ($path_packages as $match => $packages) {
+        $packages = isort($packages, 'length');
+        $packages = array_reverse($packages, true);
+
+        $first = null;
+        foreach ($packages as $package_id => $package) {
+          // If this is the first package we've encountered, note it and
+          // continue. We're iterating over the packages from longest to
+          // shortest match, so this package always has the strongest claim
+          // on the path.
+          if ($first === null) {
+            $first = $package_id;
+            continue;
+          }
+
+          // If this is the first package we saw, its claim stands even if it
+          // is a weak package.
+          if ($first === $package_id) {
+            continue;
+          }
+
+          // If this is a weak package and not the first package we saw,
+          // cede its claim to the stronger package.
+          if (isset($weak[$package_id])) {
+            unset($packages[$package_id]);
+          }
+        }
+
+        $path_packages[$match] = $packages;
+      }
+    }
+
+    // For each package that owns at least one path, identify the longest
+    // path it owns.
+    $package_lengths = array();
+    foreach ($path_packages as $match => $hits) {
+      foreach ($hits as $hit) {
+        $length = $hit['length'];
+        $id = $hit['id'];
+        if (empty($package_lengths[$id])) {
+          $package_lengths[$id] = $length;
+        } else {
+          $package_lengths[$id] = max($package_lengths[$id], $length);
+        }
+      }
+    }
+
+    return $package_lengths;
   }
 
-  private static function splitPath($path) {
-    $result = array('/');
+  public static function splitPath($path) {
     $trailing_slash = preg_match('@/$@', $path) ? '/' : '';
     $path = trim($path, '/');
     $parts = explode('/', $path);
+
+    $result = array();
     while (count($parts)) {
       $result[] = '/'.implode('/', $parts).$trailing_slash;
       $trailing_slash = '/';
       array_pop($parts);
     }
-    return $result;
+    $result[] = '/';
+
+    return array_reverse($result);
+  }
+
+  public function attachPaths(array $paths) {
+    assert_instances_of($paths, 'PhabricatorOwnersPath');
+    $this->paths = $paths;
+    return $this;
+  }
+
+  public function getPaths() {
+    return $this->assertAttached($this->paths);
+  }
+
+  public function attachOwners(array $owners) {
+    assert_instances_of($owners, 'PhabricatorOwnersOwner');
+    $this->owners = $owners;
+    return $this;
+  }
+
+  public function getOwners() {
+    return $this->assertAttached($this->owners);
+  }
+
+  public function getOwnerPHIDs() {
+    return mpull($this->getOwners(), 'getUserPHID');
+  }
+
+  public function isOwnerPHID($phid) {
+    if (!$phid) {
+      return false;
+    }
+
+    $owner_phids = $this->getOwnerPHIDs();
+    $owner_phids = array_fuse($owner_phids);
+
+    return isset($owner_phids[$phid]);
+  }
+
+  public function getMonogram() {
+    return 'O'.$this->getID();
+  }
+
+  public function getURI() {
+    // TODO: Move these to "/O123" for consistency.
+    return '/owners/package/'.$this->getID().'/';
+  }
+
+/* -(  PhabricatorPolicyInterface  )----------------------------------------- */
+
+
+  public function getCapabilities() {
+    return array(
+      PhabricatorPolicyCapability::CAN_VIEW,
+      PhabricatorPolicyCapability::CAN_EDIT,
+    );
+  }
+
+  public function getPolicy($capability) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        return $this->getViewPolicy();
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return $this->getEditPolicy();
+    }
+  }
+
+  public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        if ($this->isOwnerPHID($viewer->getPHID())) {
+          return true;
+        }
+        break;
+    }
+
+    return false;
+  }
+
+  public function describeAutomaticCapability($capability) {
+    return pht('Owners of a package may always view it.');
   }
 
 
@@ -258,6 +465,120 @@ final class PhabricatorOwnersPackage
     PhabricatorApplicationTransactionView $timeline,
     AphrontRequest $request) {
     return $timeline;
+  }
+
+
+/* -(  PhabricatorCustomFieldInterface  )------------------------------------ */
+
+
+  public function getCustomFieldSpecificationForRole($role) {
+    return PhabricatorEnv::getEnvConfig('owners.fields');
+  }
+
+  public function getCustomFieldBaseClass() {
+    return 'PhabricatorOwnersCustomField';
+  }
+
+  public function getCustomFields() {
+    return $this->assertAttached($this->customFields);
+  }
+
+  public function attachCustomFields(PhabricatorCustomFieldAttachment $fields) {
+    $this->customFields = $fields;
+    return $this;
+  }
+
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $conn_w = $this->establishConnection('w');
+
+      queryfx(
+        $conn_w,
+        'DELETE FROM %T WHERE packageID = %d',
+        id(new PhabricatorOwnersPath())->getTableName(),
+        $this->getID());
+
+      queryfx(
+        $conn_w,
+        'DELETE FROM %T WHERE packageID = %d',
+        id(new PhabricatorOwnersOwner())->getTableName(),
+        $this->getID());
+
+      $this->delete();
+    $this->saveTransaction();
+  }
+
+
+/* -(  PhabricatorConduitResultInterface  )---------------------------------- */
+
+
+  public function getFieldSpecificationsForConduit() {
+    return array(
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('name')
+        ->setType('string')
+        ->setDescription(pht('The name of the package.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('description')
+        ->setType('string')
+        ->setDescription(pht('The package description.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('status')
+        ->setType('string')
+        ->setDescription(pht('Active or archived status of the package.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('owners')
+        ->setType('list<map<string, wild>>')
+        ->setDescription(pht('List of package owners.')),
+    );
+  }
+
+  public function getFieldValuesForConduit() {
+    $owner_list = array();
+    foreach ($this->getOwners() as $owner) {
+      $owner_list[] = array(
+        'ownerPHID' => $owner->getUserPHID(),
+      );
+    }
+
+    return array(
+      'name' => $this->getName(),
+      'description' => $this->getDescription(),
+      'status' => $this->getStatus(),
+      'owners' => $owner_list,
+    );
+  }
+
+  public function getConduitSearchAttachments() {
+    return array(
+      id(new PhabricatorOwnersPathsSearchEngineAttachment())
+        ->setAttachmentKey('paths'),
+    );
+  }
+
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+
+  public function newFulltextEngine() {
+    return new PhabricatorOwnersPackageFulltextEngine();
+  }
+
+
+/* -(  PhabricatorNgramsInterface  )----------------------------------------- */
+
+
+  public function newNgrams() {
+    return array(
+      id(new PhabricatorOwnersPackageNameNgrams())
+        ->setValue($this->getName()),
+    );
   }
 
 }

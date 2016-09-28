@@ -5,6 +5,7 @@ final class DifferentialDiff
   implements
     PhabricatorPolicyInterface,
     HarbormasterBuildableInterface,
+    HarbormasterCircleCIBuildableInterface,
     PhabricatorApplicationTransactionInterface,
     PhabricatorDestructibleInterface {
 
@@ -27,7 +28,6 @@ final class DifferentialDiff
   protected $branch;
   protected $bookmark;
 
-  protected $arcanistProjectPHID;
   protected $creationMethod;
   protected $repositoryUUID;
 
@@ -40,6 +40,8 @@ final class DifferentialDiff
   private $revision = self::ATTACHABLE;
   private $properties = array();
   private $buildable = self::ATTACHABLE;
+
+  private $unitMessages = self::ATTACHABLE;
 
   protected function getConfiguration() {
     return array(
@@ -58,7 +60,6 @@ final class DifferentialDiff
         'lineCount' => 'uint32',
         'branch' => 'text255?',
         'bookmark' => 'text255?',
-        'arcanistProjectPHID' => 'phid?',
         'repositoryUUID' => 'text64?',
 
         // T6203/NULLABILITY
@@ -103,9 +104,15 @@ final class DifferentialDiff
     if (!$this->getID()) {
       return array();
     }
-    return id(new DifferentialChangeset())->loadAllWhere(
+    $changesets = id(new DifferentialChangeset())->loadAllWhere(
       'diffID = %d',
       $this->getID());
+
+    foreach ($changesets as $changeset) {
+      $changeset->attachDiff($this);
+    }
+
+    return $changesets;
   }
 
   public function save() {
@@ -242,10 +249,15 @@ final class DifferentialDiff
       'unitStatus' => $this->getUnitStatus(),
       'lintStatus' => $this->getLintStatus(),
       'changes' => array(),
-      'properties' => array(),
     );
 
     $dict['changes'] = $this->buildChangesList();
+
+    return $dict + $this->getDiffAuthorshipDict();
+  }
+
+  public function getDiffAuthorshipDict() {
+    $dict = array('properties' => array());
 
     $properties = id(new DifferentialDiffProperty())->loadAllWhere(
       'diffID = %d',
@@ -324,6 +336,20 @@ final class DifferentialDiff
     return $this->assertAttachedKey($this->properties, $key);
   }
 
+  public function hasDiffProperty($key) {
+    $properties = $this->getDiffProperties();
+    return array_key_exists($key, $properties);
+  }
+
+  public function attachDiffProperties(array $properties) {
+    $this->properties = $properties;
+    return $this;
+  }
+
+  public function getDiffProperties() {
+    return $this->assertAttached($this->properties);
+  }
+
   public function attachBuildable(HarbormasterBuildable $buildable = null) {
     $this->buildable = $buildable;
     return $this;
@@ -331,6 +357,64 @@ final class DifferentialDiff
 
   public function getBuildable() {
     return $this->assertAttached($this->buildable);
+  }
+
+  public function getBuildTargetPHIDs() {
+    $buildable = $this->getBuildable();
+
+    if (!$buildable) {
+      return array();
+    }
+
+    $target_phids = array();
+    foreach ($buildable->getBuilds() as $build) {
+      foreach ($build->getBuildTargets() as $target) {
+        $target_phids[] = $target->getPHID();
+      }
+    }
+
+    return $target_phids;
+  }
+
+  public function loadCoverageMap(PhabricatorUser $viewer) {
+    $target_phids = $this->getBuildTargetPHIDs();
+    if (!$target_phids) {
+      return array();
+    }
+
+    $unit = id(new HarbormasterBuildUnitMessage())->loadAllWhere(
+      'buildTargetPHID IN (%Ls)',
+      $target_phids);
+
+    $map = array();
+    foreach ($unit as $message) {
+      $coverage = $message->getProperty('coverage', array());
+      foreach ($coverage as $path => $coverage_data) {
+        $map[$path][] = $coverage_data;
+      }
+    }
+
+    foreach ($map as $path => $coverage_items) {
+      $map[$path] = ArcanistUnitTestResult::mergeCoverage($coverage_items);
+    }
+
+    return $map;
+  }
+
+  public function getURI() {
+    $id = $this->getID();
+    return "/differential/diff/{$id}/";
+  }
+
+
+  public function attachUnitMessages(array $unit_messages) {
+    $this->unitMessages = $unit_messages;
+    return $this;
+  }
+
+
+  public function getUnitMessages() {
+    return $this->assertAttached($this->unitMessages);
   }
 
 
@@ -372,6 +456,15 @@ final class DifferentialDiff
 /* -(  HarbormasterBuildableInterface  )------------------------------------- */
 
 
+  public function getHarbormasterBuildableDisplayPHID() {
+    $container_phid = $this->getHarbormasterContainerPHID();
+    if ($container_phid) {
+      return $container_phid;
+    }
+
+    return $this->getHarbormasterBuildablePHID();
+  }
+
   public function getHarbormasterBuildablePHID() {
     return $this->getPHID();
   }
@@ -398,8 +491,12 @@ final class DifferentialDiff
 
       if ($repo) {
         $results['repository.callsign'] = $repo->getCallsign();
+        $results['repository.phid'] = $repo->getPHID();
         $results['repository.vcs'] = $repo->getVersionControlSystem();
         $results['repository.uri'] = $repo->getPublicCloneURI();
+
+        $results['repository.staging.uri'] = $repo->getStagingURI();
+        $results['repository.staging.ref'] = $this->getStagingRef();
       }
     }
 
@@ -414,11 +511,133 @@ final class DifferentialDiff
         pht('The differential revision ID, if applicable.'),
       'repository.callsign' =>
         pht('The callsign of the repository in Phabricator.'),
+      'repository.phid' =>
+        pht('The PHID of the repository in Phabricator.'),
       'repository.vcs' =>
         pht('The version control system, either "svn", "hg" or "git".'),
       'repository.uri' =>
         pht('The URI to clone or checkout the repository from.'),
+      'repository.staging.uri' =>
+        pht('The URI of the staging repository.'),
+      'repository.staging.ref' =>
+        pht('The ref name for this change in the staging repository.'),
     );
+  }
+
+
+/* -(  HarbormasterCircleCIBuildableInterface  )----------------------------- */
+
+
+  public function getCircleCIGitHubRepositoryURI() {
+    $diff_phid = $this->getPHID();
+    $repository_phid = $this->getRepositoryPHID();
+    if (!$repository_phid) {
+      throw new Exception(
+        pht(
+          'This diff ("%s") is not associated with a repository. A diff '.
+          'must belong to a tracked repository to be built by CircleCI.',
+          $diff_phid));
+    }
+
+    $repository = id(new PhabricatorRepositoryQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($repository_phid))
+      ->executeOne();
+    if (!$repository) {
+      throw new Exception(
+        pht(
+          'This diff ("%s") is associated with a repository ("%s") which '.
+          'could not be loaded.',
+          $diff_phid,
+          $repository_phid));
+    }
+
+    $staging_uri = $repository->getStagingURI();
+    if (!$staging_uri) {
+      throw new Exception(
+        pht(
+          'This diff ("%s") is associated with a repository ("%s") that '.
+          'does not have a Staging Area configured. You must configure a '.
+          'Staging Area to use CircleCI integration.',
+          $diff_phid,
+          $repository_phid));
+    }
+
+    $path = HarbormasterCircleCIBuildStepImplementation::getGitHubPath(
+      $staging_uri);
+    if (!$path) {
+      throw new Exception(
+        pht(
+          'This diff ("%s") is associated with a repository ("%s") that '.
+          'does not have a Staging Area ("%s") that is hosted on GitHub. '.
+          'CircleCI can only build from GitHub, so the Staging Area for '.
+          'the repository must be hosted there.',
+          $diff_phid,
+          $repository_phid,
+          $staging_uri));
+    }
+
+    return $staging_uri;
+  }
+
+  public function getCircleCIBuildIdentifierType() {
+    return 'tag';
+  }
+
+  public function getCircleCIBuildIdentifier() {
+    $ref = $this->getStagingRef();
+    $ref = preg_replace('(^refs/tags/)', '', $ref);
+    return $ref;
+  }
+
+  public function getStagingRef() {
+    // TODO: We're just hoping to get lucky. Instead, `arc` should store
+    // where it sent changes and we should only provide staging details
+    // if we reasonably believe they are accurate.
+    return 'refs/tags/phabricator/diff/'.$this->getID();
+  }
+
+  public function loadTargetBranch() {
+    // TODO: This is sketchy, but just eat the query cost until this can get
+    // cleaned up.
+
+    // For now, we're only returning a target if there's exactly one and it's
+    // a branch, since we don't support landing to more esoteric targets like
+    // tags yet.
+
+    $property = id(new DifferentialDiffProperty())->loadOneWhere(
+      'diffID = %d AND name = %s',
+      $this->getID(),
+      'arc:onto');
+    if (!$property) {
+      return null;
+    }
+
+    $data = $property->getData();
+
+    if (!$data) {
+      return null;
+    }
+
+    if (!is_array($data)) {
+      return null;
+    }
+
+    if (count($data) != 1) {
+      return null;
+    }
+
+    $onto = head($data);
+    if (!is_array($onto)) {
+      return null;
+    }
+
+    $type = idx($onto, 'type');
+    if ($type != 'branch') {
+      return null;
+    }
+
+    return idx($onto, 'name');
   }
 
 

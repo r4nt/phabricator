@@ -52,7 +52,48 @@ abstract class PhabricatorLiskDAO extends LiskDAO {
    */
   protected function establishLiveConnection($mode) {
     $namespace = self::getStorageNamespace();
+    $database = $namespace.'_'.$this->getApplicationName();
 
+    $is_readonly = PhabricatorEnv::isReadOnly();
+
+    if ($is_readonly && ($mode != 'r')) {
+      $this->raiseImproperWrite($database);
+    }
+
+    $is_cluster = (bool)PhabricatorEnv::getEnvConfig('cluster.databases');
+    if ($is_cluster) {
+      $connection = $this->newClusterConnection($database, $mode);
+    } else {
+      $connection = $this->newBasicConnection($database, $mode, $namespace);
+    }
+
+    // TODO: This should be testing if the mode is "r", but that would probably
+    // break a lot of things. Perform a more narrow test for readonly mode
+    // until we have greater certainty that this works correctly most of the
+    // time.
+    if ($is_readonly) {
+      $connection->setReadOnly(true);
+    }
+
+    // Unless this is a script running from the CLI:
+    //   - (T10849) Prevent any query from running for more than 30 seconds.
+    //   - (T11672) Use persistent connections.
+    if (php_sapi_name() != 'cli') {
+
+      // TODO: For now, disable this until after T11044: it's better at high
+      // load, but causes us to use slightly more connections at low load and
+      // is pushing users over limits like MySQL "max_connections".
+      $use_persistent = false;
+
+      $connection
+        ->setQueryTimeout(30)
+        ->setPersistent($use_persistent);
+    }
+
+    return $connection;
+  }
+
+  private function newBasicConnection($database, $mode, $namespace) {
     $conf = PhabricatorEnv::newObjectFromConfig(
       'mysql.configuration-provider',
       array($this, $mode, $namespace));
@@ -65,11 +106,80 @@ abstract class PhabricatorLiskDAO extends LiskDAO {
           'pass'      => $conf->getPassword(),
           'host'      => $conf->getHost(),
           'port'      => $conf->getPort(),
-          'database'  => $conf->getDatabase(),
+          'database'  => $database,
           'retries'   => 3,
+          'timeout' => 10,
         ),
       ));
   }
+
+  private function newClusterConnection($database, $mode) {
+    $master = PhabricatorDatabaseRef::getMasterDatabaseRef();
+
+    if ($master && !$master->isSevered()) {
+      $connection = $master->newApplicationConnection($database);
+      if ($master->isReachable($connection)) {
+        return $connection;
+      } else {
+        if ($mode == 'w') {
+          $this->raiseImpossibleWrite($database);
+        }
+        PhabricatorEnv::setReadOnly(
+          true,
+          PhabricatorEnv::READONLY_UNREACHABLE);
+      }
+    }
+
+    $replica = PhabricatorDatabaseRef::getReplicaDatabaseRef();
+    if ($replica) {
+      $connection = $replica->newApplicationConnection($database);
+      $connection->setReadOnly(true);
+      if ($replica->isReachable($connection)) {
+        return $connection;
+      }
+    }
+
+    if (!$master && !$replica) {
+      $this->raiseUnconfigured($database);
+    }
+
+    $this->raiseUnreachable($database);
+  }
+
+  private function raiseImproperWrite($database) {
+    throw new PhabricatorClusterImproperWriteException(
+      pht(
+        'Unable to establish a write-mode connection (to application '.
+        'database "%s") because Phabricator is in read-only mode. Whatever '.
+        'you are trying to do does not function correctly in read-only mode.',
+        $database));
+  }
+
+  private function raiseImpossibleWrite($database) {
+    throw new PhabricatorClusterImpossibleWriteException(
+      pht(
+        'Unable to connect to master database ("%s"). This is a severe '.
+        'failure; your request did not complete.',
+        $database));
+  }
+
+  private function raiseUnconfigured($database) {
+    throw new Exception(
+      pht(
+        'Unable to establish a connection to any database host '.
+        '(while trying "%s"). No masters or replicas are configured.',
+        $database));
+  }
+
+  private function raiseUnreachable($database) {
+    throw new PhabricatorClusterStrandedException(
+      pht(
+        'Unable to establish a connection to any database host '.
+        '(while trying "%s"). All masters and replicas are completely '.
+        'unreachable.',
+        $database));
+  }
+
 
   /**
    * @task config

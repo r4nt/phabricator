@@ -56,16 +56,23 @@ final class PhabricatorEnv extends Phobject {
   private static $requestBaseURI;
   private static $cache;
   private static $localeCode;
+  private static $readOnly;
+  private static $readOnlyReason;
+
+  const READONLY_CONFIG = 'config';
+  const READONLY_UNREACHABLE = 'unreachable';
+  const READONLY_SEVERED = 'severed';
+  const READONLY_MASTERLESS = 'masterless';
 
   /**
    * @phutil-external-symbol class PhabricatorStartup
    */
   public static function initializeWebEnvironment() {
-    self::initializeCommonEnvironment();
+    self::initializeCommonEnvironment(false);
   }
 
-  public static function initializeScriptEnvironment() {
-    self::initializeCommonEnvironment();
+  public static function initializeScriptEnvironment($config_optional) {
+    self::initializeCommonEnvironment($config_optional);
 
     // NOTE: This is dangerous in general, but we know we're in a script context
     // and are not vulnerable to CSRF.
@@ -81,10 +88,11 @@ final class PhabricatorEnv extends Phobject {
   }
 
 
-  private static function initializeCommonEnvironment() {
+  private static function initializeCommonEnvironment($config_optional) {
     PhutilErrorHandler::initialize();
 
-    self::buildConfigurationSourceStack();
+    self::resetUmask();
+    self::buildConfigurationSourceStack($config_optional);
 
     // Force a valid timezone. If both PHP and Phabricator configuration are
     // invalid, use UTC.
@@ -166,7 +174,7 @@ final class PhabricatorEnv extends Phobject {
     }
   }
 
-  private static function buildConfigurationSourceStack() {
+  private static function buildConfigurationSourceStack($config_optional) {
     self::dropConfigCache();
 
     $stack = new PhabricatorConfigStackSource();
@@ -200,22 +208,41 @@ final class PhabricatorEnv extends Phobject {
     $default_source->loadExternalOptions();
 
     // If this install has site config sources, load them now.
-    $site_sources = id(new PhutilSymbolLoader())
+    $site_sources = id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorConfigSiteSource')
-      ->loadObjects();
-    $site_sources = msort($site_sources, 'getPriority');
+      ->setSortMethod('getPriority')
+      ->execute();
+
     foreach ($site_sources as $site_source) {
       $stack->pushSource($site_source);
+    }
+
+    $master = PhabricatorDatabaseRef::getMasterDatabaseRef();
+    if (!$master) {
+      self::setReadOnly(true, self::READONLY_MASTERLESS);
+    } else if ($master->isSevered()) {
+      $master->checkHealth();
+      if ($master->isSevered()) {
+        self::setReadOnly(true, self::READONLY_SEVERED);
+      }
     }
 
     try {
       $stack->pushSource(
         id(new PhabricatorConfigDatabaseSource('default'))
           ->setName(pht('Database')));
-    } catch (AphrontQueryException $exception) {
+    } catch (AphrontSchemaQueryException $exception) {
       // If the database is not available, just skip this configuration
       // source. This happens during `bin/storage upgrade`, `bin/conf` before
       // schema setup, etc.
+    } catch (AphrontConnectionQueryException $ex) {
+      if (!$config_optional) {
+        throw $ex;
+      }
+    } catch (AphrontInvalidCredentialsQueryException $ex) {
+      if (!$config_optional) {
+        throw $ex;
+      }
     }
   }
 
@@ -276,106 +303,6 @@ final class PhabricatorEnv extends Phobject {
     return $env;
   }
 
-  public static function calculateEnvironmentHash() {
-    $keys = self::getKeysForConsistencyCheck();
-
-    $values = array();
-    foreach ($keys as $key) {
-      $values[$key] = self::getEnvConfigIfExists($key);
-    }
-
-    return PhabricatorHash::digest(json_encode($values));
-  }
-
-  /**
-   * Returns a summary of non-default configuration settings to allow the
-   * "daemons and web have different config" setup check to list divergent
-   * keys.
-   */
-  public static function calculateEnvironmentInfo() {
-    $keys = self::getKeysForConsistencyCheck();
-
-    $info = array();
-
-    $defaults = id(new PhabricatorConfigDefaultSource())->getAllKeys();
-    foreach ($keys as $key) {
-      $current = self::getEnvConfigIfExists($key);
-      $default = idx($defaults, $key, null);
-      if ($current !== $default) {
-        $info[$key] = PhabricatorHash::digestForIndex(json_encode($current));
-      }
-    }
-
-    $keys_hash = array_keys($defaults);
-    sort($keys_hash);
-    $keys_hash = implode("\0", $keys_hash);
-    $keys_hash = PhabricatorHash::digestForIndex($keys_hash);
-
-    return array(
-      'version' => 1,
-      'keys' => $keys_hash,
-      'values' => $info,
-    );
-  }
-
-
-  /**
-   * Compare two environment info summaries to generate a human-readable
-   * list of discrepancies.
-   */
-  public static function compareEnvironmentInfo(array $u, array $v) {
-    $issues = array();
-
-    $uversion = idx($u, 'version');
-    $vversion = idx($v, 'version');
-    if ($uversion != $vversion) {
-      $issues[] = pht(
-        'The two configurations were generated by different versions '.
-        'of Phabricator.');
-
-      // These may not be comparable, so stop here.
-      return $issues;
-    }
-
-    if ($u['keys'] !== $v['keys']) {
-      $issues[] = pht(
-        'The two configurations have different keys. This usually means '.
-        'that they are running different versions of Phabricator.');
-    }
-
-    $uval = idx($u, 'values', array());
-    $vval = idx($v, 'values', array());
-
-    $all_keys = array_keys($uval + $vval);
-
-    foreach ($all_keys as $key) {
-      $uv = idx($uval, $key);
-      $vv = idx($vval, $key);
-      if ($uv !== $vv) {
-        if ($uv && $vv) {
-          $issues[] = pht(
-            'The configuration key "%s" is set in both configurations, but '.
-            'set to different values.',
-            $key);
-        } else {
-          $issues[] = pht(
-            'The configuration key "%s" is set in only one configuration.',
-            $key);
-        }
-      }
-    }
-
-    return $issues;
-  }
-
-  private static function getKeysForConsistencyCheck() {
-    $keys = array_keys(self::getAllConfigKeys());
-    sort($keys);
-
-    $skip_keys = self::getEnvConfig('phd.variant-config');
-    return array_diff($keys, $skip_keys);
-  }
-
 
 /* -(  Reading Configuration  )---------------------------------------------- */
 
@@ -388,12 +315,28 @@ final class PhabricatorEnv extends Phobject {
    * @task read
    */
   public static function getEnvConfig($key) {
+    if (!self::$sourceStack) {
+      throw new Exception(
+        pht(
+          'Trying to read configuration "%s" before configuration has been '.
+          'initialized.',
+          $key));
+    }
+
     if (isset(self::$cache[$key])) {
       return self::$cache[$key];
     }
 
     if (array_key_exists($key, self::$cache)) {
       return self::$cache[$key];
+    }
+
+    if (!self::$sourceStack) {
+      throw new Exception(
+        pht(
+          'Trying to read configuration "%s" before configuration has been '.
+          'initialized.',
+          $key));
     }
 
     $result = self::$sourceStack->getKeys(array($key));
@@ -407,7 +350,6 @@ final class PhabricatorEnv extends Phobject {
           $key));
     }
   }
-
 
   /**
    * Get the current configuration setting for a given key. If the key
@@ -537,6 +479,55 @@ final class PhabricatorEnv extends Phobject {
   public static function setRequestBaseURI($uri) {
     self::$requestBaseURI = $uri;
   }
+
+  public static function isReadOnly() {
+    if (self::$readOnly !== null) {
+      return self::$readOnly;
+    }
+    return self::getEnvConfig('cluster.read-only');
+  }
+
+  public static function setReadOnly($read_only, $reason) {
+    self::$readOnly = $read_only;
+    self::$readOnlyReason = $reason;
+  }
+
+  public static function getReadOnlyMessage() {
+    $reason = self::getReadOnlyReason();
+    switch ($reason) {
+      case self::READONLY_MASTERLESS:
+        return pht(
+          'Phabricator is in read-only mode (no writable database '.
+          'is configured).');
+      case self::READONLY_UNREACHABLE:
+        return pht(
+          'Phabricator is in read-only mode (unreachable master).');
+      case self::READONLY_SEVERED:
+        return pht(
+          'Phabricator is in read-only mode (major interruption).');
+    }
+
+    return pht('Phabricator is in read-only mode.');
+  }
+
+  public static function getReadOnlyURI() {
+    return urisprintf(
+      '/readonly/%s/',
+      self::getReadOnlyReason());
+  }
+
+  public static function getReadOnlyReason() {
+    if (!self::isReadOnly()) {
+      return null;
+    }
+
+    if (self::$readOnlyReason !== null) {
+      return self::$readOnlyReason;
+    }
+
+    return self::READONLY_CONFIG;
+  }
+
 
 /* -(  Unit Test Support  )-------------------------------------------------- */
 
@@ -674,8 +665,8 @@ final class PhabricatorEnv extends Phobject {
    * @return void
    * @task uri
    */
-  public static function requireValidRemoteURIForLink($uri) {
-    $uri = new PhutilURI($uri);
+  public static function requireValidRemoteURIForLink($raw_uri) {
+    $uri = new PhutilURI($raw_uri);
 
     $proto = $uri->getProtocol();
     if (!strlen($proto)) {
@@ -683,7 +674,7 @@ final class PhabricatorEnv extends Phobject {
         pht(
           'URI "%s" is not a valid linkable resource. A valid linkable '.
           'resource URI must specify a protocol.',
-          $uri));
+          $raw_uri));
     }
 
     $protocols = self::getEnvConfig('uri.allowed-protocols');
@@ -692,7 +683,7 @@ final class PhabricatorEnv extends Phobject {
         pht(
           'URI "%s" is not a valid linkable resource. A valid linkable '.
           'resource URI must use one of these protocols: %s.',
-          $uri,
+          $raw_uri,
           implode(', ', array_keys($protocols))));
     }
 
@@ -702,7 +693,7 @@ final class PhabricatorEnv extends Phobject {
         pht(
           'URI "%s" is not a valid linkable resource. A valid linkable '.
           'resource URI must specify a domain.',
-          $uri));
+          $raw_uri));
     }
   }
 
@@ -815,6 +806,11 @@ final class PhabricatorEnv extends Phobject {
   }
 
   public static function isClusterRemoteAddress() {
+    $cluster_addresses = self::getEnvConfig('cluster.addresses');
+    if (!$cluster_addresses) {
+      return false;
+    }
+
     $address = idx($_SERVER, 'REMOTE_ADDR');
     if (!$address) {
       throw new Exception(
@@ -890,5 +886,35 @@ final class PhabricatorEnv extends Phobject {
   private static function dropConfigCache() {
     self::$cache = array();
   }
+
+  private static function resetUmask() {
+    // Reset the umask to the common standard umask. The umask controls default
+    // permissions when files are created and propagates to subprocesses.
+
+    // "022" is the most common umask, but sometimes it is set to something
+    // unusual by the calling environment.
+
+    // Since various things rely on this umask to work properly and we are
+    // not aware of any legitimate reasons to adjust it, unconditionally
+    // normalize it until such reasons arise. See T7475 for discussion.
+    umask(022);
+  }
+
+
+  /**
+   * Get the path to an empty directory which is readable by all of the system
+   * user accounts that Phabricator acts as.
+   *
+   * In some cases, a binary needs some valid HOME or CWD to continue, but not
+   * all user accounts have valid home directories and even if they do they
+   * may not be readable after a `sudo` operation.
+   *
+   * @return string Path to an empty directory suitable for use as a CWD.
+   */
+  public static function getEmptyCWD() {
+    $root = dirname(phutil_get_library_root('phabricator'));
+    return $root.'/support/empty/';
+  }
+
 
 }

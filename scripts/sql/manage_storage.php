@@ -2,7 +2,7 @@
 <?php
 
 $root = dirname(dirname(dirname(__FILE__)));
-require_once $root.'/scripts/__init_script__.php';
+require_once $root.'/scripts/init/init-setup.php';
 
 $args = new PhutilArgumentParser($argv);
 $args->setTagline(pht('manage Phabricator storage and schemata'));
@@ -19,13 +19,6 @@ EOHELP
 );
 $args->parseStandardArguments();
 
-$conf = PhabricatorEnv::newObjectFromConfig(
-  'mysql.configuration-provider',
-  array($dao = null, 'w'));
-
-$default_user       = $conf->getUser();
-$default_host       = $conf->getHost();
-$default_port       = $conf->getPort();
 $default_namespace  = PhabricatorLiskDAO::getDefaultStorageNamespace();
 
 try {
@@ -38,13 +31,17 @@ try {
           'Do not prompt before performing dangerous operations.'),
       ),
       array(
+        'name' => 'host',
+        'param' => 'hostname',
+        'help' => pht(
+          'Connect to __host__ instead of the default host.'),
+      ),
+      array(
         'name'    => 'user',
         'short'   => 'u',
         'param'   => 'username',
-        'default' => $default_user,
         'help'    => pht(
-          "Connect with __username__ instead of the configured default ('%s').",
-          $default_user),
+          'Connect with __username__ instead of the configured default.'),
       ),
       array(
         'name'    => 'password',
@@ -63,16 +60,17 @@ try {
           $default_namespace),
       ),
       array(
-        'name'  => 'dryrun',
-        'help'  => pht(
+        'name'    => 'dryrun',
+        'help'    => pht(
           'Do not actually change anything, just show what would be changed.'),
       ),
       array(
-        'name' => 'disable-utf8mb4',
-        'help' => pht(
-          'Disable utf8mb4, even if the database supports it. This is an '.
+        'name'    => 'disable-utf8mb4',
+        'help'    => pht(
+          'Disable %s, even if the database supports it. This is an '.
           'advanced feature used for testing changes to Phabricator; you '.
-          'should not normally use this flag.'),
+          'should not normally use this flag.',
+          'utf8mb4'),
       ),
     ));
 } catch (PhutilArgumentUsageException $ex) {
@@ -83,12 +81,49 @@ try {
 // First, test that the Phabricator configuration is set up correctly. After
 // we know this works we'll test any administrative credentials specifically.
 
-$test_api = new PhabricatorStorageManagementAPI();
-$test_api->setUser($default_user);
-$test_api->setHost($default_host);
-$test_api->setPort($default_port);
-$test_api->setPassword($conf->getPassword());
-$test_api->setNamespace($args->getArg('namespace'));
+$host = $args->getArg('host');
+if (strlen($host)) {
+  $ref = null;
+
+  $refs = PhabricatorDatabaseRef::getLiveRefs();
+
+  // Include the master in case the user is just specifying a redundant
+  // "--host" flag for no reason and does not actually have a database
+  // cluster configured.
+  $refs[] = PhabricatorDatabaseRef::getMasterDatabaseRef();
+
+  foreach ($refs as $possible_ref) {
+    if ($possible_ref->getHost() == $host) {
+      $ref = $possible_ref;
+      break;
+    }
+  }
+
+  if (!$ref) {
+    throw new PhutilArgumentUsageException(
+      pht(
+        'There is no configured database on host "%s". This command can '.
+        'only interact with configured databases.',
+        $host));
+  }
+} else {
+  $ref = PhabricatorDatabaseRef::getMasterDatabaseRef();
+  if (!$ref) {
+    throw new Exception(
+      pht('No database master is configured.'));
+  }
+}
+
+$default_user = $ref->getUser();
+$default_host = $ref->getHost();
+$default_port = $ref->getPort();
+
+$test_api = id(new PhabricatorStorageManagementAPI())
+  ->setUser($default_user)
+  ->setHost($default_host)
+  ->setPort($default_port)
+  ->setPassword($ref->getPass())
+  ->setNamespace($args->getArg('namespace'));
 
 try {
   queryfx(
@@ -113,30 +148,32 @@ try {
       '--password'),
     pht('Raw MySQL Error'),
     $ex->getMessage());
-
   echo phutil_console_wrap($message);
-
   exit(1);
 }
 
-
 if ($args->getArg('password') === null) {
   // This is already a PhutilOpaqueEnvelope.
-  $password = $conf->getPassword();
+  $password = $ref->getPass();
 } else {
   // Put this in a PhutilOpaqueEnvelope.
   $password = new PhutilOpaqueEnvelope($args->getArg('password'));
   PhabricatorEnv::overrideConfig('mysql.pass', $args->getArg('password'));
 }
 
-$api = new PhabricatorStorageManagementAPI();
-$api->setUser($args->getArg('user'));
-PhabricatorEnv::overrideConfig('mysql.user', $args->getArg('user'));
-$api->setHost($default_host);
-$api->setPort($default_port);
-$api->setPassword($password);
-$api->setNamespace($args->getArg('namespace'));
-$api->setDisableUTF8MB4($args->getArg('disable-utf8mb4'));
+$selected_user = $args->getArg('user');
+if ($selected_user === null) {
+  $selected_user = $default_user;
+}
+
+$api = id(new PhabricatorStorageManagementAPI())
+  ->setUser($selected_user)
+  ->setHost($default_host)
+  ->setPort($default_port)
+  ->setPassword($password)
+  ->setNamespace($args->getArg('namespace'))
+  ->setDisableUTF8MB4($args->getArg('disable-utf8mb4'));
+PhabricatorEnv::overrideConfig('mysql.user', $api->getUser());
 
 try {
   queryfx(
@@ -154,15 +191,13 @@ try {
       '--password'),
     pht('Raw MySQL Error'),
     $ex->getMessage());
-
   echo phutil_console_wrap($message);
-
   exit(1);
 }
 
-$workflows = id(new PhutilSymbolLoader())
+$workflows = id(new PhutilClassMapQuery())
   ->setAncestorClass('PhabricatorStorageManagementWorkflow')
-  ->loadObjects();
+  ->execute();
 
 $patches = PhabricatorSQLPatchList::buildAllPatches();
 

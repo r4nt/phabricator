@@ -70,7 +70,8 @@ Beyond an operating system, you will need **a webserver**.
 You will also need:
 
   - **MySQL**: You need MySQL. We strongly recommend MySQL 5.5 or newer.
-  - **PHP**: You need PHP 5.2 or newer.
+  - **PHP**: You need PHP 5.2 or newer, but note that PHP 7 is
+    **not supported**.
 
 You'll probably also need a **domain name**. In particular, you should read this
 note:
@@ -106,8 +107,11 @@ scripts available which should handle most of the things discussed in this
 document for you:
 
   - **RedHat Derivatives**:
-    <http://www.phabricator.com/rsrc/install/install_rhel-derivs.sh>
-  - **Ubuntu**: <http://www.phabricator.com/rsrc/install/install_ubuntu.sh>
+    [[ https://secure.phabricator.com/diffusion/P/browse/master/scripts/install/install_rhel-derivs.sh
+     | install_rhel-derivs.sh ]]
+  - **Ubuntu**:
+    [[ https://secure.phabricator.com/diffusion/P/browse/master/scripts/install/install_ubuntu.sh
+     | install_ubuntu.sh ]]
 
 If those work for you, you can skip directly to the
 @{article:Configuration Guide}. These scripts are also available in the

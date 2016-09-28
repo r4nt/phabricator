@@ -6,7 +6,7 @@ require_once $root.'/scripts/__init_script__.php';
 
 $args = new PhutilArgumentParser($argv);
 $args->setSynopsis(<<<EOSYNOPSIS
-**import_repository_symbols.php** [__options__] __callsign__ < symbols
+**import_repository_symbols.php** [__options__] __repository__ < symbols
 
   Import repository symbols (symbols are read from stdin).
 EOSYNOPSIS
@@ -35,24 +35,26 @@ $args->parse(
         'be part of a single transaction.'),
     ),
     array(
-      'name'      => 'callsign',
+      'name'      => 'repository',
       'wildcard'  => true,
     ),
   ));
 
-$callsigns = $args->getArg('callsign');
-if (count($callsigns) !== 1) {
+$identifiers = $args->getArg('repository');
+if (count($identifiers) !== 1) {
   $args->printHelpAndExit();
 }
 
-$callsign = head($callsigns);
+$identifier = head($identifiers);
 $repository = id(new PhabricatorRepositoryQuery())
   ->setViewer(PhabricatorUser::getOmnipotentUser())
-  ->withCallsigns($callsigns)
+  ->withIdentifiers($identifiers)
   ->executeOne();
 
 if (!$repository) {
-  echo pht("Repository '%s' does not exist.", $callsign);
+  echo tsprintf(
+    "%s\n",
+    pht('Repository "%s" does not exist.', $identifier));
   exit(1);
 }
 
@@ -102,7 +104,7 @@ function commit_symbols(
       $repository->getPHID());
   }
 
-  echo pht('Loading %s symbols...',  new PhutilNumber(count($sql))), "\n";
+  echo pht('Loading %s symbols...',  phutil_count($sql)), "\n";
   foreach (array_chunk($sql, 128) as $chunk) {
     queryfx(
       $conn_w,
@@ -203,7 +205,7 @@ foreach ($input as $key => $line) {
     }
   }
 
-  if (count ($symbols) >= $args->getArg('max-transaction')) {
+  if (count($symbols) >= $args->getArg('max-transaction')) {
     try {
       echo pht(
         "Committing %s symbols...\n",

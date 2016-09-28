@@ -2,20 +2,32 @@
 
 final class DrydockLeaseListController extends DrydockLeaseController {
 
-  private $queryKey;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->queryKey = idx($data, 'queryKey');
-  }
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $query_key = $request->getURIData('queryKey');
 
-  public function processRequest() {
+    $engine = new DrydockLeaseSearchEngine();
+
+    $id = $request->getURIData('id');
+    if ($id) {
+      $resource = id(new DrydockResourceQuery())
+        ->setViewer($viewer)
+        ->withIDs(array($id))
+        ->executeOne();
+      if (!$resource) {
+        return new Aphront404Response();
+      }
+      $this->setResource($resource);
+      $engine->setResource($resource);
+    }
+
     $controller = id(new PhabricatorApplicationSearchController())
-      ->setQueryKey($this->queryKey)
-      ->setSearchEngine(new DrydockLeaseSearchEngine())
+      ->setQueryKey($query_key)
+      ->setSearchEngine($engine)
       ->setNavigation($this->buildSideNavView());
 
     return $this->delegateToController($controller);

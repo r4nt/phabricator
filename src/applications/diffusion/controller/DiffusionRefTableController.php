@@ -6,9 +6,13 @@ final class DiffusionRefTableController extends DiffusionController {
     return true;
   }
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $viewer = $this->getViewer();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContext();
+    if ($response) {
+      return $response;
+    }
 
+    $viewer = $this->getViewer();
     $drequest = $this->getDiffusionRequest();
     $repository = $drequest->getRepository();
 
@@ -127,23 +131,20 @@ final class DiffusionRefTableController extends DiffusionController {
 
     $content = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Ref "%s"', $ref_name))
-      ->appendChild($table);
+      ->setTable($table);
 
     $crumbs = $this->buildCrumbs(array());
     $crumbs->addTextCrumb(pht('Refs'));
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $content,
-      ),
-      array(
-        'title' => array(
-          pht('Refs'),
-          $repository->getMonogram(),
+    return $this->newPage()
+      ->setTitle(
+        array(
           $ref_name,
-        ),
-      ));
+          pht('Ref'),
+          $repository->getDisplayName(),
+        ))
+      ->setCrumbs($crumbs)
+      ->appendChild($content);
   }
 
 }

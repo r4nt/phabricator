@@ -2,45 +2,35 @@
 
 final class HarbormasterBuildableListController extends HarbormasterController {
 
-  private $queryKey;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->queryKey = idx($data, 'queryKey');
-  }
+  public function handleRequest(AphrontRequest $request) {
+    $items = array();
 
-  public function processRequest() {
-    $controller = id(new PhabricatorApplicationSearchController())
-      ->setQueryKey($this->queryKey)
-      ->setSearchEngine(new HarbormasterBuildableSearchEngine())
-      ->setNavigation($this->buildSideNavView());
+    $items[] = id(new PHUIListItemView())
+      ->setType(PHUIListItemView::TYPE_LABEL)
+      ->setName(pht('Builds'));
 
-    return $this->delegateToController($controller);
-  }
+    $items[] = id(new PHUIListItemView())
+      ->setType(PHUIListItemView::TYPE_LINK)
+      ->setName(pht('Browse Builds'))
+      ->setHref($this->getApplicationURI('build/'));
 
-  public function buildSideNavView($for_app = false) {
-    $user = $this->getRequest()->getUser();
+    $items[] = id(new PHUIListItemView())
+      ->setType(PHUIListItemView::TYPE_LABEL)
+      ->setName(pht('Build Plans'));
 
-    $nav = new AphrontSideNavFilterView();
-    $nav->setBaseURI(new PhutilURI($this->getApplicationURI()));
+    $items[] = id(new PHUIListItemView())
+      ->setType(PHUIListItemView::TYPE_LINK)
+      ->setName(pht('Manage Build Plans'))
+      ->setHref($this->getApplicationURI('plan/'));
 
-    id(new HarbormasterBuildableSearchEngine())
-      ->setViewer($user)
-      ->addNavigationItems($nav->getMenu());
-
-    $nav->addLabel(pht('Build Plans'));
-    $nav->addFilter('plan/', pht('Manage Build Plans'));
-
-    $nav->selectFilter(null);
-
-    return $nav;
-  }
-
-  public function buildApplicationMenu() {
-    return $this->buildSideNavView(true)->getMenu();
+    return id(new HarbormasterBuildableSearchEngine())
+      ->setController($this)
+      ->setNavigationItems($items)
+      ->buildResponse();
   }
 
 }

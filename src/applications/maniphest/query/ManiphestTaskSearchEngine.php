@@ -45,48 +45,65 @@ final class ManiphestTaskSearchEngine
 
   protected function buildCustomSearchFields() {
     return array(
-      id(new PhabricatorSearchOwnersField())
+      id(new PhabricatorOwnersSearchField())
         ->setLabel(pht('Assigned To'))
         ->setKey('assignedPHIDs')
-        ->setAliases(array('assigned')),
-      id(new PhabricatorSearchUsersField())
+        ->setConduitKey('assigned')
+        ->setAliases(array('assigned'))
+        ->setDescription(
+          pht('Search for tasks owned by a user from a list.')),
+      id(new PhabricatorUsersSearchField())
         ->setLabel(pht('Authors'))
         ->setKey('authorPHIDs')
-        ->setAliases(array('author', 'authors')),
+        ->setAliases(array('author', 'authors'))
+        ->setDescription(
+          pht('Search for tasks with given authors.')),
       id(new PhabricatorSearchDatasourceField())
         ->setLabel(pht('Statuses'))
         ->setKey('statuses')
         ->setAliases(array('status'))
+        ->setDescription(
+          pht('Search for tasks with given statuses.'))
         ->setDatasource(new ManiphestTaskStatusFunctionDatasource()),
       id(new PhabricatorSearchDatasourceField())
         ->setLabel(pht('Priorities'))
         ->setKey('priorities')
         ->setAliases(array('priority'))
+        ->setDescription(
+          pht('Search for tasks with given priorities.'))
+        ->setConduitParameterType(new ConduitIntListParameterType())
         ->setDatasource(new ManiphestTaskPriorityDatasource()),
       id(new PhabricatorSearchTextField())
         ->setLabel(pht('Contains Words'))
         ->setKey('fulltext'),
       id(new PhabricatorSearchThreeStateField())
-        ->setLabel(pht('Blocking'))
-        ->setKey('blocking')
+        ->setLabel(pht('Open Parents'))
+        ->setKey('hasParents')
+        ->setAliases(array('blocking'))
         ->setOptions(
           pht('(Show All)'),
-          pht('Show Only Tasks Blocking Other Tasks'),
-          pht('Hide Tasks Blocking Other Tasks')),
+          pht('Show Only Tasks With Open Parents'),
+          pht('Show Only Tasks Without Open Parents')),
       id(new PhabricatorSearchThreeStateField())
-        ->setLabel(pht('Blocked'))
-        ->setKey('blocked')
+        ->setLabel(pht('Open Subtasks'))
+        ->setKey('hasSubtasks')
+        ->setAliases(array('blocked'))
         ->setOptions(
           pht('(Show All)'),
-          pht('Show Only Task Blocked By Other Tasks'),
-          pht('Hide Tasks Blocked By Other Tasks')),
+          pht('Show Only Tasks With Open Subtasks'),
+          pht('Show Only Tasks Without Open Subtasks')),
+      id(new PhabricatorIDsSearchField())
+        ->setLabel(pht('Parent IDs'))
+        ->setKey('parentIDs')
+        ->setAliases(array('parentID')),
+      id(new PhabricatorIDsSearchField())
+        ->setLabel(pht('Subtask IDs'))
+        ->setKey('subtaskIDs')
+        ->setAliases(array('subtaskID')),
       id(new PhabricatorSearchSelectField())
         ->setLabel(pht('Group By'))
         ->setKey('group')
         ->setOptions($this->getGroupOptions()),
-      id(new PhabricatorSearchStringListField())
-        ->setLabel(pht('Task IDs'))
-        ->setKey('ids'),
       id(new PhabricatorSearchDateField())
         ->setLabel(pht('Created After'))
         ->setKey('createdStart'),
@@ -114,8 +131,10 @@ final class ManiphestTaskSearchEngine
       'statuses',
       'priorities',
       'fulltext',
-      'blocking',
-      'blocked',
+      'hasParents',
+      'hasSubtasks',
+      'parentIDs',
+      'subtaskIDs',
       'group',
       'order',
       'ids',
@@ -141,8 +160,7 @@ final class ManiphestTaskSearchEngine
   }
 
   protected function buildQueryFromParameters(array $map) {
-    $query = id(new ManiphestTaskQuery())
-      ->needProjectPHIDs(true);
+    $query = $this->newQuery();
 
     if ($map['assignedPHIDs']) {
       $query->withOwners($map['assignedPHIDs']);
@@ -176,16 +194,24 @@ final class ManiphestTaskSearchEngine
       $query->withDateModifiedBefore($map['modifiedEnd']);
     }
 
-    if ($map['blocking'] !== null) {
-      $query->withBlockingTasks($map['blocking']);
+    if ($map['hasParents'] !== null) {
+      $query->withOpenParents($map['hasParents']);
     }
 
-    if ($map['blocked'] !== null) {
-      $query->withBlockedTasks($map['blocked']);
+    if ($map['hasSubtasks'] !== null) {
+      $query->withOpenSubtasks($map['hasSubtasks']);
     }
 
     if (strlen($map['fulltext'])) {
       $query->withFullTextSearch($map['fulltext']);
+    }
+
+    if ($map['parentIDs']) {
+      $query->withParentTaskIDs($map['parentIDs']);
+    }
+
+    if ($map['subtaskIDs']) {
+      $query->withSubtaskIDs($map['subtaskIDs']);
     }
 
     $group = idx($map, 'group');
@@ -316,13 +342,18 @@ final class ManiphestTaskSearchEngine
         ManiphestBulkEditCapability::CAPABILITY);
     }
 
-    return id(new ManiphestTaskResultListView())
+    $list = id(new ManiphestTaskResultListView())
       ->setUser($viewer)
       ->setTasks($tasks)
       ->setSavedQuery($saved)
       ->setCanEditPriority($can_edit_priority)
       ->setCanBatchEdit($can_bulk_edit)
       ->setShowBatchControls($this->showBatchControls);
+
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setContent($list);
+
+    return $result;
   }
 
   protected function willUseSavedQuery(PhabricatorSavedQuery $saved) {
@@ -371,6 +402,26 @@ final class ManiphestTaskSearchEngine
     }
 
     $saved->setParameter('projectPHIDs', $project_phids);
+  }
+
+  protected function getNewUserBody() {
+    $create_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Create a Task'))
+      ->setHref('/maniphest/task/edit/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Use Maniphest to track bugs, features, todos, or anything else '.
+            'you need to get done. Tasks assigned to you will appear here.'))
+      ->addAction($create_button);
+
+      return $view;
   }
 
 }

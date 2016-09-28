@@ -18,7 +18,7 @@ final class ConpherenceThreadSearchEngine
 
   protected function buildCustomSearchFields() {
     return array(
-      id(new PhabricatorSearchUsersField())
+      id(new PhabricatorUsersSearchField())
         ->setLabel(pht('Participants'))
         ->setKey('participants')
         ->setAliases(array('participant')),
@@ -58,11 +58,11 @@ final class ConpherenceThreadSearchEngine
   protected function getBuiltinQueryNames() {
     $names = array();
 
+    $names['all'] = pht('All Rooms');
+
     if ($this->requireViewer()->isLoggedIn()) {
       $names['participant'] = pht('Joined Rooms');
     }
-
-    $names['all'] = pht('All Rooms');
 
     return $names;
   }
@@ -149,7 +149,7 @@ final class ConpherenceThreadSearchEngine
 
       $icon_name = $conpherence->getPolicyIconName($policy_objects);
       $icon = id(new PHUIIconView())
-        ->setIconFont($icon_name);
+        ->setIcon($icon_name);
       $item = id(new PHUIObjectItemView())
         ->setObjectName($conpherence->getMonogram())
         ->setHeader($title)
@@ -204,7 +204,11 @@ final class ConpherenceThreadSearchEngine
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No threads found.'));
+
+    return $result;
   }
 
   private function loadContextMessages(array $threads, $fulltext) {

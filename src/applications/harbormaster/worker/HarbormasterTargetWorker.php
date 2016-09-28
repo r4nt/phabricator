@@ -11,6 +11,16 @@ final class HarbormasterTargetWorker extends HarbormasterWorker {
     return phutil_units('24 hours in seconds');
   }
 
+  public function renderForDisplay(PhabricatorUser $viewer) {
+    try {
+      $target = $this->loadBuildTarget();
+    } catch (Exception $ex) {
+      return null;
+    }
+
+    return $viewer->renderHandle($target->getPHID());
+  }
+
   private function loadBuildTarget() {
     $data = $this->getTaskData();
     $id = idx($data, 'targetID');
@@ -18,6 +28,7 @@ final class HarbormasterTargetWorker extends HarbormasterWorker {
     $target = id(new HarbormasterBuildTargetQuery())
       ->withIDs(array($id))
       ->setViewer($this->getViewer())
+      ->needBuildSteps(true)
       ->executeOne();
 
     if (!$target) {
@@ -49,6 +60,7 @@ final class HarbormasterTargetWorker extends HarbormasterWorker {
       }
 
       $implementation = $target->getImplementation();
+      $implementation->setCurrentWorkerTaskID($this->getCurrentWorkerTaskID());
       $implementation->execute($build, $target);
 
       $next_status = HarbormasterBuildTarget::STATUS_PASSED;
@@ -78,13 +90,10 @@ final class HarbormasterTargetWorker extends HarbormasterWorker {
       $target->setDateCompleted(PhabricatorTime::getNow());
       $target->save();
     } catch (Exception $ex) {
-      phlog($ex);
-
       try {
-        $log = $build->createLog($target, 'core', 'exception');
-        $start = $log->start();
-        $log->append((string)$ex);
-        $log->finalize($start);
+        $log = $target->newLog('core', 'exception')
+          ->append($ex)
+          ->closeBuildLog();
       } catch (Exception $log_ex) {
         phlog($log_ex);
       }

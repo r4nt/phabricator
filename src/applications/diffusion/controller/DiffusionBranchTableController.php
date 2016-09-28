@@ -6,23 +6,32 @@ final class DiffusionBranchTableController extends DiffusionController {
     return true;
   }
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $drequest = $this->getDiffusionRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContext();
+    if ($response) {
+      return $response;
+    }
 
+    $viewer = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
     $repository = $drequest->getRepository();
 
-    $pager = new AphrontPagerView();
-    $pager->setURI($request->getRequestURI(), 'offset');
-    $pager->setOffset($request->getInt('offset'));
+    $pager = id(new PHUIPagerView())
+      ->readFromRequest($request);
 
-    // TODO: Add support for branches that contain commit
+    $params = array(
+      'offset' => $pager->getOffset(),
+      'limit' => $pager->getPageSize() + 1,
+    );
+
+    $contains = $drequest->getSymbolicCommit();
+    if (strlen($contains)) {
+      $params['contains'] = $contains;
+    }
+
     $branches = $this->callConduitWithDiffusionRequest(
       'diffusion.branchquery',
-      array(
-        'offset' => $pager->getOffset(),
-        'limit' => $pager->getPageSize() + 1,
-      ));
+      $params);
     $branches = $pager->sliceResults($branches);
 
     $branches = DiffusionRepositoryRef::loadAllFromDictionaries($branches);
@@ -39,36 +48,48 @@ final class DiffusionBranchTableController extends DiffusionController {
         ->withRepository($repository)
         ->execute();
 
-      $view = id(new DiffusionBranchTableView())
+      $table = id(new DiffusionBranchTableView())
         ->setUser($viewer)
         ->setBranches($branches)
         ->setCommits($commits)
         ->setDiffusionRequest($drequest);
 
-      $panel = id(new PHUIObjectBoxView())
-        ->setHeaderText(pht('Branches'))
-        ->appendChild($view);
-
-      $content = $panel;
+      $content = id(new PHUIObjectBoxView())
+        ->setHeaderText($repository->getName())
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+        ->setTable($table);
     }
 
     $crumbs = $this->buildCrumbs(
       array(
         'branches' => true,
       ));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $content,
-        $pager,
-      ),
-      array(
-        'title' => array(
-          pht('Branches'),
-          'r'.$repository->getCallsign(),
-        ),
+    $pager_box = $this->renderTablePagerBox($pager);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Branches'))
+      ->setHeaderIcon('fa-code-fork');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+          $content,
+          $pager_box,
       ));
+
+    return $this->newPage()
+      ->setTitle(
+        array(
+          pht('Branches'),
+          $repository->getDisplayName(),
+        ))
+      ->setCrumbs($crumbs)
+      ->appendChild(
+        array(
+          $view,
+        ));
   }
 
 }

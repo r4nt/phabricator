@@ -5,6 +5,7 @@ final class ConduitAPIRequest extends Phobject {
   protected $params;
   private $user;
   private $isClusterRequest = false;
+  private $oauthToken;
 
   public function __construct(array $params) {
     $this->params = $params;
@@ -12,6 +13,10 @@ final class ConduitAPIRequest extends Phobject {
 
   public function getValue($key, $default = null) {
     return coalesce(idx($this->params, $key), $default);
+  }
+
+  public function getValueExists($key) {
+    return array_key_exists($key, $this->params);
   }
 
   public function getAllParameters() {
@@ -44,6 +49,16 @@ final class ConduitAPIRequest extends Phobject {
     return $this->user;
   }
 
+  public function setOAuthToken(
+    PhabricatorOAuthServerAccessToken $oauth_token) {
+    $this->oauthToken = $oauth_token;
+    return $this;
+  }
+
+  public function getOAuthToken() {
+    return $this->oauthToken;
+  }
+
   public function setIsClusterRequest($is_cluster_request) {
     $this->isClusterRequest = $is_cluster_request;
     return $this;
@@ -51,6 +66,11 @@ final class ConduitAPIRequest extends Phobject {
 
   public function getIsClusterRequest() {
     return $this->isClusterRequest;
+  }
+
+  public function newContentSource() {
+    return PhabricatorContentSource::newForSource(
+      PhabricatorConduitContentSource::SOURCECONST);
   }
 
 }

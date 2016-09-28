@@ -20,7 +20,7 @@ final class PhabricatorAuditCommentEditor extends PhabricatorEditor {
 
     $owned_packages = id(new PhabricatorOwnersPackageQuery())
       ->setViewer($user)
-      ->withOwnerPHIDs(array($user->getPHID()))
+      ->withAuthorityPHIDs(array($user->getPHID()))
       ->execute();
     foreach ($owned_packages as $package) {
       $phids[$package->getPHID()] = true;
@@ -46,7 +46,7 @@ final class PhabricatorAuditCommentEditor extends PhabricatorEditor {
       'diffusion-audit-'.$commit->getPHID(),
       pht(
         'Commit %s',
-        'r'.$repository->getCallsign().$commit->getCommitIdentifier()),
+        $commit->getMonogram()),
     );
   }
 

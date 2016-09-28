@@ -113,7 +113,7 @@ final class AphrontFormDateControl extends AphrontFormControl {
       return $result;
     }
 
-    $readable = $this->formatTime($epoch, 'Y!m!d!g:i A');
+    $readable = $this->formatTime($epoch, 'Y!m!d!'.$this->getTimeFormat());
     $readable = explode('!', $readable, 4);
 
     $year  = $readable[0];
@@ -130,20 +130,25 @@ final class AphrontFormDateControl extends AphrontFormControl {
     $date_format = $this->getDateFormat();
     $timezone = $this->getTimezone();
 
-    $datetime = new DateTime($this->valueDate, $timezone);
-    $date = $datetime->format($date_format);
+    try {
+      $datetime = new DateTime($this->valueDate, $timezone);
+    } catch (Exception $ex) {
+      return $this->valueDate;
+    }
 
-    return $date;
+    return $datetime->format($date_format);
   }
 
   private function getTimeFormat() {
-    return $this->getUser()
-      ->getPreference(PhabricatorUserPreferences::PREFERENCE_TIME_FORMAT);
+    $viewer = $this->getViewer();
+    $time_key = PhabricatorTimeFormatSetting::SETTINGKEY;
+    return $viewer->getUserSetting($time_key);
   }
 
   private function getDateFormat() {
-    return $this->getUser()
-      ->getPreference(PhabricatorUserPreferences::PREFERENCE_DATE_FORMAT);
+    $viewer = $this->getViewer();
+    $date_key = PhabricatorDateFormatSetting::SETTINGKEY;
+    return $viewer->getUserSetting($date_key);
   }
 
   private function getTimeInputValue() {
@@ -153,7 +158,7 @@ final class AphrontFormDateControl extends AphrontFormControl {
   private function formatTime($epoch, $fmt) {
     return phabricator_format_local_time(
       $epoch,
-      $this->user,
+      $this->getViewer(),
       $fmt);
   }
 
@@ -217,7 +222,7 @@ final class AphrontFormDateControl extends AphrontFormControl {
       $date_sel);
 
     $cicon = id(new PHUIIconView())
-      ->setIconFont('fa-calendar');
+      ->setIcon('fa-calendar');
 
     $cal_icon = javelin_tag(
       'a',
@@ -237,7 +242,6 @@ final class AphrontFormDateControl extends AphrontFormControl {
       'timeValues' => $values,
       'format' => $this->getTimeFormat(),
       ));
-
 
     $time_sel = javelin_tag(
       'input',
@@ -259,9 +263,9 @@ final class AphrontFormDateControl extends AphrontFormControl {
       ),
       $time_sel);
 
-    $preferences = $this->user->loadPreferences();
-    $pref_week_start = PhabricatorUserPreferences::PREFERENCE_WEEK_START_DAY;
-    $week_start = $preferences->getPreference($pref_week_start, 0);
+    $viewer = $this->getViewer();
+    $week_key = PhabricatorWeekStartDaySetting::SETTINGKEY;
+    $week_start = $viewer->getUserSetting($week_key);
 
     Javelin::initBehavior('fancy-datepicker', array(
       'format' => $this->getDateFormat(),
@@ -300,12 +304,9 @@ final class AphrontFormDateControl extends AphrontFormControl {
       return $this->zone;
     }
 
-    $user = $this->getUser();
-    if (!$this->getUser()) {
-      throw new PhutilInvalidStateException('setUser');
-    }
+    $viewer = $this->getViewer();
 
-    $user_zone = $user->getTimezoneIdentifier();
+    $user_zone = $viewer->getTimezoneIdentifier();
     $this->zone = new DateTimeZone($user_zone);
     return $this->zone;
   }

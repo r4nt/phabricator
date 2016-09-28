@@ -7,10 +7,20 @@ final class DifferentialRevisionListView extends AphrontView {
 
   private $revisions;
   private $handles;
-  private $highlightAge;
   private $header;
   private $noDataString;
   private $noBox;
+  private $background = null;
+  private $unlandedDependencies = array();
+
+  public function setUnlandedDependencies(array $unlanded_dependencies) {
+    $this->unlandedDependencies = $unlanded_dependencies;
+    return $this;
+  }
+
+  public function getUnlandedDependencies() {
+    return $this->unlandedDependencies;
+  }
 
   public function setNoDataString($no_data_string) {
     $this->noDataString = $no_data_string;
@@ -28,13 +38,13 @@ final class DifferentialRevisionListView extends AphrontView {
     return $this;
   }
 
-  public function setHighlightAge($bool) {
-    $this->highlightAge = $bool;
+  public function setNoBox($box) {
+    $this->noBox = $box;
     return $this;
   }
 
-  public function setNoBox($box) {
-    $this->noBox = $box;
+  public function setBackground($background) {
+    $this->background = $background;
     return $this;
   }
 
@@ -57,24 +67,7 @@ final class DifferentialRevisionListView extends AphrontView {
   }
 
   public function render() {
-    $user = $this->user;
-    if (!$user) {
-      throw new PhutilInvalidStateException('setUser');
-    }
-
-    $fresh = PhabricatorEnv::getEnvConfig('differential.days-fresh');
-    if ($fresh) {
-      $fresh = PhabricatorCalendarHoliday::getNthBusinessDay(
-        time(),
-        -$fresh);
-    }
-
-    $stale = PhabricatorEnv::getEnvConfig('differential.days-stale');
-    if ($stale) {
-      $stale = PhabricatorCalendarHoliday::getNthBusinessDay(
-        time(),
-        -$stale);
-    }
+    $viewer = $this->getViewer();
 
     $this->initBehavior('phabricator-tooltips', array());
     $this->requireResource('aphront-tooltip-css');
@@ -83,12 +76,12 @@ final class DifferentialRevisionListView extends AphrontView {
 
     foreach ($this->revisions as $revision) {
       $item = id(new PHUIObjectItemView())
-        ->setUser($user);
+        ->setUser($viewer);
 
       $icons = array();
 
       $phid = $revision->getPHID();
-      $flag = $revision->getFlag($user);
+      $flag = $revision->getFlag($viewer);
       if ($flag) {
         $flag_class = PhabricatorFlagColor::getCSSClass($flag->getColor());
         $icons['flag'] = phutil_tag(
@@ -99,27 +92,11 @@ final class DifferentialRevisionListView extends AphrontView {
           '');
       }
 
-      if ($revision->getDrafts($user)) {
+      if ($revision->getDrafts($viewer)) {
         $icons['draft'] = true;
       }
 
       $modified = $revision->getDateModified();
-
-      $status = $revision->getStatus();
-      $show_age = ($fresh || $stale) &&
-                  $this->highlightAge &&
-                  !$revision->isClosed();
-
-      if ($stale && $modified < $stale) {
-        $object_age = PHUIObjectItemView::AGE_OLD;
-      } else if ($fresh && $modified < $fresh) {
-        $object_age = PHUIObjectItemView::AGE_STALE;
-      } else {
-        $object_age = PHUIObjectItemView::AGE_FRESH;
-      }
-
-      $status_name =
-        ArcanistDifferentialRevisionStatus::getNameForRevisionStatus($status);
 
       if (isset($icons['flag'])) {
         $item->addHeadIcon($icons['flag']);
@@ -131,7 +108,7 @@ final class DifferentialRevisionListView extends AphrontView {
 
       if (isset($icons['draft'])) {
         $draft = id(new PHUIIconView())
-          ->setIconFont('fa-comment yellow')
+          ->setIcon('fa-comment yellow')
           ->addSigil('has-tooltip')
           ->setMetadata(
             array(
@@ -140,14 +117,19 @@ final class DifferentialRevisionListView extends AphrontView {
         $item->addAttribute($draft);
       }
 
-      /* Most things 'Need Review', so accept it's the default */
-      if ($status != ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
-        $item->addAttribute($status_name);
-      }
-
       // Author
       $author_handle = $this->handles[$revision->getAuthorPHID()];
       $item->addByline(pht('Author: %s', $author_handle->renderLink()));
+
+      $unlanded = idx($this->unlandedDependencies, $phid);
+      if ($unlanded) {
+        $item->addAttribute(
+          array(
+            id(new PHUIIconView())->setIcon('fa-chain-broken', 'red'),
+            ' ',
+            pht('Open Dependencies'),
+          ));
+      }
 
       $reviewers = array();
       // TODO: As above, this should be based on `getReviewerStatus()`.
@@ -161,25 +143,15 @@ final class DifferentialRevisionListView extends AphrontView {
       }
 
       $item->addAttribute(pht('Reviewers: %s', $reviewers));
-      $item->setEpoch($revision->getDateModified(), $object_age);
+      $item->setEpoch($revision->getDateModified());
 
-      switch ($status) {
-        case ArcanistDifferentialRevisionStatus::NEEDS_REVIEW:
-          break;
-        case ArcanistDifferentialRevisionStatus::NEEDS_REVISION:
-        case ArcanistDifferentialRevisionStatus::CHANGES_PLANNED:
-          $item->setBarColor('red');
-          break;
-        case ArcanistDifferentialRevisionStatus::ACCEPTED:
-          $item->setBarColor('green');
-          break;
-        case ArcanistDifferentialRevisionStatus::CLOSED:
-          $item->setDisabled(true);
-          break;
-        case ArcanistDifferentialRevisionStatus::ABANDONED:
-          $item->setBarColor('black');
-          break;
+      if ($revision->isClosed()) {
+        $item->setDisabled(true);
       }
+
+      $item->setStatusIcon(
+        $revision->getStatusIcon(),
+        $revision->getStatusDisplayName());
 
       $list->addItem($item);
     }
@@ -190,7 +162,8 @@ final class DifferentialRevisionListView extends AphrontView {
     if ($this->header && !$this->noBox) {
       $list->setFlush(true);
       $list = id(new PHUIObjectBoxView())
-        ->appendChild($list);
+        ->setBackground($this->background)
+        ->setObjectList($list);
 
       if ($this->header instanceof PHUIHeaderView) {
         $list->setHeader($this->header);

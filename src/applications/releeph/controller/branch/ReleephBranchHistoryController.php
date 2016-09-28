@@ -2,23 +2,17 @@
 
 final class ReleephBranchHistoryController extends ReleephBranchController {
 
-  private $branchID;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->branchID = $data['branchID'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('branchID');
 
     $branch = id(new ReleephBranchQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->branchID))
+      ->withIDs(array($id))
       ->executeOne();
     if (!$branch) {
       return new Aphront404Response();
@@ -33,15 +27,15 @@ final class ReleephBranchHistoryController extends ReleephBranchController {
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('History'));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $timeline,
-      ),
-      array(
-        'title' => pht('Branch History'),
-      ));
+    $title = pht('Branch History');
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($timeline);
+
   }
 
 }

@@ -18,22 +18,25 @@ final class ConduitQueryConduitAPIMethod extends ConduitAPIMethod {
     return 'dict<dict>';
   }
 
-  protected function execute(ConduitAPIRequest $request) {
-    $classes = id(new PhutilSymbolLoader())
-      ->setAncestorClass('ConduitAPIMethod')
-      ->setType('class')
-      ->loadObjects();
+  public function getRequiredScope() {
+    return self::SCOPE_ALWAYS;
+  }
 
-    $names_to_params = array();
-    foreach ($classes as $class) {
-      $names_to_params[$class->getAPIMethodName()] = array(
-        'description' => $class->getMethodDescription(),
-        'params' => $class->getParamTypes(),
-        'return' => $class->getReturnType(),
+  protected function execute(ConduitAPIRequest $request) {
+    $methods = id(new PhabricatorConduitMethodQuery())
+      ->setViewer($request->getUser())
+      ->execute();
+
+    $map = array();
+    foreach ($methods as $method) {
+      $map[$method->getAPIMethodName()] = array(
+        'description' => $method->getMethodDescription(),
+        'params' => $method->getParamTypes(),
+        'return' => $method->getReturnType(),
       );
     }
 
-    return $names_to_params;
+    return $map;
   }
 
 }

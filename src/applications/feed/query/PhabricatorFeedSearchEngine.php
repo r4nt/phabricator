@@ -102,7 +102,7 @@ final class PhabricatorFeedSearchEngine
     );
 
     if ($this->requireViewer()->isLoggedIn()) {
-      $names['projects'] = pht('Projects');
+      $names['projects'] = pht('Tags');
     }
 
     return $names;
@@ -139,7 +139,12 @@ final class PhabricatorFeedSearchEngine
     $builder->setUser($this->requireViewer());
     $view = $builder->buildView();
 
-    return phutil_tag_div('phabricator-feed-frame', $view);
+    $list = phutil_tag_div('phabricator-feed-frame', $view);
+
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setContent($list);
+
+    return $result;
   }
 
 }

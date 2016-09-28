@@ -14,7 +14,7 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
     return '/diffusion/';
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-code';
   }
 
@@ -37,12 +37,6 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
     );
   }
 
-  public function getEventListeners() {
-    return array(
-      new DiffusionHovercardEventListener(),
-    );
-  }
-
   public function getRemarkupRules() {
     return array(
       new DiffusionCommitRemarkupRule(),
@@ -53,25 +47,33 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
 
   public function getRoutes() {
     return array(
-      '/r(?P<callsign>[A-Z]+)(?P<commit>[a-z0-9]+)'
+      '/(?:'.
+        'r(?P<repositoryCallsign>[A-Z]+)'.
+        '|'.
+        'R(?P<repositoryID>[1-9]\d*):'.
+      ')(?P<commit>[a-f0-9]+)'
         => 'DiffusionCommitController',
+
       '/diffusion/' => array(
-        '(?:query/(?P<queryKey>[^/]+)/)?'
+        $this->getQueryRoutePattern()
           => 'DiffusionRepositoryListController',
-        'new/' => 'DiffusionRepositoryNewController',
-        '(?P<edit>create)/' => 'DiffusionRepositoryCreateController',
-        '(?P<edit>import)/' => 'DiffusionRepositoryCreateController',
+        $this->getEditRoutePattern('edit/') =>
+          'DiffusionRepositoryEditController',
         'pushlog/' => array(
           '(?:query/(?P<queryKey>[^/]+)/)?' => 'DiffusionPushLogListController',
           'view/(?P<id>\d+)/' => 'DiffusionPushEventViewController',
         ),
-        '(?P<callsign>[A-Z]+)/' => array(
+        '(?:'.
+          '(?P<repositoryCallsign>[A-Z]+)'.
+          '|'.
+          '(?P<repositoryID>[1-9]\d*)'.
+        ')/' => array(
           '' => 'DiffusionRepositoryController',
 
           'repository/(?P<dblob>.*)'    => 'DiffusionRepositoryController',
           'change/(?P<dblob>.*)'        => 'DiffusionChangeController',
           'history/(?P<dblob>.*)'       => 'DiffusionHistoryController',
-          'browse/(?P<dblob>.*)'        => 'DiffusionBrowseMainController',
+          'browse/(?P<dblob>.*)'        => 'DiffusionBrowseController',
           'lastmodified/(?P<dblob>.*)'  => 'DiffusionLastModifiedController',
           'diff/'                       => 'DiffusionDiffController',
           'tags/(?P<dblob>.*)'          => 'DiffusionTagListController',
@@ -84,37 +86,34 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
             => 'DiffusionCommitTagsController',
           'commit/(?P<commit>[a-z0-9]+)/edit/'
             => 'DiffusionCommitEditController',
+          'manage/(?:(?P<panel>[^/]+)/)?'
+            => 'DiffusionRepositoryManagePanelsController',
+          'uri/' => array(
+            'view/(?P<id>[0-9]\d*)/' => 'DiffusionRepositoryURIViewController',
+            'disable/(?P<id>[0-9]\d*)/'
+              => 'DiffusionRepositoryURIDisableController',
+            $this->getEditRoutePattern('edit/')
+              => 'DiffusionRepositoryURIEditController',
+            'credential/(?P<id>[0-9]\d*)/(?P<action>edit|remove)/'
+              => 'DiffusionRepositoryURICredentialController',
+          ),
           'edit/' => array(
-            '' => 'DiffusionRepositoryEditMainController',
-            'basic/' => 'DiffusionRepositoryEditBasicController',
-            'encoding/' => 'DiffusionRepositoryEditEncodingController',
             'activate/' => 'DiffusionRepositoryEditActivateController',
             'dangerous/' => 'DiffusionRepositoryEditDangerousController',
-            'branches/' => 'DiffusionRepositoryEditBranchesController',
-            'subversion/' => 'DiffusionRepositoryEditSubversionController',
-            'actions/' => 'DiffusionRepositoryEditActionsController',
-            '(?P<edit>remote)/' => 'DiffusionRepositoryCreateController',
-            '(?P<edit>policy)/' => 'DiffusionRepositoryCreateController',
-            'storage/' => 'DiffusionRepositoryEditStorageController',
             'delete/' => 'DiffusionRepositoryEditDeleteController',
-            'hosting/' => 'DiffusionRepositoryEditHostingController',
-            '(?P<serve>serve)/' => 'DiffusionRepositoryEditHostingController',
             'update/' => 'DiffusionRepositoryEditUpdateController',
-            'symbol/' => 'DiffusionRepositorySymbolsController',
-            'staging/' => 'DiffusionRepositoryEditStagingController',
+            'testautomation/' => 'DiffusionRepositoryTestAutomationController',
           ),
           'pathtree/(?P<dblob>.*)' => 'DiffusionPathTreeController',
-          'mirror/' => array(
-            'edit/(?:(?P<id>\d+)/)?' => 'DiffusionMirrorEditController',
-            'delete/(?P<id>\d+)/' => 'DiffusionMirrorDeleteController',
-          ),
         ),
 
         // NOTE: This must come after the rule above; it just gives us a
         // catch-all for serving repositories over HTTP. We must accept
         // requests without the trailing "/" because SVN commands don't
         // necessarily include it.
-        '(?P<callsign>[A-Z]+)(/|$).*' => 'DiffusionRepositoryDefaultController',
+        '(?:(?P<repositoryCallsign>[A-Z]+)|(?P<repositoryID>[1-9]\d*))'.
+          '(?:/.*)?'
+          => 'DiffusionRepositoryDefaultController',
 
         'inline/' => array(
           'edit/(?P<phid>[^/]+)/' => 'DiffusionInlineCommentController',

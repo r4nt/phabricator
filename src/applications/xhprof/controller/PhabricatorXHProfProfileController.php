@@ -3,18 +3,16 @@
 final class PhabricatorXHProfProfileController
   extends PhabricatorXHProfController {
 
-  private $phid;
-
-  public function willProcessRequest(array $data) {
-    $this->phid = $data['phid'];
+  public function shouldAllowPublic() {
+    return true;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
+  public function handleRequest(AphrontRequest $request) {
+    $phid = $request->getURIData('phid');
 
     $file = id(new PhabricatorFileQuery())
       ->setViewer($request->getUser())
-      ->withPHIDs(array($this->phid))
+      ->withPHIDs(array($phid))
       ->executeOne();
     if (!$file) {
       return new Aphront404Response();
@@ -49,11 +47,14 @@ final class PhabricatorXHProfProfileController
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('%s Profile', $symbol));
 
-    return $this->buildStandardPageResponse(
-      array($crumbs, $view),
-      array(
-        'title' => pht('Profile'),
-        'frame' => $is_framed,
-      ));
+    $title = pht('Profile');
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->setFrameable(true)
+      ->setShowChrome(false)
+      ->setDisableConsole(true)
+      ->appendChild($view);
   }
 }

@@ -55,16 +55,9 @@ abstract class PhabricatorAuthProvider extends Phobject {
   }
 
   public static function getAllBaseProviders() {
-    static $providers;
-
-    if ($providers === null) {
-      $objects = id(new PhutilSymbolLoader())
-        ->setAncestorClass(__CLASS__)
-        ->loadObjects();
-      $providers = $objects;
-    }
-
-    return $providers;
+    return id(new PhutilClassMapQuery())
+      ->setAncestorClass(__CLASS__)
+      ->execute();
   }
 
   public static function getAllProviders() {
@@ -128,6 +121,10 @@ abstract class PhabricatorAuthProvider extends Phobject {
   }
 
   public function shouldAllowRegistration() {
+    if (!$this->shouldAllowLogin()) {
+      return false;
+    }
+
     return $this->getProviderConfig()->getShouldAllowRegistration();
   }
 
@@ -467,12 +464,14 @@ abstract class PhabricatorAuthProvider extends Phobject {
   public function getAuthCSRFCode(AphrontRequest $request) {
     $phcid = $request->getCookie(PhabricatorCookies::COOKIE_CLIENTID);
     if (!strlen($phcid)) {
-      throw new Exception(
+      throw new AphrontMalformedRequestException(
+        pht('Missing Client ID Cookie'),
         pht(
           'Your browser did not submit a "%s" cookie with client state '.
           'information in the request. Check that cookies are enabled. '.
           'If this problem persists, you may need to clear your cookies.',
-          PhabricatorCookies::COOKIE_CLIENTID));
+          PhabricatorCookies::COOKIE_CLIENTID),
+        true);
     }
 
     return PhabricatorHash::digest($phcid);
@@ -489,13 +488,21 @@ abstract class PhabricatorAuthProvider extends Phobject {
           'problem persists, you may need to clear your cookies.'));
     }
 
-    if ($actual !== $expect) {
+    if (!phutil_hashes_are_identical($actual, $expect)) {
       throw new Exception(
         pht(
           'The authentication provider did not return the correct client '.
           'state parameter in its response. If this problem persists, you may '.
           'need to clear your cookies.'));
     }
+  }
+
+  public function supportsAutoLogin() {
+    return false;
+  }
+
+  public function getAutoLoginURI(AphrontRequest $request) {
+    throw new PhutilMethodNotImplementedException();
   }
 
 }

@@ -112,20 +112,13 @@ abstract class PhabricatorCustomField extends Phobject {
     $object,
     array $options = array()) {
 
-    PhutilTypeSpec::checkMap(
-      $options,
-      array(
-        'withDisabled' => 'optional bool',
-      ));
-
-    $field_objects = id(new PhutilSymbolLoader())
+    $field_objects = id(new PhutilClassMapQuery())
       ->setAncestorClass($base_class)
-      ->loadObjects();
+      ->execute();
 
     $fields = array();
-    $from_map = array();
     foreach ($field_objects as $field_object) {
-      $current_class = get_class($field_object);
+      $field_object = clone $field_object;
       foreach ($field_object->createFields($object) as $field) {
         $key = $field->getFieldKey();
         if (isset($fields[$key])) {
@@ -133,11 +126,10 @@ abstract class PhabricatorCustomField extends Phobject {
             pht(
               "Both '%s' and '%s' define a custom field with ".
               "field key '%s'. Field keys must be unique.",
-              $from_map[$key],
-              $current_class,
+              get_class($fields[$key]),
+              get_class($field),
               $key));
         }
-        $from_map[$key] = $current_class;
         $fields[$key] = $field;
       }
     }
@@ -152,11 +144,13 @@ abstract class PhabricatorCustomField extends Phobject {
 
     if (empty($options['withDisabled'])) {
       foreach ($fields as $key => $field) {
-        $config = idx($spec, $key, array()) + array(
-          'disabled' => $field->shouldDisableByDefault(),
-        );
+        if (isset($spec[$key]['disabled'])) {
+          $is_disabled = $spec[$key]['disabled'];
+        } else {
+          $is_disabled = $field->shouldDisableByDefault();
+        }
 
-        if (!empty($config['disabled'])) {
+        if ($is_disabled) {
           if ($field->canDisableField()) {
             unset($fields[$key]);
           }
@@ -188,6 +182,13 @@ abstract class PhabricatorCustomField extends Phobject {
       $field_key_is_incomplete = true);
   }
 
+  public function getModernFieldKey() {
+    if ($this->proxy) {
+      return $this->proxy->getModernFieldKey();
+    }
+    return $this->getFieldKey();
+  }
+
 
   /**
    * Return a human-readable field name.
@@ -199,7 +200,7 @@ abstract class PhabricatorCustomField extends Phobject {
     if ($this->proxy) {
       return $this->proxy->getFieldName();
     }
-    return $this->getFieldKey();
+    return $this->getModernFieldKey();
   }
 
 
@@ -499,7 +500,7 @@ abstract class PhabricatorCustomField extends Phobject {
 
     $out = array();
     foreach ($handles as $handle) {
-      $out[] = $handle->renderLink();
+      $out[] = $handle->renderHovercardLink();
     }
 
     return phutil_implode_html(phutil_tag('br'), $out);
@@ -540,9 +541,7 @@ abstract class PhabricatorCustomField extends Phobject {
    * @task storage
    */
   public function newStorageObject() {
-    if ($this->proxy) {
-      return $this->proxy->newStorageObject();
-    }
+    // NOTE: This intentionally isn't proxied, to avoid call cycles.
     throw new PhabricatorCustomFieldImplementationIncompleteException($this);
   }
 
@@ -587,6 +586,13 @@ abstract class PhabricatorCustomField extends Phobject {
       return $this->proxy->setValueFromStorage($value);
     }
     throw new PhabricatorCustomFieldImplementationIncompleteException($this);
+  }
+
+  public function didSetValueFromStorage() {
+    if ($this->proxy) {
+      return $this->proxy->didSetValueFromStorage();
+    }
+    return $this;
   }
 
 
@@ -1084,6 +1090,52 @@ abstract class PhabricatorCustomField extends Phobject {
 /* -(  Edit View  )---------------------------------------------------------- */
 
 
+  public function getEditEngineFields(PhabricatorEditEngine $engine) {
+    $field = $this->newStandardEditField($engine);
+
+    return array(
+      $field,
+    );
+  }
+
+  protected function newEditField() {
+    $field = id(new PhabricatorCustomFieldEditField())
+      ->setCustomField($this);
+
+    $http_type = $this->getHTTPParameterType();
+    if ($http_type) {
+      $field->setCustomFieldHTTPParameterType($http_type);
+    }
+
+    $conduit_type = $this->getConduitEditParameterType();
+    if ($conduit_type) {
+      $field->setCustomFieldConduitParameterType($conduit_type);
+    }
+
+    return $field;
+  }
+
+  protected function newStandardEditField() {
+    if ($this->proxy) {
+      return $this->proxy->newStandardEditField();
+    }
+
+    return $this->newEditField()
+      ->setKey($this->getFieldKey())
+      ->setEditTypeKey($this->getModernFieldKey())
+      ->setLabel($this->getFieldName())
+      ->setDescription($this->getFieldDescription())
+      ->setTransactionType($this->getApplicationTransactionType())
+      ->setValue($this->getNewValueForApplicationTransactions());
+  }
+
+  protected function getHTTPParameterType() {
+    if ($this->proxy) {
+      return $this->proxy->getHTTPParameterType();
+    }
+    return null;
+  }
+
   /**
    * @task edit
    */
@@ -1284,6 +1336,36 @@ abstract class PhabricatorCustomField extends Phobject {
   }
 
 
+  public function shouldAppearInConduitTransactions() {
+    if ($this->proxy) {
+      return $this->proxy->shouldAppearInConduitDictionary();
+    }
+    return false;
+  }
+
+  public function getConduitSearchParameterType() {
+    return $this->newConduitSearchParameterType();
+  }
+
+  protected function newConduitSearchParameterType() {
+    if ($this->proxy) {
+      return $this->proxy->newConduitSearchParameterType();
+    }
+    return null;
+  }
+
+  public function getConduitEditParameterType() {
+    return $this->newConduitEditParameterType();
+  }
+
+  protected function newConduitEditParameterType() {
+    if ($this->proxy) {
+      return $this->proxy->newConduitEditParameterType();
+    }
+    return null;
+  }
+
+
 /* -(  Herald  )------------------------------------------------------------- */
 
 
@@ -1354,6 +1436,20 @@ abstract class PhabricatorCustomField extends Phobject {
   public function getHeraldFieldValueType($condition) {
     if ($this->proxy) {
       return $this->proxy->getHeraldFieldValueType($condition);
+    }
+    return null;
+  }
+
+  public function getHeraldFieldStandardType() {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldFieldStandardType();
+    }
+    return null;
+  }
+
+  public function getHeraldDatasource() {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldDatasource();
     }
     return null;
   }

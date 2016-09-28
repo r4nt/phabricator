@@ -36,30 +36,61 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     $crumbs = $this->buildApplicationCrumbs();
     $this->addAccountCrumb($crumbs, $account, $link = false);
+    $crumbs->setBorder(true);
 
     $header = id(new PHUIHeaderView())
-      ->setHeader($title);
+      ->setHeader($title)
+      ->setHeaderIcon('fa-credit-card');
+
+    $curtain = $this->buildCurtainView($account, $invoices);
+    $invoices = $this->buildInvoicesSection($account, $invoices);
+    $purchase_history = $this->buildPurchaseHistorySection($account);
+    $charge_history = $this->buildChargeHistorySection($account);
+    $subscriptions = $this->buildSubscriptionsSection($account);
+    $payment_methods = $this->buildPaymentMethodsSection($account);
+
+    $timeline = $this->buildTransactionTimeline(
+      $account,
+      new PhortuneAccountTransactionQuery());
+    $timeline->setShouldTerminate(true);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+        $invoices,
+        $purchase_history,
+        $charge_history,
+        $subscriptions,
+        $payment_methods,
+        $timeline,
+      ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
+  }
+
+  private function buildCurtainView(PhortuneAccount $account, $invoices) {
+    $viewer = $this->getViewer();
+
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $account,
+      PhabricatorPolicyCapability::CAN_EDIT);
 
     $edit_uri = $this->getApplicationURI('account/edit/'.$account->getID().'/');
 
-    $actions = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObjectURI($request->getRequestURI())
-      ->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Edit Account'))
-          ->setIcon('fa-pencil')
-          ->setHref($edit_uri)
-          ->setDisabled(!$can_edit)
-          ->setWorkflow(!$can_edit));
-
-    $properties = id(new PHUIPropertyListView())
-      ->setObject($account)
-      ->setUser($viewer);
-
-    $properties->addProperty(
-      pht('Members'),
-      $viewer->renderHandleList($account->getMemberPHIDs()));
+    $curtain = $this->newCurtainView($account);
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Edit Account'))
+        ->setIcon('fa-pencil')
+        ->setHref($edit_uri)
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit));
 
     $status_items = $this->getStatusItemsForAccount($account, $invoices);
     $status_view = new PHUIStatusListView();
@@ -73,46 +104,39 @@ final class PhortuneAccountViewController extends PhortuneController {
           ->setTarget(idx($item, 'target'))
           ->setNote(idx($item, 'note')));
     }
-    $properties->addProperty(
-      pht('Status'),
-      $status_view);
 
-    $properties->setActionList($actions);
+    $member_phids = $account->getMemberPHIDs();
+    $handles = $viewer->loadHandles($member_phids);
 
-    $invoices = $this->buildInvoicesSection($account, $invoices);
-    $purchase_history = $this->buildPurchaseHistorySection($account);
-    $charge_history = $this->buildChargeHistorySection($account);
-    $subscriptions = $this->buildSubscriptionsSection($account);
-    $payment_methods = $this->buildPaymentMethodsSection($account);
+    $member_list = id(new PHUIObjectItemListView())
+      ->setSimple(true);
 
-    $timeline = $this->buildTransactionTimeline(
-      $account,
-      new PhortuneAccountTransactionQuery());
-    $timeline->setShouldTerminate(true);
+    foreach ($member_phids as $member_phid) {
+      $image_uri = $handles[$member_phid]->getImageURI();
+      $image_href = $handles[$member_phid]->getURI();
+      $person = $handles[$member_phid];
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->addPropertyList($properties);
+      $member = id(new PHUIObjectItemView())
+        ->setImageURI($image_uri)
+        ->setHref($image_href)
+        ->setHeader($person->getFullName());
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-        $invoices,
-        $purchase_history,
-        $charge_history,
-        $subscriptions,
-        $payment_methods,
-        $timeline,
-      ),
-      array(
-        'title' => $title,
-      ));
+      $member_list->addItem($member);
+    }
+
+    $curtain->newPanel()
+      ->setHeaderText(pht('Status'))
+      ->appendChild($status_view);
+
+    $curtain->newPanel()
+      ->setHeaderText(pht('Members'))
+      ->appendChild($member_list);
+
+    return $curtain;
   }
 
   private function buildPaymentMethodsSection(PhortuneAccount $account) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+    $viewer = $this->getViewer();
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
@@ -133,6 +157,10 @@ final class PhortuneAccountViewController extends PhortuneController {
     $methods = id(new PhortunePaymentMethodQuery())
       ->setViewer($viewer)
       ->withAccountPHIDs(array($account->getPHID()))
+      ->withStatuses(
+        array(
+          PhortunePaymentMethod::STATUS_ACTIVE,
+        ))
       ->execute();
 
     foreach ($methods as $method) {
@@ -143,7 +171,7 @@ final class PhortuneAccountViewController extends PhortuneController {
 
       switch ($method->getStatus()) {
         case PhortunePaymentMethod::STATUS_ACTIVE:
-          $item->setBarColor('green');
+          $item->setStatusIcon('fa-check green');
 
           $disable_uri = $this->getApplicationURI('card/'.$id.'/disable/');
           $item->addAction(
@@ -154,6 +182,7 @@ final class PhortuneAccountViewController extends PhortuneController {
               ->setWorkflow(true));
           break;
         case PhortunePaymentMethod::STATUS_DISABLED:
+          $item->setStatusIcon('fa-ban lightbluetext');
           $item->setDisabled(true);
           break;
       }
@@ -175,15 +204,15 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($list);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setObjectList($list);
   }
 
   private function buildInvoicesSection(
     PhortuneAccount $account,
     array $carts) {
 
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+    $viewer = $this->getViewer();
 
     $phids = array();
     foreach ($carts as $cart) {
@@ -207,12 +236,12 @@ final class PhortuneAccountViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($table);
   }
 
   private function buildPurchaseHistorySection(PhortuneAccount $account) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+    $viewer = $this->getViewer();
 
     $carts = id(new PhortuneCartQuery())
       ->setViewer($viewer)
@@ -250,20 +279,18 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-list'))
+          ->setIcon('fa-list')
           ->setHref($orders_uri)
           ->setText(pht('View All Orders')));
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($table);
   }
 
   private function buildChargeHistorySection(PhortuneAccount $account) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+    $viewer = $this->getViewer();
 
     $charges = id(new PhortuneChargeQuery())
       ->setViewer($viewer)
@@ -294,20 +321,18 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-list'))
+          ->setIcon('fa-list')
           ->setHref($charges_uri)
           ->setText(pht('View All Charges')));
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($table);
   }
 
   private function buildSubscriptionsSection(PhortuneAccount $account) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+    $viewer = $this->getViewer();
 
     $subscriptions = id(new PhortuneSubscriptionQuery())
       ->setViewer($viewer)
@@ -332,13 +357,14 @@ final class PhortuneAccountViewController extends PhortuneController {
           ->setTag('a')
           ->setIcon(
             id(new PHUIIconView())
-              ->setIconFont('fa-list'))
+              ->setIcon('fa-list'))
           ->setHref($subscriptions_uri)
           ->setText(pht('View All Subscriptions')));
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($table);
   }
 
   protected function buildApplicationCrumbs() {

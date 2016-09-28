@@ -7,6 +7,8 @@ final class PhrictionDocument extends PhrictionDAO
     PhabricatorFlaggableInterface,
     PhabricatorTokenReceiverInterface,
     PhabricatorDestructibleInterface,
+    PhabricatorFulltextInterface,
+    PhabricatorProjectInterface,
     PhabricatorApplicationTransactionInterface {
 
   protected $slug;
@@ -193,13 +195,6 @@ final class PhrictionDocument extends PhrictionDAO
     return false;
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
-  }
 
 /* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
 
@@ -250,6 +245,14 @@ final class PhrictionDocument extends PhrictionDAO
       }
 
     $this->saveTransaction();
+  }
+
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+
+  public function newFulltextEngine() {
+    return new PhrictionDocumentFulltextEngine();
   }
 
 }

@@ -82,29 +82,22 @@ final class ManiphestTaskStatus extends ManiphestConstants {
     return self::getStatusAttribute($status, 'name', pht('Unknown Status'));
   }
 
-  public static function renderFullDescription($status) {
+  public static function renderFullDescription($status, $priority) {
     if (self::isOpenStatus($status)) {
-      $color = 'status';
-      $icon_color = 'bluegrey';
+      $name = pht('%s, %s', self::getTaskStatusFullName($status), $priority);
+      $color = 'grey';
+      $icon = 'fa-square-o';
     } else {
-      $color = 'status-dark';
-      $icon_color = '';
+      $name = self::getTaskStatusFullName($status);
+      $color = 'indigo';
+      $icon = 'fa-check-square-o';
     }
 
-    $icon = self::getStatusIcon($status);
-
-    $img = id(new PHUIIconView())
-      ->setIconFont($icon.' '.$icon_color);
-
-    $tag = phutil_tag(
-      'span',
-      array(
-        'class' => 'phui-header-'.$color.' plr',
-      ),
-      array(
-        $img,
-        self::getTaskStatusFullName($status),
-      ));
+    $tag = id(new PHUITagView())
+      ->setName($name)
+      ->setIcon($icon)
+      ->setType(PHUITagView::TYPE_SHADE)
+      ->setShade($color);
 
     return $tag;
   }
@@ -155,6 +148,10 @@ final class ManiphestTaskStatus extends ManiphestConstants {
     return false;
   }
 
+  public static function isClaimStatus($status) {
+    return self::getStatusAttribute($status, 'claim', true);
+  }
+
   public static function isClosedStatus($status) {
     return !self::isOpenStatus($status);
   }
@@ -167,6 +164,10 @@ final class ManiphestTaskStatus extends ManiphestConstants {
     return self::getStatusAttribute($status, 'transaction.color');
   }
 
+  public static function isDisabledStatus($status) {
+    return self::getStatusAttribute($status, 'disabled');
+  }
+
   public static function getStatusIcon($status) {
     $icon = self::getStatusAttribute($status, 'transaction.icon');
     if ($icon) {
@@ -174,7 +175,7 @@ final class ManiphestTaskStatus extends ManiphestConstants {
     }
 
     if (self::isOpenStatus($status)) {
-      return 'fa-square-o';
+      return 'fa-exclamation-circle';
     } else {
       return 'fa-check-square-o';
     }
@@ -274,6 +275,8 @@ final class ManiphestTaskStatus extends ManiphestConstants {
           'prefixes' => 'optional list<string>',
           'suffixes' => 'optional list<string>',
           'keywords' => 'optional list<string>',
+          'disabled' => 'optional bool',
+          'claim' => 'optional bool',
         ));
     }
 

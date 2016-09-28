@@ -15,11 +15,16 @@ final class PhabricatorOwnersPackageTransactionEditor
     $types = parent::getTransactionTypes();
 
     $types[] = PhabricatorOwnersPackageTransaction::TYPE_NAME;
-    $types[] = PhabricatorOwnersPackageTransaction::TYPE_PRIMARY;
     $types[] = PhabricatorOwnersPackageTransaction::TYPE_OWNERS;
     $types[] = PhabricatorOwnersPackageTransaction::TYPE_AUDITING;
     $types[] = PhabricatorOwnersPackageTransaction::TYPE_DESCRIPTION;
     $types[] = PhabricatorOwnersPackageTransaction::TYPE_PATHS;
+    $types[] = PhabricatorOwnersPackageTransaction::TYPE_STATUS;
+    $types[] = PhabricatorOwnersPackageTransaction::TYPE_AUTOREVIEW;
+    $types[] = PhabricatorOwnersPackageTransaction::TYPE_DOMINION;
+
+    $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
+    $types[] = PhabricatorTransactions::TYPE_EDIT_POLICY;
 
     return $types;
   }
@@ -31,11 +36,8 @@ final class PhabricatorOwnersPackageTransactionEditor
     switch ($xaction->getTransactionType()) {
       case PhabricatorOwnersPackageTransaction::TYPE_NAME:
         return $object->getName();
-      case PhabricatorOwnersPackageTransaction::TYPE_PRIMARY:
-        return $object->getPrimaryOwnerPHID();
       case PhabricatorOwnersPackageTransaction::TYPE_OWNERS:
-        // TODO: needOwners() this on the Query.
-        $phids = mpull($object->loadOwners(), 'getUserPHID');
+        $phids = mpull($object->getOwners(), 'getUserPHID');
         $phids = array_values($phids);
         return $phids;
       case PhabricatorOwnersPackageTransaction::TYPE_AUDITING:
@@ -43,9 +45,14 @@ final class PhabricatorOwnersPackageTransactionEditor
       case PhabricatorOwnersPackageTransaction::TYPE_DESCRIPTION:
         return $object->getDescription();
       case PhabricatorOwnersPackageTransaction::TYPE_PATHS:
-        // TODO: needPaths() this on the query
-        $paths = $object->loadPaths();
+        $paths = $object->getPaths();
         return mpull($paths, 'getRef');
+      case PhabricatorOwnersPackageTransaction::TYPE_STATUS:
+        return $object->getStatus();
+      case PhabricatorOwnersPackageTransaction::TYPE_AUTOREVIEW:
+        return $object->getAutoReview();
+      case PhabricatorOwnersPackageTransaction::TYPE_DOMINION:
+        return $object->getDominion();
     }
   }
 
@@ -55,10 +62,17 @@ final class PhabricatorOwnersPackageTransactionEditor
 
     switch ($xaction->getTransactionType()) {
       case PhabricatorOwnersPackageTransaction::TYPE_NAME:
-      case PhabricatorOwnersPackageTransaction::TYPE_PRIMARY:
       case PhabricatorOwnersPackageTransaction::TYPE_DESCRIPTION:
-      case PhabricatorOwnersPackageTransaction::TYPE_PATHS:
+      case PhabricatorOwnersPackageTransaction::TYPE_STATUS:
+      case PhabricatorOwnersPackageTransaction::TYPE_AUTOREVIEW:
+      case PhabricatorOwnersPackageTransaction::TYPE_DOMINION:
         return $xaction->getNewValue();
+      case PhabricatorOwnersPackageTransaction::TYPE_PATHS:
+        $new = $xaction->getNewValue();
+        foreach ($new as $key => $info) {
+          $new[$key]['excluded'] = (int)idx($info, 'excluded');
+        }
+        return $new;
       case PhabricatorOwnersPackageTransaction::TYPE_AUDITING:
         return (int)$xaction->getNewValue();
       case PhabricatorOwnersPackageTransaction::TYPE_OWNERS:
@@ -95,9 +109,6 @@ final class PhabricatorOwnersPackageTransactionEditor
       case PhabricatorOwnersPackageTransaction::TYPE_NAME:
         $object->setName($xaction->getNewValue());
         return;
-      case PhabricatorOwnersPackageTransaction::TYPE_PRIMARY:
-        $object->setPrimaryOwnerPHID($xaction->getNewValue());
-        return;
       case PhabricatorOwnersPackageTransaction::TYPE_DESCRIPTION:
         $object->setDescription($xaction->getNewValue());
         return;
@@ -106,6 +117,15 @@ final class PhabricatorOwnersPackageTransactionEditor
         return;
       case PhabricatorOwnersPackageTransaction::TYPE_OWNERS:
       case PhabricatorOwnersPackageTransaction::TYPE_PATHS:
+        return;
+      case PhabricatorOwnersPackageTransaction::TYPE_STATUS:
+        $object->setStatus($xaction->getNewValue());
+        return;
+      case PhabricatorOwnersPackageTransaction::TYPE_AUTOREVIEW:
+        $object->setAutoReview($xaction->getNewValue());
+        return;
+      case PhabricatorOwnersPackageTransaction::TYPE_DOMINION:
+        $object->setDominion($xaction->getNewValue());
         return;
     }
 
@@ -118,16 +138,17 @@ final class PhabricatorOwnersPackageTransactionEditor
 
     switch ($xaction->getTransactionType()) {
       case PhabricatorOwnersPackageTransaction::TYPE_NAME:
-      case PhabricatorOwnersPackageTransaction::TYPE_PRIMARY:
       case PhabricatorOwnersPackageTransaction::TYPE_DESCRIPTION:
       case PhabricatorOwnersPackageTransaction::TYPE_AUDITING:
+      case PhabricatorOwnersPackageTransaction::TYPE_STATUS:
+      case PhabricatorOwnersPackageTransaction::TYPE_AUTOREVIEW:
+      case PhabricatorOwnersPackageTransaction::TYPE_DOMINION:
         return;
       case PhabricatorOwnersPackageTransaction::TYPE_OWNERS:
         $old = $xaction->getOldValue();
         $new = $xaction->getNewValue();
 
-        // TODO: needOwners this
-        $owners = $object->loadOwners();
+        $owners = $object->getOwners();
         $owners = mpull($owners, null, 'getUserPHID');
 
         $rem = array_diff($old, $new);
@@ -152,8 +173,7 @@ final class PhabricatorOwnersPackageTransactionEditor
         $old = $xaction->getOldValue();
         $new = $xaction->getNewValue();
 
-        // TODO: needPaths this
-        $paths = $object->loadPaths();
+        $paths = $object->getPaths();
 
         $diffs = PhabricatorOwnersPath::getTransactionValueChanges($old, $new);
         list($rem, $add) = $diffs;
@@ -201,38 +221,145 @@ final class PhabricatorOwnersPackageTransactionEditor
           $error->setIsMissingFieldError(true);
           $errors[] = $error;
         }
+
+        foreach ($xactions as $xaction) {
+          $new = $xaction->getNewValue();
+          if (preg_match('([,!])', $new)) {
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht(
+                'Package names may not contain commas (",") or exclamation '.
+                'marks ("!"). These characters are ambiguous when package '.
+                'names are parsed from the command line.'),
+              $xaction);
+          }
+        }
+
         break;
-      case PhabricatorOwnersPackageTransaction::TYPE_PRIMARY:
-        $missing = $this->validateIsEmptyTextField(
-          $object->getPrimaryOwnerPHID(),
-          $xactions);
+      case PhabricatorOwnersPackageTransaction::TYPE_AUTOREVIEW:
+        $map = PhabricatorOwnersPackage::getAutoreviewOptionsMap();
+        foreach ($xactions as $xaction) {
+          $new = $xaction->getNewValue();
 
-        if ($missing) {
-          $error = new PhabricatorApplicationTransactionValidationError(
-            $type,
-            pht('Required'),
-            pht('Packages must have a primary owner.'),
-            nonempty(last($xactions), null));
+          if (empty($map[$new])) {
+            $valid = array_keys($map);
 
-          $error->setIsMissingFieldError(true);
-          $errors[] = $error;
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht(
+                'Autoreview setting "%s" is not valid. '.
+                'Valid settings are: %s.',
+                $new,
+                implode(', ', $valid)),
+              $xaction);
+          }
+        }
+        break;
+      case PhabricatorOwnersPackageTransaction::TYPE_DOMINION:
+        $map = PhabricatorOwnersPackage::getDominionOptionsMap();
+        foreach ($xactions as $xaction) {
+          $new = $xaction->getNewValue();
+
+          if (empty($map[$new])) {
+            $valid = array_keys($map);
+
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht(
+                'Dominion setting "%s" is not valid. '.
+                'Valid settings are: %s.',
+                $new,
+                implode(', ', $valid)),
+              $xaction);
+          }
+        }
+        break;
+      case PhabricatorOwnersPackageTransaction::TYPE_PATHS:
+        if (!$xactions) {
+          continue;
+        }
+
+        $old = mpull($object->getPaths(), 'getRef');
+        foreach ($xactions as $xaction) {
+          $new = $xaction->getNewValue();
+
+          // Check that we have a list of paths.
+          if (!is_array($new)) {
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht('Path specification must be a list of paths.'),
+              $xaction);
+            continue;
+          }
+
+          // Check that each item in the list is formatted properly.
+          $type_exception = null;
+          foreach ($new as $key => $value) {
+            try {
+              PhutilTypeSpec::checkMap(
+                $value,
+                array(
+                  'repositoryPHID' => 'string',
+                  'path' => 'string',
+                  'excluded' => 'optional wild',
+                ));
+            } catch (PhutilTypeCheckException $ex) {
+              $errors[] = new PhabricatorApplicationTransactionValidationError(
+                $type,
+                pht('Invalid'),
+                pht(
+                  'Path specification list contains invalid value '.
+                  'in key "%s": %s.',
+                  $key,
+                  $ex->getMessage()),
+                $xaction);
+              $type_exception = $ex;
+            }
+          }
+
+          if ($type_exception) {
+            continue;
+          }
+
+          // Check that any new paths reference legitimate repositories which
+          // the viewer has permission to see.
+          list($rem, $add) = PhabricatorOwnersPath::getTransactionValueChanges(
+            $old,
+            $new);
+
+          if ($add) {
+            $repository_phids = ipull($add, 'repositoryPHID');
+
+            $repositories = id(new PhabricatorRepositoryQuery())
+              ->setViewer($this->getActor())
+              ->withPHIDs($repository_phids)
+              ->execute();
+            $repositories = mpull($repositories, null, 'getPHID');
+
+            foreach ($add as $ref) {
+              $repository_phid = $ref['repositoryPHID'];
+              if (isset($repositories[$repository_phid])) {
+                continue;
+              }
+
+              $errors[] = new PhabricatorApplicationTransactionValidationError(
+                $type,
+                pht('Invalid'),
+                pht(
+                  'Path specification list references repository PHID "%s", '.
+                  'but that is not a valid, visible repository.',
+                  $repository_phid));
+            }
+          }
         }
         break;
     }
 
     return $errors;
-  }
-
-  protected function extractFilePHIDsFromCustomTransaction(
-    PhabricatorLiskDAO $object,
-    PhabricatorApplicationTransaction $xaction) {
-
-    switch ($xaction->getTransactionType()) {
-      case PhabricatorOwnersPackageTransaction::TYPE_DESCRIPTION:
-        return array($xaction->getNewValue());
-    }
-
-    return parent::extractFilePHIDsFromCustomTransaction($object, $xaction);
   }
 
   protected function shouldSendMail(
@@ -247,14 +374,12 @@ final class PhabricatorOwnersPackageTransactionEditor
 
   protected function getMailTo(PhabricatorLiskDAO $object) {
     return array(
-      $object->getPrimaryOwnerPHID(),
       $this->requireActor()->getPHID(),
     );
   }
 
   protected function getMailCC(PhabricatorLiskDAO $object) {
-    // TODO: needOwners() this
-    return mpull($object->loadOwners(), 'getUserPHID');
+    return mpull($object->getOwners(), 'getUserPHID');
   }
 
   protected function buildReplyHandler(PhabricatorLiskDAO $object) {
@@ -277,14 +402,17 @@ final class PhabricatorOwnersPackageTransactionEditor
 
     $body = parent::buildMailBody($object, $xactions);
 
-    $detail_uri = PhabricatorEnv::getProductionURI(
-      '/owners/package/'.$object->getID().'/');
+    $detail_uri = PhabricatorEnv::getProductionURI($object->getURI());
 
     $body->addLinkSection(
       pht('PACKAGE DETAIL'),
       $detail_uri);
 
     return $body;
+  }
+
+  protected function supportsSearch() {
+    return true;
   }
 
 }

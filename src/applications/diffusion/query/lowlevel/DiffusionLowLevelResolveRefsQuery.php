@@ -31,6 +31,11 @@ final class DiffusionLowLevelResolveRefsQuery
       return array();
     }
 
+    $repository = $this->getRepository();
+    if (!$repository->hasLocalWorkingCopy()) {
+      return array();
+    }
+
     switch ($this->getRepository()->getVersionControlSystem()) {
       case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
         $result = $this->resolveGitRefs();
@@ -61,8 +66,11 @@ final class DiffusionLowLevelResolveRefsQuery
     // First, resolve branches and tags.
     $ref_map = id(new DiffusionLowLevelGitRefQuery())
       ->setRepository($repository)
-      ->withIsTag(true)
-      ->withIsOriginBranch(true)
+      ->withRefTypes(
+        array(
+          PhabricatorRepositoryRefCursor::TYPE_BRANCH,
+          PhabricatorRepositoryRefCursor::TYPE_TAG,
+        ))
       ->execute();
     $ref_map = mgroup($ref_map, 'getShortName');
 

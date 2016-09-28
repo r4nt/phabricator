@@ -43,6 +43,26 @@ final class DifferentialCreateRawDiffConduitAPIMethod
     $changes = $parser->parseDiff($raw_diff);
     $diff = DifferentialDiff::newFromRawChanges($viewer, $changes);
 
+    // We're bounded by doing INSERTs for all the hunks and changesets, so
+    // estimate the number of inserts we'll require.
+    $size = 0;
+    foreach ($diff->getChangesets() as $changeset) {
+      $hunks = $changeset->getHunks();
+      $size += 1 + count($hunks);
+    }
+
+    $raw_limit = 10000;
+    if ($size > $raw_limit) {
+      throw new Exception(
+        pht(
+          'The raw diff you have submitted is too large to parse (it affects '.
+          'more than %s paths and hunks). Differential should only be used '.
+          'for changes which are small enough to receive detailed human '.
+          'review. See "Differential User Guide: Large Changes" in the '.
+          'documentation for more information.',
+          new PhutilNumber($raw_limit)));
+    }
+
     $diff_data_dict = array(
       'creationMethod' => 'web',
       'authorPHID' => $viewer->getPHID(),
@@ -51,20 +71,21 @@ final class DifferentialCreateRawDiffConduitAPIMethod
       'unitStatus' => DifferentialUnitStatus::UNIT_SKIP,
     );
 
-    $xactions = array(id(new DifferentialTransaction())
-      ->setTransactionType(DifferentialDiffTransaction::TYPE_DIFF_CREATE)
-      ->setNewValue($diff_data_dict),
+    $xactions = array(
+      id(new DifferentialDiffTransaction())
+        ->setTransactionType(DifferentialDiffTransaction::TYPE_DIFF_CREATE)
+        ->setNewValue($diff_data_dict),
     );
 
     if ($request->getValue('viewPolicy')) {
-      $xactions[] = id(new DifferentialTransaction())
+      $xactions[] = id(new DifferentialDiffTransaction())
         ->setTransactionType(PhabricatorTransactions::TYPE_VIEW_POLICY)
         ->setNewValue($request->getValue('viewPolicy'));
     }
 
     id(new DifferentialDiffEditor())
       ->setActor($viewer)
-      ->setContentSourceFromConduitRequest($request)
+      ->setContentSource($request->newContentSource())
       ->setContinueOnNoEffect(true)
       ->setLookupRepository(false) // respect user choice
       ->applyTransactions($diff, $xactions);

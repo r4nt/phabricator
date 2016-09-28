@@ -6,7 +6,7 @@
 .differential-changeset {
   position: relative;
   margin: 0;
-  padding-top: 32px;
+  padding-top: 16px;
   overflow-x: auto;
 
   /* Fixes what seems to be a layout bug in Firefox which causes scrollbars,
@@ -60,15 +60,14 @@
   vertical-align: top;
   white-space: pre-wrap;
   word-wrap: break-word;
-  padding: 0 8px 1px;
-  line-height: 16px;
+  padding: 1px 8px;
 }
 
 .device .differential-diff td {
-  padding: 0 4px 1px;
+  padding: 1px 4px;
 }
 
-.device .differential-diff .inline td {
+.device .differential-diff .inline > td {
   padding: 4px;
 }
 
@@ -79,7 +78,7 @@
 
 .differential-diff th {
   text-align: right;
-  padding: 2px 6px 0px 0px;
+  padding: 1px 6px 1px 0;
   vertical-align: top;
   background: {$lightbluebackground};
   color: {$bluetext};
@@ -94,6 +93,28 @@
   user-select: none;
 }
 
+.prose-diff {
+  white-space: pre-wrap;
+  color: {$greytext};
+}
+
+.prose-diff-frame {
+  padding: 12px;
+}
+
+.prose-diff span.old,
+.prose-diff span.new {
+  padding: 0 2px;
+}
+
+.prose-diff span.old {
+  color: {$redtext};
+}
+
+.prose-diff span.new {
+  color: {$greentext};
+}
+
 .differential-diff th.selected {
   background-color: {$sh-yellowbackground};
 }
@@ -103,11 +124,11 @@
 }
 
 .differential-diff td.old {
-  background: #ffd0d0;
+  background: rgba(251, 175, 175, .3);
 }
 
 .differential-diff td.new {
-  background: #d0ffd0;
+  background: rgba(151, 234, 151, .3);
 }
 
 .differential-diff td.old-rebase {
@@ -119,13 +140,15 @@
 }
 
 .differential-diff td.old-full,
-.differential-diff td.old span.bright {
-  background: #ffaaaa;
+.differential-diff td.old span.bright,
+.prose-diff span.old {
+  background: rgba(251, 175, 175, .7);
 }
 
 .differential-diff td.new-full,
-.differential-diff td.new span.bright {
-  background: #aaffaa;
+.differential-diff td.new span.bright,
+.prose-diff span.new {
+  background: rgba(151, 234, 151, .6);
 }
 
 .differential-diff td.copy {
@@ -211,7 +234,7 @@ td.cov-I {
 .differential-diff td.show-more,
 .differential-diff td.differential-shield {
   font: {$basefont};
-  font-size: 12px;
+  font-size: {$smallerfontsize};
   white-space: normal;
 }
 
@@ -264,9 +287,10 @@ td.cov-I {
 }
 
 .differential-changeset h1 {
-  font-size: 15px;
-  padding: 2px 0 12px 12px;
-  line-height: 18px;
+  font-size: {$biggestfontsize};
+  padding: 2px 0 20px 12px;
+  line-height: 20px;
+  color: #000;
 }
 
 .device-phone .differential-changeset h1 {
@@ -284,7 +308,7 @@ td.cov-I {
   box-sizing: border-box;
 }
 
-.differential-diff .inline td {
+.differential-diff .inline > td {
   padding: 8px 12px;
 }
 
@@ -321,15 +345,12 @@ td.cov-I {
 
 .differential-changeset-buttons {
   float: right;
-  margin-right: 16px;
+  margin-right: 12px;
 }
 
-.device-phone .differential-changeset-buttons {
-  float: none;
-  margin: 0 0 8px 4px;
-}
-
-.differential-changeset-buttons a.button {
+.device-phone .differential-changeset-buttons .button .phui-button-text {
+  visibility: hidden;
+  width: 0;
   margin-left: 8px;
 }
 
@@ -360,4 +381,8 @@ tr.differential-inline-hidden {
 
 tr.differential-inline-loading {
   opacity: 0.5;
+}
+
+.differential-review-stage {
+  position: relative;
 }

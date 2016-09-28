@@ -18,27 +18,63 @@ final class PhabricatorOwnersPackageSearchEngine
   protected function buildCustomSearchFields() {
     return array(
       id(new PhabricatorSearchDatasourceField())
-        ->setLabel(pht('Owners'))
-        ->setKey('ownerPHIDs')
-        ->setAliases(array('owner', 'owners'))
+        ->setLabel(pht('Authority'))
+        ->setKey('authorityPHIDs')
+        ->setAliases(array('authority', 'authorities'))
+        ->setConduitKey('owners')
+        ->setDescription(
+          pht('Search for packages with specific owners.'))
         ->setDatasource(new PhabricatorProjectOrUserDatasource()),
+      id(new PhabricatorSearchTextField())
+        ->setLabel(pht('Name Contains'))
+        ->setKey('name')
+        ->setDescription(pht('Search for packages by name substrings.')),
       id(new PhabricatorSearchDatasourceField())
         ->setLabel(pht('Repositories'))
         ->setKey('repositoryPHIDs')
+        ->setConduitKey('repositories')
         ->setAliases(array('repository', 'repositories'))
+        ->setDescription(
+          pht('Search for packages by included repositories.'))
         ->setDatasource(new DiffusionRepositoryDatasource()),
+      id(new PhabricatorSearchStringListField())
+        ->setLabel(pht('Paths'))
+        ->setKey('paths')
+        ->setAliases(array('path'))
+        ->setDescription(
+          pht('Search for packages affecting specific paths.')),
+      id(new PhabricatorSearchCheckboxesField())
+        ->setKey('statuses')
+        ->setLabel(pht('Status'))
+        ->setDescription(
+          pht('Search for active or archived packages.'))
+        ->setOptions(
+          id(new PhabricatorOwnersPackage())
+            ->getStatusNameMap()),
     );
   }
 
   protected function buildQueryFromParameters(array $map) {
     $query = $this->newQuery();
 
-    if ($map['ownerPHIDs']) {
-      $query->withOwnerPHIDs($map['ownerPHIDs']);
+    if ($map['authorityPHIDs']) {
+      $query->withAuthorityPHIDs($map['authorityPHIDs']);
     }
 
     if ($map['repositoryPHIDs']) {
       $query->withRepositoryPHIDs($map['repositoryPHIDs']);
+    }
+
+    if ($map['paths']) {
+      $query->withPaths($map['paths']);
+    }
+
+    if ($map['statuses']) {
+      $query->withStatuses($map['statuses']);
+    }
+
+    if (strlen($map['name'])) {
+      $query->withNameNgrams($map['name']);
     }
 
     return $query;
@@ -52,10 +88,11 @@ final class PhabricatorOwnersPackageSearchEngine
     $names = array();
 
     if ($this->requireViewer()->isLoggedIn()) {
-      $names['owned'] = pht('Owned');
+      $names['authority'] = pht('Owned');
     }
 
     $names += array(
+      'active' => pht('Active Packages'),
       'all' => pht('All Packages'),
     );
 
@@ -69,9 +106,15 @@ final class PhabricatorOwnersPackageSearchEngine
     switch ($query_key) {
       case 'all':
         return $query;
-      case 'owned':
+      case 'active':
         return $query->setParameter(
-          'ownerPHIDs',
+          'statuses',
+          array(
+            PhabricatorOwnersPackage::STATUS_ACTIVE,
+          ));
+      case 'authority':
+        return $query->setParameter(
+          'authorityPHIDs',
           array($this->requireViewer()->getPHID()));
     }
 
@@ -93,13 +136,43 @@ final class PhabricatorOwnersPackageSearchEngine
 
       $item = id(new PHUIObjectItemView())
         ->setObject($package)
-        ->setObjectName(pht('Package %d', $id))
+        ->setObjectName($package->getMonogram())
         ->setHeader($package->getName())
-        ->setHref('/owners/package/'.$id.'/');
+        ->setHref($package->getURI());
+
+      if ($package->isArchived()) {
+        $item->setDisabled(true);
+      }
 
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No packages found.'));
+
+    return $result;
+
   }
+
+  protected function getNewUserBody() {
+    $create_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Create a Package'))
+      ->setHref('/owners/edit/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Group sections of a codebase into packages for re-use in other '.
+        'areas of Phabricator, like Herald rules.'))
+      ->addAction($create_button);
+
+      return $view;
+  }
+
 }

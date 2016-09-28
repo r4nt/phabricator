@@ -2,23 +2,17 @@
 
 final class PhabricatorMacroEditController extends PhabricatorMacroController {
 
-  private $id;
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
     $this->requireApplicationCapability(
       PhabricatorMacroManageCapability::CAPABILITY);
 
-    $request = $this->getRequest();
-    $user = $request->getUser();
-
-    if ($this->id) {
+    if ($id) {
       $macro = id(new PhabricatorMacroQuery())
-        ->setViewer($user)
-        ->withIDs(array($this->id))
+        ->setViewer($viewer)
+        ->withIDs(array($id))
         ->needFiles(true)
         ->executeOne();
       if (!$macro) {
@@ -26,7 +20,7 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
       }
     } else {
       $macro = new PhabricatorFileImageMacro();
-      $macro->setAuthorPHID($user->getPHID());
+      $macro->setAuthorPHID($viewer->getPHID());
     }
 
     $errors = array();
@@ -66,7 +60,7 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
           $_FILES['file'],
           array(
             'name' => $request->getStr('name'),
-            'authorPHID' => $user->getPHID(),
+            'authorPHID' => $viewer->getPHID(),
             'isExplicitUpload' => true,
             'canCDN' => true,
           ));
@@ -75,7 +69,7 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
           // Rate limit outbound fetches to make this mechanism less useful for
           // scanning networks and ports.
           PhabricatorSystemActionEngine::willTakeAction(
-            array($user->getPHID()),
+            array($viewer->getPHID()),
             new PhabricatorFilesOutboundRequestAction(),
             1);
 
@@ -101,7 +95,7 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
                 $mime_type));
           } else {
             $file
-              ->setAuthorPHID($user->getPHID())
+              ->setAuthorPHID($viewer->getPHID())
               ->save();
           }
         } catch (HTTPFutureHTTPResponseStatus $status) {
@@ -114,7 +108,7 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
         }
       } else if ($request->getStr('phid')) {
         $file = id(new PhabricatorFileQuery())
-          ->setViewer($user)
+          ->setViewer($viewer)
           ->withPHIDs(array($request->getStr('phid')))
           ->executeOne();
       }
@@ -152,7 +146,7 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
           }
 
           $editor = id(new PhabricatorMacroEditor())
-            ->setActor($user)
+            ->setActor($viewer)
             ->setContinueOnNoEffect(true)
             ->setContentSourceFromRequest($request);
 
@@ -239,16 +233,19 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
     $crumbs = $this->buildApplicationCrumbs();
 
     if ($macro->getID()) {
-      $title = pht('Edit Image Macro');
+      $title = pht('Edit Macro: %s', $macro->getName());
       $crumb = pht('Edit Macro');
+      $header_icon = 'fa-pencil';
 
-      $crumbs->addTextCrumb(pht('Macro "%s"', $macro->getName()), $view_uri);
+      $crumbs->addTextCrumb(pht('Macro: %s', $macro->getName()), $view_uri);
     } else {
       $title = pht('Create Image Macro');
       $crumb = pht('Create Macro');
+      $header_icon = 'fa-plus-square';
     }
 
     $crumbs->addTextCrumb($crumb, $request->getRequestURI());
+    $crumbs->setBorder(true);
 
     $upload = null;
     if ($macro->getID()) {
@@ -273,23 +270,32 @@ final class PhabricatorMacroEditController extends PhabricatorMacroController {
 
       $upload = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Upload New File'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->setForm($upload_form);
     }
 
     $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+      ->setHeaderText(pht('Macro'))
       ->setFormErrors($errors)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $form_box,
         $upload,
-      ),
-      array(
-        'title' => $title,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
 }

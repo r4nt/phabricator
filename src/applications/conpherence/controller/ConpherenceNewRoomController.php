@@ -7,6 +7,7 @@ final class ConpherenceNewRoomController extends ConpherenceController {
 
     $title = pht('New Room');
     $e_title = true;
+    $v_message = null;
     $validation_exception = null;
 
     $conpherence = ConpherenceThread::initializeNewRoom($user);
@@ -15,16 +16,19 @@ final class ConpherenceNewRoomController extends ConpherenceController {
       $editor = new ConpherenceEditor();
       $xactions = array();
 
+      $xactions[] = id(new ConpherenceTransaction())
+        ->setTransactionType(ConpherenceTransaction::TYPE_TITLE)
+        ->setNewValue($request->getStr('title'));
+
       $participants = $request->getArr('participants');
       $participants[] = $user->getPHID();
       $participants = array_unique($participants);
       $xactions[] = id(new ConpherenceTransaction())
         ->setTransactionType(ConpherenceTransaction::TYPE_PARTICIPANTS)
         ->setNewValue(array('+' => $participants));
-
       $xactions[] = id(new ConpherenceTransaction())
-        ->setTransactionType(ConpherenceTransaction::TYPE_TITLE)
-        ->setNewValue($request->getStr('title'));
+        ->setTransactionType(ConpherenceTransaction::TYPE_TOPIC)
+        ->setNewValue($request->getStr('topic'));
       $xactions[] = id(new ConpherenceTransaction())
         ->setTransactionType(PhabricatorTransactions::TYPE_VIEW_POLICY)
         ->setNewValue($request->getStr('viewPolicy'));
@@ -35,12 +39,12 @@ final class ConpherenceNewRoomController extends ConpherenceController {
         ->setTransactionType(PhabricatorTransactions::TYPE_JOIN_POLICY)
         ->setNewValue($request->getStr('joinPolicy'));
 
-      $message = $request->getStr('message');
-      if ($message) {
+      $v_message = $request->getStr('message');
+      if (strlen($v_message)) {
         $message_xactions = $editor->generateTransactionsFromText(
           $user,
           $conpherence,
-          $message);
+          $v_message);
         $xactions = array_merge($xactions, $message_xactions);
       }
 
@@ -93,6 +97,11 @@ final class ConpherenceNewRoomController extends ConpherenceController {
         ->setName('title')
         ->setValue($request->getStr('title')))
       ->appendChild(
+        id(new AphrontFormTextControl())
+        ->setLabel(pht('Topic'))
+        ->setName('topic')
+        ->setValue($request->getStr('topic')))
+      ->appendChild(
         id(new AphrontFormTokenizerControl())
         ->setName('participants')
         ->setUser($user)
@@ -121,7 +130,8 @@ final class ConpherenceNewRoomController extends ConpherenceController {
         id(new PhabricatorRemarkupControl())
         ->setUser($user)
         ->setName('message')
-        ->setLabel(pht('First Message')));
+        ->setLabel(pht('First Message'))
+        ->setValue($v_message));
 
     $dialog->appendChild($form);
 

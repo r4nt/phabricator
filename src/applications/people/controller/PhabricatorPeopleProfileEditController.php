@@ -1,25 +1,15 @@
 <?php
 
 final class PhabricatorPeopleProfileEditController
-  extends PhabricatorPeopleController {
+  extends PhabricatorPeopleProfileController {
 
-  private $id;
-
-  public function shouldRequireAdmin() {
-    return false;
-  }
-
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $id = $request->getURIData('id');
 
     $user = id(new PhabricatorPeopleQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->needProfileImage(true)
       ->requireCapabilities(
         array(
@@ -31,7 +21,9 @@ final class PhabricatorPeopleProfileEditController
       return new Aphront404Response();
     }
 
-    $profile_uri = '/p/'.$user->getUsername().'/';
+    $this->setUser($user);
+
+    $done_uri = $this->getApplicationURI("manage/{$id}/");
 
     $field_list = PhabricatorCustomField::getObjectFields(
       $user,
@@ -54,7 +46,7 @@ final class PhabricatorPeopleProfileEditController
 
       try {
         $editor->applyTransactions($user, $xactions);
-        return id(new AphrontRedirectResponse())->setURI($profile_uri);
+        return id(new AphrontRedirectResponse())->setURI($done_uri);
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
         $validation_exception = $ex;
       }
@@ -66,26 +58,50 @@ final class PhabricatorPeopleProfileEditController
       ->setUser($viewer);
 
     $field_list->appendFieldsToForm($form);
-
     $form
       ->appendChild(
         id(new AphrontFormSubmitControl())
-          ->addCancelButton($profile_uri)
+          ->addCancelButton($done_uri)
           ->setValue(pht('Save Profile')));
 
+    $allow_public = PhabricatorEnv::getEnvConfig('policy.allow-public');
+    $note = null;
+    if ($allow_public) {
+      $note = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->appendChild(pht(
+          'Information on user profiles on this install is publicly '.
+          'visible.'));
+    }
+
     $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Edit Profile'))
+      ->setHeaderText(pht('Profile'))
       ->setValidationException($validation_exception)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
-    $nav = $this->buildIconNavView($user);
-    $nav->selectFilter('/');
-    $nav->appendChild($form_box);
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb(pht('Edit Profile'));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => $title,
+    $nav = $this->getProfileMenu();
+    $nav->selectFilter(PhabricatorPeopleProfilePanelEngine::PANEL_MANAGE);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Edit Profile: %s', $user->getFullName()))
+      ->setHeaderIcon('fa-pencil');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $note,
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->setNavigation($nav)
+      ->appendChild($view);
   }
 }

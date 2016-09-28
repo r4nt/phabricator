@@ -12,9 +12,9 @@ final class PhabricatorOwnersPathsController
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
-          // TODO: Support this capability.
-          // PhabricatorPolicyCapability::CAN_EDIT,
+          PhabricatorPolicyCapability::CAN_EDIT,
         ))
+      ->needPaths(true)
       ->executeOne();
     if (!$package) {
       return new Aphront404Response();
@@ -64,9 +64,9 @@ final class PhabricatorOwnersPathsController
       $editor->applyTransactions($package, $xactions);
 
       return id(new AphrontRedirectResponse())
-        ->setURI('/owners/package/'.$package->getID().'/');
+        ->setURI($package->getURI());
     } else {
-      $paths = $package->loadPaths();
+      $paths = $package->getPaths();
       $path_refs = mpull($paths, 'getRef');
     }
 
@@ -82,7 +82,13 @@ final class PhabricatorOwnersPathsController
       }
     }
 
-    $repos = mpull($repos, 'getCallsign', 'getPHID');
+
+    $repo_map = array();
+    foreach ($repos as $key => $repo) {
+      $monogram = $repo->getMonogram();
+      $name = $repo->getName();
+      $repo_map[$repo->getPHID()] = "{$monogram} {$name}";
+    }
     asort($repos);
 
     $template = new AphrontTypeaheadTemplateView();
@@ -94,7 +100,7 @@ final class PhabricatorOwnersPathsController
         'root'                => 'path-editor',
         'table'               => 'paths',
         'add_button'          => 'addpath',
-        'repositories'        => $repos,
+        'repositories'        => $repo_map,
         'input_template'      => $template,
         'pathRefs'            => $path_refs,
 
@@ -106,7 +112,7 @@ final class PhabricatorOwnersPathsController
 
     require_celerity_resource('owners-path-editor-css');
 
-    $cancel_uri = '/owners/package/'.$package->getID().'/';
+    $cancel_uri = $package->getURI();
 
     $form = id(new AphrontFormView())
       ->setUser($viewer)
@@ -139,8 +145,9 @@ final class PhabricatorOwnersPathsController
           ->addCancelButton($cancel_uri)
           ->setValue(pht('Save Paths')));
 
-    $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Edit Paths'))
+    $box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Paths'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
     $crumbs = $this->buildApplicationCrumbs();
@@ -148,18 +155,23 @@ final class PhabricatorOwnersPathsController
       $package->getName(),
       $this->getApplicationURI('package/'.$package->getID().'/'));
     $crumbs->addTextCrumb(pht('Edit Paths'));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $form_box,
-      ),
-      array(
-        'title' => array(
-          $package->getName(),
-          pht('Edit Paths'),
-        ),
-      ));
-  }
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Edit Paths: %s', $package->getName()))
+      ->setHeaderIcon('fa-pencil');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    $title = array($package->getName(), pht('Edit Paths'));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
+      }
 
 }

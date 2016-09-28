@@ -10,7 +10,7 @@ final class PhabricatorOwnersApplication extends PhabricatorApplication {
     return '/owners/';
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-gift';
   }
 
@@ -26,7 +26,7 @@ final class PhabricatorOwnersApplication extends PhabricatorApplication {
     return array(
       array(
         'name' => pht('Owners User Guide'),
-        'href' => PhabricatorEnv::getDoclink('Owners Tool User Guide'),
+        'href' => PhabricatorEnv::getDoclink('Owners User Guide'),
       ),
     );
   }
@@ -39,14 +39,38 @@ final class PhabricatorOwnersApplication extends PhabricatorApplication {
     return self::GROUP_UTILITIES;
   }
 
+  public function getRemarkupRules() {
+    return array(
+      new PhabricatorOwnersPackageRemarkupRule(),
+    );
+  }
+
   public function getRoutes() {
     return array(
       '/owners/' => array(
         '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorOwnersListController',
-        'edit/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersEditController',
         'new/' => 'PhabricatorOwnersEditController',
         'package/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersDetailController',
+        'archive/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersArchiveController',
         'paths/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersPathsController',
+
+        $this->getEditRoutePattern('edit/')
+          => 'PhabricatorOwnersEditController',
+      ),
+    );
+  }
+
+  protected function getCustomCapabilities() {
+    return array(
+      PhabricatorOwnersDefaultViewCapability::CAPABILITY => array(
+        'caption' => pht('Default view policy for newly created packages.'),
+        'template' => PhabricatorOwnersPackagePHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_VIEW,
+      ),
+      PhabricatorOwnersDefaultEditCapability::CAPABILITY => array(
+        'caption' => pht('Default edit policy for newly created packages.'),
+        'template' => PhabricatorOwnersPackagePHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_EDIT,
       ),
     );
   }

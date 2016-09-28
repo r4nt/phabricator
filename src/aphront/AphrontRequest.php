@@ -26,7 +26,9 @@ final class AphrontRequest extends Phobject {
   private $requestData;
   private $user;
   private $applicationConfiguration;
-  private $uriData;
+  private $site;
+  private $controller;
+  private $uriData = array();
   private $cookiePrefix;
 
   public function __construct($host, $path) {
@@ -77,6 +79,24 @@ final class AphrontRequest extends Phobject {
     return $uri->getDomain();
   }
 
+  public function setSite(AphrontSite $site) {
+    $this->site = $site;
+    return $this;
+  }
+
+  public function getSite() {
+    return $this->site;
+  }
+
+  public function setController(AphrontController $controller) {
+    $this->controller = $controller;
+    return $this;
+  }
+
+  public function getController() {
+    return $this->controller;
+  }
+
 
 /* -(  Accessing Request Data  )--------------------------------------------- */
 
@@ -103,6 +123,11 @@ final class AphrontRequest extends Phobject {
    */
   public function getInt($name, $default = null) {
     if (isset($this->requestData[$name])) {
+      // Converting from array to int is "undefined". Don't rely on whatever
+      // PHP decides to do.
+      if (is_array($this->requestData[$name])) {
+        return $default;
+      }
       return (int)$this->requestData[$name];
     } else {
       return $default;
@@ -216,6 +241,10 @@ final class AphrontRequest extends Phobject {
     return 'X-Phabricator-Csrf';
   }
 
+  public static function getViaHeaderName() {
+    return 'X-Phabricator-Via';
+  }
+
   public function validateCSRF() {
     $token_name = self::getCSRFTokenName();
     $token = $this->getStr($token_name);
@@ -232,25 +261,30 @@ final class AphrontRequest extends Phobject {
       // Add some diagnostic details so we can figure out if some CSRF issues
       // are JS problems or people accessing Ajax URIs directly with their
       // browsers.
-      $more_info = array();
+      $info = array();
+
+      $info[] = pht(
+        'You are trying to save some data to Phabricator, but the request '.
+        'your browser made included an incorrect token. Reload the page '.
+        'and try again. You may need to clear your cookies.');
 
       if ($this->isAjax()) {
-        $more_info[] = pht('This was an Ajax request.');
+        $info[] = pht('This was an Ajax request.');
       } else {
-        $more_info[] = pht('This was a Web request.');
+        $info[] = pht('This was a Web request.');
       }
 
       if ($token) {
-        $more_info[] = pht('This request had an invalid CSRF token.');
+        $info[] = pht('This request had an invalid CSRF token.');
       } else {
-        $more_info[] = pht('This request had no CSRF token.');
+        $info[] = pht('This request had no CSRF token.');
       }
 
       // Give a more detailed explanation of how to avoid the exception
       // in developer mode.
       if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')) {
         // TODO: Clean this up, see T1921.
-        $more_info[] = pht(
+        $info[] = pht(
           "To avoid this error, use %s to construct forms. If you are already ".
           "using %s, make sure the form 'action' uses a relative URI (i.e., ".
           "begins with a '%s'). Forms using absolute URIs do not include CSRF ".
@@ -270,16 +304,16 @@ final class AphrontRequest extends Phobject {
           'setRenderAsForm(true)');
       }
 
+      $message = implode("\n", $info);
+
       // This should only be able to happen if you load a form, pull your
       // internet for 6 hours, and then reconnect and immediately submit,
       // but give the user some indication of what happened since the workflow
       // is incredibly confusing otherwise.
-      throw new AphrontCSRFException(
-        pht(
-          'You are trying to save some data to Phabricator, but the request '.
-          'your browser made included an incorrect token. Reload the page '.
-          'and try again. You may need to clear your cookies.')."\n\n".
-          implode("\n", $more_info));
+      throw new AphrontMalformedRequestException(
+        pht('Invalid Request (CSRF)'),
+        $message,
+        true);
     }
 
     return true;
@@ -451,15 +485,17 @@ final class AphrontRequest extends Phobject {
       $configured_as = PhabricatorEnv::getEnvConfig('phabricator.base-uri');
       $accessed_as = $this->getHost();
 
-      throw new Exception(
+      throw new AphrontMalformedRequestException(
+        pht('Bad Host Header'),
         pht(
           'This Phabricator install is configured as "%s", but you are '.
           'using the domain name "%s" to access a page which is trying to '.
-          'set a cookie. Acccess Phabricator on the configured primary '.
+          'set a cookie. Access Phabricator on the configured primary '.
           'domain or a configured alternate domain. Phabricator will not '.
           'set cookies on other domains for security reasons.',
           $configured_as,
-          $accessed_as));
+          $accessed_as),
+        true);
     }
 
     $base_domain = $base_domain_uri->getDomain();
@@ -513,8 +549,12 @@ final class AphrontRequest extends Phobject {
     return $this->isFormPost() && $this->getStr('__dialog__');
   }
 
-  public function getRemoteAddr() {
-    return $_SERVER['REMOTE_ADDR'];
+  public function getRemoteAddress() {
+    $address = $_SERVER['REMOTE_ADDR'];
+    if (!strlen($address)) {
+      return null;
+    }
+    return substr($address, 0, 64);
   }
 
   public function isHTTPS() {
@@ -721,13 +761,26 @@ final class AphrontRequest extends Phobject {
     // NOTE: apache_request_headers() might provide a nicer way to do this,
     // but isn't available under FCGI until PHP 5.4.0.
     foreach ($_SERVER as $key => $value) {
-      if (preg_match('/^HTTP_/', $key)) {
-        // Unmangle the header as best we can.
-        $key = str_replace('_', ' ', $key);
-        $key = strtolower($key);
-        $key = ucwords($key);
-        $key = str_replace(' ', '-', $key);
+      if (!preg_match('/^HTTP_/', $key)) {
+        continue;
+      }
 
+      // Unmangle the header as best we can.
+      $key = substr($key, strlen('HTTP_'));
+      $key = str_replace('_', ' ', $key);
+      $key = strtolower($key);
+      $key = ucwords($key);
+      $key = str_replace(' ', '-', $key);
+
+      // By default, do not forward headers.
+      $should_forward = false;
+
+      // Forward "X-Hgarg-..." headers.
+      if (preg_match('/^X-Hgarg-/', $key)) {
+        $should_forward = true;
+      }
+
+      if ($should_forward) {
         $headers[] = array($key, $value);
         $seen[$key] = true;
       }

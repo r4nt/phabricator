@@ -3,24 +3,17 @@
 final class PhrictionHistoryController
   extends PhrictionController {
 
-  private $slug;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->slug = $data['slug'];
-  }
-
-  public function processRequest() {
-
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $slug = $request->getURIData('slug');
 
     $document = id(new PhrictionDocumentQuery())
-      ->setViewer($user)
-      ->withSlugs(array(PhabricatorSlug::normalize($this->slug)))
+      ->setViewer($viewer)
+      ->withSlugs(array(PhabricatorSlug::normalize($slug)))
       ->needContent(true)
       ->executeOne();
     if (!$document) {
@@ -29,7 +22,7 @@ final class PhrictionHistoryController
 
     $current = $document->getContent();
 
-    $pager = new AphrontPagerView();
+    $pager = new PHUIPagerView();
     $pager->setOffset($request->getInt('page'));
     $pager->setURI($request->getRequestURI(), 'page');
 
@@ -75,7 +68,7 @@ final class PhrictionHistoryController
           $color = 'red';
           break;
         case PhrictionChangeType::CHANGE_EDIT:
-          $color = 'blue';
+          $color = 'lightbluetext';
           break;
         case PhrictionChangeType::CHANGE_MOVE_HERE:
             $color = 'yellow';
@@ -93,7 +86,7 @@ final class PhrictionHistoryController
 
       $item = id(new PHUIObjectItemView())
         ->setHeader(pht('%s by %s', $change_type, $author))
-        ->setBarColor($color)
+        ->setStatusIcon('fa-file '.$color)
         ->addAttribute(
           phutil_tag(
             'a',
@@ -102,8 +95,8 @@ final class PhrictionHistoryController
             ),
             pht('Version %s', $version)))
         ->addAttribute(pht('%s %s',
-          phabricator_date($content->getDateCreated(), $user),
-          phabricator_time($content->getDateCreated(), $user)));
+          phabricator_date($content->getDateCreated(), $viewer),
+          phabricator_time($content->getDateCreated(), $viewer)));
 
       if ($content->getDescription()) {
         $item->addAttribute($content->getDescription());
@@ -146,27 +139,40 @@ final class PhrictionHistoryController
     $crumbs->addTextCrumb(
       pht('History'),
       PhrictionDocument::getSlugURI($document->getSlug(), 'history'));
+    $crumbs->setBorder(true);
 
     $header = new PHUIHeaderView();
-    $header->setHeader(pht('Document History for %s',
-      phutil_tag(
+    $header->setHeader(phutil_tag(
         'a',
         array('href' => PhrictionDocument::getSlugURI($document->getSlug())),
-        head($history)->getTitle())));
+        head($history)->getTitle()));
+    $header->setSubheader(pht('Document History'));
 
     $obj_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->appendChild($list)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setObjectList($list);
+
+    $pager = id(new PHUIBoxView())
+      ->addClass('ml')
       ->appendChild($pager);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Document History: %s', head($history)->getTitle()))
+      ->setHeaderIcon('fa-history');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $obj_box,
-      ),
-      array(
-        'title'     => pht('Document History'),
+        $pager,
       ));
+
+    $title = pht('Document History');
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
 
   }
 

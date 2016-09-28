@@ -11,7 +11,7 @@ final class PhabricatorAsanaConfigOptions
     return pht('Asana integration options.');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-exchange';
   }
 
@@ -96,8 +96,11 @@ final class PhabricatorAsanaConfigOptions
     }
 
     $out = array();
-    $out[] = pht('| Workspace ID | Workspace Name |');
-    $out[] =     '| ------------ | -------------- |';
+    $out[] = sprintf(
+      '| %s | %s |',
+      pht('Workspace ID'),
+      pht('Workspace Name'));
+    $out[] = '| ------------ | -------------- |';
     foreach ($workspaces as $workspace) {
       $out[] = sprintf('| `%s` | `%s` |', $workspace['id'], $workspace['name']);
     }
@@ -108,10 +111,7 @@ final class PhabricatorAsanaConfigOptions
       "The Asana Workspaces your linked account has access to are:\n\n%s",
       $out);
 
-    return PhabricatorMarkupEngine::renderOneObject(
-      id(new PhabricatorMarkupOneOff())->setContent($out),
-      'default',
-      $viewer);
+    return new PHUIRemarkupView($viewer, $out);
   }
 
   private function renderContextualProjectDescription(
@@ -120,9 +120,9 @@ final class PhabricatorAsanaConfigOptions
 
     $viewer = $request->getUser();
 
-    $publishers = id(new PhutilSymbolLoader())
+    $publishers = id(new PhutilClassMapQuery())
       ->setAncestorClass('DoorkeeperFeedStoryPublisher')
-      ->loadObjects();
+      ->execute();
 
     $out = array();
     $out[] = pht(
@@ -152,10 +152,7 @@ final class PhabricatorAsanaConfigOptions
 
     $out = implode("\n", $out);
 
-    return PhabricatorMarkupEngine::renderOneObject(
-      id(new PhabricatorMarkupOneOff())->setContent($out),
-      'default',
-      $viewer);
+    return new PHUIRemarkupView($viewer, $out);
   }
 
 }

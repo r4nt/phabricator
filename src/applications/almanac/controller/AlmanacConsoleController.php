@@ -10,45 +10,77 @@ final class AlmanacConsoleController extends AlmanacController {
     $viewer = $request->getViewer();
 
     $menu = id(new PHUIObjectItemListView())
-      ->setUser($viewer)
-      ->setStackable(true);
-
-    $menu->addItem(
-      id(new PHUIObjectItemView())
-        ->setHeader(pht('Services'))
-        ->setHref($this->getApplicationURI('service/'))
-        ->setFontIcon('fa-plug')
-        ->addAttribute(pht('Manage Almanac services.')));
+      ->setUser($viewer);
 
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Devices'))
         ->setHref($this->getApplicationURI('device/'))
-        ->setFontIcon('fa-server')
-        ->addAttribute(pht('Manage Almanac devices.')));
+        ->setImageIcon('fa-server')
+        ->addAttribute(
+          pht(
+            'Create an inventory of physical and virtual hosts and '.
+            'devices.')));
+
+    $menu->addItem(
+      id(new PHUIObjectItemView())
+        ->setHeader(pht('Services'))
+        ->setHref($this->getApplicationURI('service/'))
+        ->setImageIcon('fa-plug')
+        ->addAttribute(
+          pht(
+            'Create and update services, and map them to interfaces on '.
+            'devices.')));
 
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Networks'))
         ->setHref($this->getApplicationURI('network/'))
-        ->setFontIcon('fa-globe')
-        ->addAttribute(pht('Manage Almanac networks.')));
+        ->setImageIcon('fa-globe')
+        ->addAttribute(
+          pht(
+            'Manage public and private networks.')));
+
+    $menu->addItem(
+      id(new PHUIObjectItemView())
+        ->setHeader(pht('Namespaces'))
+        ->setHref($this->getApplicationURI('namespace/'))
+        ->setImageIcon('fa-asterisk')
+        ->addAttribute(
+          pht('Control who can create new named services and devices.')));
+
+    $docs_uri = PhabricatorEnv::getDoclink(
+      'Almanac User Guide');
+
+    $menu->addItem(
+      id(new PHUIObjectItemView())
+        ->setHeader(pht('Documentation'))
+        ->setHref($docs_uri)
+        ->setImageIcon('fa-book')
+        ->addAttribute(pht('Browse documentation for Almanac.')));
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Console'));
+    $crumbs->setBorder(true);
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Console'))
-      ->appendChild($menu);
+      ->setObjectList($menu);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Almanac Console'))
+      ->setHeaderIcon('fa-server');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $box,
-      ),
-      array(
-        'title'  => pht('Almanac Console'),
       ));
+
+    return $this->newPage()
+      ->setTitle(pht('Almanac Console'))
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
 }

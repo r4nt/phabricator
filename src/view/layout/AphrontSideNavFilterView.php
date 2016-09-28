@@ -27,12 +27,15 @@ final class AphrontSideNavFilterView extends AphrontView {
   private $crumbs;
   private $classes = array();
   private $menuID;
-  private $iconNav;
+  private $mainID;
+  private $isProfileMenu;
+  private $footer = array();
 
   public function setMenuID($menu_id) {
     $this->menuID = $menu_id;
     return $this;
   }
+
   public function getMenuID() {
     return $this->menuID;
   }
@@ -46,13 +49,6 @@ final class AphrontSideNavFilterView extends AphrontView {
     return $this;
   }
 
-  public static function newFromMenu(PHUIListView $menu) {
-    $object = new AphrontSideNavFilterView();
-    $object->setBaseURI(new PhutilURI('/'));
-    $object->menu = $menu;
-    return $object;
-  }
-
   public function setCrumbs(PHUICrumbsView $crumbs) {
     $this->crumbs = $crumbs;
     return $this;
@@ -62,9 +58,13 @@ final class AphrontSideNavFilterView extends AphrontView {
     return $this->crumbs;
   }
 
-  public function setIconNav($nav) {
-    $this->iconNav = $nav;
+  public function setIsProfileMenu($is_profile) {
+    $this->isProfileMenu = $is_profile;
     return $this;
+  }
+
+  public function getIsProfileMenu() {
+    return $this->isProfileMenu;
   }
 
   public function setActive($active) {
@@ -95,29 +95,9 @@ final class AphrontSideNavFilterView extends AphrontView {
     return $this->menu;
   }
 
-  public function addFilter($key, $name, $uri = null) {
+  public function addFilter($key, $name, $uri = null, $icon = null) {
     return $this->addThing(
-      $key, $name, $uri, PHUIListItemView::TYPE_LINK);
-  }
-
-  public function addIcon($key, $name, $icon, $image = null, $uri = null) {
-    if (!$uri) {
-      $href = clone $this->baseURI;
-      $href->setPath(rtrim($href->getPath().$key, '/').'/');
-      $href = (string)$href;
-    } else {
-      $href = $uri;
-    }
-
-    $item = id(new PHUIListItemView())
-      ->setKey($key)
-      ->setRenderNameAsTooltip(true)
-      ->setType(PHUIListItemView::TYPE_ICON_NAV)
-      ->setIcon($icon)
-      ->setHref($href)
-      ->setName($name)
-      ->setProfileImage($image);
-    return $this->addMenuItem($item);
+      $key, $name, $uri, PHUIListItemView::TYPE_LINK, $icon);
   }
 
   public function addButton($key, $name, $uri = null) {
@@ -125,10 +105,14 @@ final class AphrontSideNavFilterView extends AphrontView {
       $key, $name, $uri, PHUIListItemView::TYPE_BUTTON);
   }
 
-  private function addThing($key, $name, $uri, $type) {
+  private function addThing($key, $name, $uri, $type, $icon) {
     $item = id(new PHUIListItemView())
       ->setName($name)
       ->setType($type);
+
+    if (strlen($icon)) {
+      $item->setIcon($icon);
+    }
 
 
     if (strlen($key)) {
@@ -184,6 +168,18 @@ final class AphrontSideNavFilterView extends AphrontView {
     return $this->selectedFilter;
   }
 
+  public function appendFooter($footer) {
+    $this->footer[] = $footer;
+    return $this;
+  }
+
+  public function getMainID() {
+    if (!$this->mainID) {
+      $this->mainID = celerity_generate_unique_node_id();
+    }
+    return $this->mainID;
+  }
+
   public function render() {
     if ($this->menu->getItems()) {
       if (!$this->baseURI) {
@@ -201,22 +197,17 @@ final class AphrontSideNavFilterView extends AphrontView {
       }
     }
 
-    require_celerity_resource('phabricator-side-menu-view-css');
+    require_celerity_resource('phui-basic-nav-view-css');
 
     return $this->renderFlexNav();
   }
 
   private function renderFlexNav() {
-
-    $user = $this->user;
-
     require_celerity_resource('phabricator-nav-view-css');
+    require_celerity_resource('phui-profile-menu-css');
 
     $nav_classes = array();
     $nav_classes[] = 'phabricator-nav';
-    if ($this->iconNav) {
-      $nav_classes[] = 'phabricator-icon-nav';
-    }
 
     $nav_id = null;
     $drag_id = null;
@@ -224,7 +215,7 @@ final class AphrontSideNavFilterView extends AphrontView {
     $local_id = null;
     $background_id = null;
     $local_menu = null;
-    $main_id = celerity_generate_unique_node_id();
+    $main_id = $this->getMainID();
 
     if ($this->flexible) {
       $drag_id = celerity_generate_unique_node_id();
@@ -248,24 +239,14 @@ final class AphrontSideNavFilterView extends AphrontView {
         $nav_classes[] = 'has-local-nav';
       }
 
-      $menu_background = phutil_tag(
-        'div',
-        array(
-          'class' => 'phabricator-nav-column-background',
-          'id'    => $background_id,
-        ),
-        '');
-
-      $local_menu = array(
-        $menu_background,
+      $local_menu =
         phutil_tag(
           'div',
           array(
             'class' => 'phabricator-nav-local phabricator-side-menu',
             'id'    => $local_id,
           ),
-          $this->menu->setID($this->getMenuID())),
-      );
+          $this->menu->setID($this->getMenuID()));
     }
 
     $crumbs = null;
@@ -277,6 +258,8 @@ final class AphrontSideNavFilterView extends AphrontView {
     if ($this->flexible) {
       if (!$this->collapsed) {
         $nav_classes[] = 'has-drag-nav';
+      } else {
+        $nav_classes[] = 'has-closed-nav';
       }
 
       Javelin::initBehavior(
@@ -301,7 +284,7 @@ final class AphrontSideNavFilterView extends AphrontView {
 
     $nav_classes = array_merge($nav_classes, $this->classes);
 
-    return phutil_tag(
+    $menu = phutil_tag(
       'div',
       array(
         'class' => implode(' ', $nav_classes),
@@ -319,8 +302,29 @@ final class AphrontSideNavFilterView extends AphrontView {
           array(
             $crumbs,
             $this->renderChildren(),
+            $this->footer,
           )),
       ));
+
+    $classes = array();
+    $classes[] = 'phui-navigation-shell';
+
+    if ($this->getIsProfileMenu()) {
+      $classes[] = 'phui-profile-menu';
+    } else {
+      $classes[] = 'phui-basic-nav';
+    }
+
+    $shell = phutil_tag(
+      'div',
+      array(
+        'class' => implode(' ', $classes),
+      ),
+      array(
+        $menu,
+      ));
+
+    return $shell;
   }
 
 }

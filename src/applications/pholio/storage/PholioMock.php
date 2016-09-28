@@ -11,7 +11,8 @@ final class PholioMock extends PholioDAO
     PhabricatorProjectInterface,
     PhabricatorDestructibleInterface,
     PhabricatorSpacesInterface,
-    PhabricatorMentionableInterface {
+    PhabricatorMentionableInterface,
+    PhabricatorFulltextInterface {
 
   const MARKUP_FIELD_DESCRIPTION  = 'markup:description';
 
@@ -183,14 +184,6 @@ final class PholioMock extends PholioDAO
     return ($this->authorPHID == $phid);
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
-  }
-
 
 /* -(  PhabricatorPolicyInterface Implementation  )-------------------------- */
 
@@ -234,12 +227,10 @@ final class PholioMock extends PholioDAO
 
   public function getMarkupText($field) {
     if ($this->getDescription()) {
-      $description = $this->getDescription();
-    } else {
-      $description = pht('No Description Given');
+      return $this->getDescription();
     }
 
-    return $description;
+    return null;
   }
 
   public function didMarkupText($field, $output, PhutilMarkupEngine $engine) {
@@ -318,6 +309,14 @@ final class PholioMock extends PholioDAO
 
   public function getSpacePHID() {
     return $this->spacePHID;
+  }
+
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+
+  public function newFulltextEngine() {
+    return new PholioMockFulltextEngine();
   }
 
 

@@ -34,6 +34,7 @@ final class PhabricatorStandardCustomFieldCredential
       ->execute();
 
     return id(new PassphraseCredentialControl())
+      ->setViewer($this->getViewer())
       ->setLabel($this->getFieldName())
       ->setName($this->getFieldKey())
       ->setCaption($this->getCaption())
@@ -134,5 +135,17 @@ final class PhabricatorStandardCustomFieldCredential
     }
   }
 
+
+  protected function getHTTPParameterType() {
+    return new AphrontPHIDHTTPParameterType();
+  }
+
+  protected function newConduitSearchParameterType() {
+    return new ConduitPHIDParameterType();
+  }
+
+  protected function newConduitEditParameterType() {
+    return new ConduitPHIDParameterType();
+  }
 
 }

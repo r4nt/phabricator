@@ -4,9 +4,13 @@ final class PhabricatorDesktopNotificationsSettingsPanel
   extends PhabricatorSettingsPanel {
 
   public function isEnabled() {
-    return PhabricatorEnv::getEnvConfig('notification.enabled') &&
-      PhabricatorApplication::isClassInstalled(
-        'PhabricatorNotificationsApplication');
+    $servers = PhabricatorNotificationServerRef::getEnabledAdminServers();
+    if (!$servers) {
+      return false;
+    }
+
+    return PhabricatorApplication::isClassInstalled(
+      'PhabricatorNotificationsApplication');
   }
 
   public function getPanelKey() {
@@ -17,20 +21,24 @@ final class PhabricatorDesktopNotificationsSettingsPanel
     return pht('Desktop Notifications');
   }
 
-  public function getPanelGroup() {
-    return pht('Application Settings');
+  public function getPanelGroupKey() {
+    return PhabricatorSettingsApplicationsPanelGroup::PANELGROUPKEY;
   }
 
   public function processRequest(AphrontRequest $request) {
-    $user = $request->getUser();
-    $preferences = $user->loadPreferences();
+    $viewer = $this->getViewer();
+    $preferences = $this->getPreferences();
 
-    $pref = PhabricatorUserPreferences::PREFERENCE_DESKTOP_NOTIFICATIONS;
+    $notifications_key = PhabricatorDesktopNotificationsSetting::SETTINGKEY;
+    $notifications_value = $preferences->getSettingValue($notifications_key);
 
     if ($request->isFormPost()) {
-      $notifications = $request->getInt($pref);
-      $preferences->setPreference($pref, $notifications);
-      $preferences->save();
+
+      $this->writeSetting(
+        $preferences,
+        $notifications_key,
+        $request->getInt($notifications_key));
+
       return id(new AphrontRedirectResponse())
         ->setURI($this->getPanelURI('?saved=true'));
     }
@@ -102,13 +110,13 @@ final class PhabricatorDesktopNotificationsSettingsPanel
      );
 
     $form = id(new AphrontFormView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->appendChild(
         id(new AphrontFormSelectControl())
         ->setLabel($title)
         ->setControlID($control_id)
-        ->setName($pref)
-        ->setValue($preferences->getPreference($pref))
+        ->setName($notifications_key)
+        ->setValue($notifications_value)
         ->setOptions(
           array(
             1 => pht('Send Desktop Notifications Too'),
@@ -126,14 +134,12 @@ final class PhabricatorDesktopNotificationsSettingsPanel
         id(new AphrontFormSubmitControl())
         ->setValue(pht('Save Preference')));
 
-    $test_icon = id(new PHUIIconView())
-      ->setIconFont('fa-exclamation-triangle');
     $test_button = id(new PHUIButtonView())
       ->setTag('a')
       ->setWorkflow(true)
       ->setText(pht('Send Test Notification'))
       ->setHref('/notification/test/')
-      ->setIcon($test_icon);
+      ->setIcon('fa-exclamation-triangle');
 
     $form_box = id(new PHUIObjectBoxView())
       ->setHeader(

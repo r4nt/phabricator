@@ -6,11 +6,21 @@
 abstract class HarbormasterBuildStepImplementation extends Phobject {
 
   private $settings;
+  private $currentWorkerTaskID;
+
+  public function setCurrentWorkerTaskID($id) {
+    $this->currentWorkerTaskID = $id;
+    return $this;
+  }
+
+  public function getCurrentWorkerTaskID() {
+    return $this->currentWorkerTaskID;
+  }
 
   public static function getImplementations() {
-    return id(new PhutilSymbolLoader())
+    return id(new PhutilClassMapQuery())
       ->setAncestorClass(__CLASS__)
-      ->loadObjects();
+      ->execute();
   }
 
   public static function getImplementation($class) {
@@ -41,6 +51,10 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
    */
   abstract public function getName();
 
+  public function getBuildStepGroupKey() {
+    return HarbormasterOtherBuildStepGroup::GROUPKEY;
+  }
+
   /**
    * The generic description of the implementation.
    */
@@ -53,6 +67,10 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
    */
   public function getDescription() {
     return $this->getGenericDescription();
+  }
+
+  public function getEditInstructions() {
+    return null;
   }
 
   /**
@@ -84,11 +102,6 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
 
   /**
    * Return the name of artifacts produced by this command.
-   *
-   * Something like:
-   *
-   *   return array(
-   *     'some_name_input_by_user' => 'host');
    *
    * Future steps will calculate all available artifact mappings
    * before them and filter on the type.
@@ -180,7 +193,7 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
    * @return string String with variables replaced safely into it.
    */
   protected function mergeVariables($function, $pattern, array $variables) {
-    $regexp = '/\\$\\{(?P<name>[a-z\\.]+)\\}/';
+    $regexp = '@\\$\\{(?P<name>[a-z\\./-]+)\\}@';
 
     $matches = null;
     preg_match_all($regexp, $pattern, $matches);
@@ -234,23 +247,53 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
     return $build->getBuildGeneration() !== $target->getBuildGeneration();
   }
 
-  protected function resolveFuture(
+  protected function resolveFutures(
     HarbormasterBuild $build,
     HarbormasterBuildTarget $target,
-    Future $future) {
+    array $futures) {
 
-    $futures = new FutureIterator(array($future));
+    $futures = new FutureIterator($futures);
     foreach ($futures->setUpdateInterval(5) as $key => $future) {
       if ($future === null) {
         $build->reload();
         if ($this->shouldAbort($build, $target)) {
           throw new HarbormasterBuildAbortedException();
         }
-      } else {
-        return $future->resolve();
       }
     }
+
   }
+
+  protected function logHTTPResponse(
+    HarbormasterBuild $build,
+    HarbormasterBuildTarget $build_target,
+    BaseHTTPFuture $future,
+    $label) {
+
+    list($status, $body, $headers) = $future->resolve();
+
+    $header_lines = array();
+
+    // TODO: We don't currently preserve the entire "HTTP" response header, but
+    // should. Once we do, reproduce it here faithfully.
+    $status_code = $status->getStatusCode();
+    $header_lines[] = "HTTP {$status_code}";
+
+    foreach ($headers as $header) {
+      list($head, $tail) = $header;
+      $header_lines[] = "{$head}: {$tail}";
+    }
+    $header_lines = implode("\n", $header_lines);
+
+    $build_target
+      ->newLog($label, 'http.head')
+      ->append($header_lines);
+
+    $build_target
+      ->newLog($label, 'http.body')
+      ->append($body);
+  }
+
 
 
 /* -(  Automatic Targets  )-------------------------------------------------- */

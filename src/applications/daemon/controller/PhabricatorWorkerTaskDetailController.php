@@ -3,26 +3,24 @@
 final class PhabricatorWorkerTaskDetailController
   extends PhabricatorDaemonController {
 
-  private $id;
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
-
-    $task = id(new PhabricatorWorkerActiveTask())->load($this->id);
+    $task = id(new PhabricatorWorkerActiveTask())->load($id);
     if (!$task) {
       $tasks = id(new PhabricatorWorkerArchiveTaskQuery())
-        ->withIDs(array($this->id))
+        ->withIDs(array($id))
         ->execute();
       $task = reset($tasks);
     }
 
+    $header = new PHUIHeaderView();
+
     if (!$task) {
       $title = pht('Task Does Not Exist');
+
+      $header->setHeader(pht('Task %d Missing', $id));
 
       $error_view = new PHUIInfoView();
       $error_view->setTitle(pht('No Such Task'));
@@ -36,17 +34,18 @@ final class PhabricatorWorkerTaskDetailController
     } else {
       $title = pht('Task %d', $task->getID());
 
-      $header = id(new PHUIHeaderView())
-        ->setHeader(pht('Task %d (%s)',
+      $header->setHeader(
+        pht(
+          'Task %d: %s',
           $task->getID(),
           $task->getTaskClass()));
 
       $properties = $this->buildPropertyListView($task);
 
       $object_box = id(new PHUIObjectBoxView())
-        ->setHeader($header)
+        ->setHeaderText($title)
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($properties);
-
 
       $retry_head = id(new PHUIHeaderView())
         ->setHeader(pht('Retries'));
@@ -55,6 +54,7 @@ final class PhabricatorWorkerTaskDetailController
 
       $retry_box = id(new PHUIObjectBoxView())
         ->setHeader($retry_head)
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($retry_info);
 
       $content = array(
@@ -63,17 +63,20 @@ final class PhabricatorWorkerTaskDetailController
       );
     }
 
+    $header->setHeaderIcon('fa-sort');
+
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($title);
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $content,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($content);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function buildPropertyListView(
@@ -155,9 +158,9 @@ final class PhabricatorWorkerTaskDetailController
     $worker = $task->getWorkerInstance();
     $data = $worker->renderForDisplay($viewer);
 
-    $view->addProperty(
-      pht('Data'),
-      $data);
+    if ($data !== null) {
+      $view->addProperty(pht('Data'), $data);
+    }
 
     return $view;
   }

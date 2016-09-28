@@ -42,7 +42,6 @@ final class PhabricatorPeopleLdapController
       $this->getApplicationURI('/ldap/'));
 
     $nav = $this->buildSideNavView();
-    $nav->setCrumbs($crumbs);
     $nav->selectFilter('ldap');
     $nav->appendChild($content);
 
@@ -56,11 +55,10 @@ final class PhabricatorPeopleLdapController
       $nav->appendChild($this->processSearchRequest($request));
     }
 
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title'  => pht('Import Ldap Users'),
-      ));
+    return $this->newPage()
+      ->setTitle(pht('Import Ldap Users'))
+      ->setCrumbs($crumbs)
+      ->setNavigation($nav);
   }
 
   private function processImportRequest($request) {
@@ -101,17 +99,17 @@ final class PhabricatorPeopleLdapController
 
         $header = pht('Successfully added %s', $username);
         $attribute = null;
-        $color = 'green';
+        $color = 'fa-check green';
       } catch (Exception $ex) {
         $header = pht('Failed to add %s', $username);
         $attribute = $ex->getMessage();
-        $color = 'red';
+        $color = 'fa-times red';
       }
 
       $item = id(new PHUIObjectItemView())
         ->setHeader($header)
         ->addAttribute($attribute)
-        ->setBarColor($color);
+        ->setStatusIcon($color);
 
       $list->addItem($item);
     }

@@ -254,10 +254,19 @@ abstract class PhabricatorMailReplyHandler extends Phobject {
       $map = $to + $cc;
 
       foreach ($map as $phid => $user) {
+        // Preserve the original To/Cc information on the target.
+        if (isset($to[$phid])) {
+          $target_to = array($phid => $user);
+          $target_cc = array();
+        } else {
+          $target_to = array();
+          $target_cc = array($phid => $user);
+        }
+
         $target = id(clone $template)
           ->setViewer($user)
-          ->setToMap(array($phid => $user))
-          ->setCCMap(array());
+          ->setToMap($target_to)
+          ->setCCMap($target_cc);
 
         if ($supports_private_replies) {
           $reply_to = $this->getPrivateReplyHandlerEmailAddress($user);
@@ -328,9 +337,12 @@ abstract class PhabricatorMailReplyHandler extends Phobject {
 
     $all_phids = array_merge($to, $cc);
     if ($all_phids) {
+      // We need user settings here because we'll check translations later
+      // when generating mail.
       $users = id(new PhabricatorPeopleQuery())
         ->setViewer(PhabricatorUser::getOmnipotentUser())
         ->withPHIDs($all_phids)
+        ->needUserSettings(true)
         ->execute();
       $users = mpull($users, null, 'getPHID');
 

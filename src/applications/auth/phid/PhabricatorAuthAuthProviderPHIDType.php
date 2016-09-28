@@ -12,6 +12,10 @@ final class PhabricatorAuthAuthProviderPHIDType extends PhabricatorPHIDType {
     return new PhabricatorAuthProviderConfig();
   }
 
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorAuthApplication';
+  }
+
   protected function buildQueryForObjects(
     PhabricatorObjectQuery $query,
     array $phids) {
@@ -26,9 +30,11 @@ final class PhabricatorAuthAuthProviderPHIDType extends PhabricatorPHIDType {
     array $objects) {
 
     foreach ($handles as $phid => $handle) {
-      $provider = $objects[$phid];
+      $provider = $objects[$phid]->getProvider();
 
-      $handle->setName($provider->getProviderName());
+      if ($provider) {
+        $handle->setName($provider->getProviderName());
+      }
     }
   }
 

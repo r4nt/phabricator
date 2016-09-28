@@ -17,6 +17,10 @@ final class PhabricatorApplicationApplicationPHIDType
     return null;
   }
 
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorApplicationsApplication';
+  }
+
   protected function buildQueryForObjects(
     PhabricatorObjectQuery $query,
     array $phids) {
@@ -33,8 +37,10 @@ final class PhabricatorApplicationApplicationPHIDType
     foreach ($handles as $phid => $handle) {
       $application = $objects[$phid];
 
-      $handle->setName($application->getName());
-      $handle->setURI($application->getApplicationURI());
+      $handle
+        ->setName($application->getName())
+        ->setURI($application->getApplicationURI())
+        ->setIcon($application->getIcon());
     }
   }
 

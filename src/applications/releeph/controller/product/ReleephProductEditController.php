@@ -2,19 +2,13 @@
 
 final class ReleephProductEditController extends ReleephProductController {
 
-  private $productID;
-
-  public function willProcessRequest(array $data) {
-    $this->productID = $data['projectID'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('projectID');
 
     $product = id(new ReleephProductQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->productID))
+      ->withIDs(array($id))
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
@@ -55,7 +49,7 @@ final class ReleephProductEditController extends ReleephProductController {
       if (!$product_name) {
         $e_name = pht('Required');
         $errors[] =
-          pht('Your releeph product should have a simple descriptive name.');
+          pht('Your Releeph product should have a simple descriptive name.');
       }
 
       if (!$trunk_branch) {
@@ -201,22 +195,30 @@ final class ReleephProductEditController extends ReleephProductController {
           ->setValue(pht('Save')));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Edit Releeph Product'))
+      ->setHeaderText(pht('Product'))
       ->setFormErrors($errors)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($form);
+
+    $title = pht('Edit Product');
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Edit Product'));
+    $crumbs->setBorder(true);
 
-    return $this->buildStandardPageResponse(
-      array(
-        $crumbs,
-        $box,
-      ),
-      array(
-        'title' => pht('Edit Releeph Product'),
-        'device' => true,
-      ));
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
   private function getBranchHelpText() {

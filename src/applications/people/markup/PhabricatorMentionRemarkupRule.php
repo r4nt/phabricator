@@ -93,7 +93,7 @@ final class PhabricatorMentionRemarkupRule extends PhutilRemarkupRule {
 
       if ($exists) {
         $user = $actual_users[$username];
-        Javelin::initBehavior('phabricator-hovercards');
+        Javelin::initBehavior('phui-hovercards');
 
         // Check if the user has view access to the object she was mentioned in
         if ($context_object
@@ -136,6 +136,10 @@ final class PhabricatorMentionRemarkupRule extends PhutilRemarkupRule {
             ),
             '@'.$user->getUserName());
         } else {
+          if ($engine->getConfig('uri.full')) {
+            $user_href = PhabricatorEnv::getURI($user_href);
+          }
+
           $tag = id(new PHUITagView())
             ->setType(PHUITagView::TYPE_PERSON)
             ->setPHID($user->getPHID())

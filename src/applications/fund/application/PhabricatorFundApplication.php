@@ -14,7 +14,7 @@ final class PhabricatorFundApplication extends PhabricatorApplication {
     return pht('Donate');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-heart';
   }
 
@@ -42,6 +42,7 @@ final class PhabricatorFundApplication extends PhabricatorApplication {
       '/fund/' => array(
         '(?:query/(?P<queryKey>[^/]+)/)?' => 'FundInitiativeListController',
         'create/' => 'FundInitiativeEditController',
+        'comment/(?P<id>[1-9]\d*)/' => 'FundInitiativeCommentController',
         'edit/(?:(?P<id>\d+)/)?' => 'FundInitiativeEditController',
         'close/(?P<id>\d+)/' => 'FundInitiativeCloseController',
         'back/(?P<id>\d+)/' => 'FundInitiativeBackController',

@@ -14,7 +14,7 @@ final class PhabricatorDrydockApplication extends PhabricatorApplication {
     return pht('Allocate Software Resources');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-truck';
   }
 
@@ -30,10 +30,6 @@ final class PhabricatorDrydockApplication extends PhabricatorApplication {
     return self::GROUP_UTILITIES;
   }
 
-  public function isPrototype() {
-    return true;
-  }
-
   public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
     return array(
       array(
@@ -47,24 +43,57 @@ final class PhabricatorDrydockApplication extends PhabricatorApplication {
     return array(
       '/drydock/' => array(
         '' => 'DrydockConsoleController',
-        'blueprint/' => array(
+        '(?P<type>blueprint)/' => array(
           '(?:query/(?P<queryKey>[^/]+)/)?' => 'DrydockBlueprintListController',
-          '(?P<id>[1-9]\d*)/' => 'DrydockBlueprintViewController',
-          'create/' => 'DrydockBlueprintCreateController',
-          'edit/(?:(?P<id>[1-9]\d*)/)?' => 'DrydockBlueprintEditController',
+          '(?P<id>[1-9]\d*)/' => array(
+            '' => 'DrydockBlueprintViewController',
+            '(?P<action>disable|enable)/' =>
+              'DrydockBlueprintDisableController',
+            'resources/(?:query/(?P<queryKey>[^/]+)/)?' =>
+              'DrydockResourceListController',
+            'logs/(?:query/(?P<queryKey>[^/]+)/)?' =>
+              'DrydockLogListController',
+            'authorizations/(?:query/(?P<queryKey>[^/]+)/)?' =>
+              'DrydockAuthorizationListController',
+          ),
+          $this->getEditRoutePattern('edit/')
+            => 'DrydockBlueprintEditController',
         ),
-        'resource/' => array(
+        '(?P<type>resource)/' => array(
           '(?:query/(?P<queryKey>[^/]+)/)?' => 'DrydockResourceListController',
-          '(?P<id>[1-9]\d*)/' => 'DrydockResourceViewController',
-          '(?P<id>[1-9]\d*)/close/' => 'DrydockResourceCloseController',
+          '(?P<id>[1-9]\d*)/' => array(
+            '' => 'DrydockResourceViewController',
+            'release/' => 'DrydockResourceReleaseController',
+            'leases/(?:query/(?P<queryKey>[^/]+)/)?' =>
+              'DrydockLeaseListController',
+            'logs/(?:query/(?P<queryKey>[^/]+)/)?' =>
+              'DrydockLogListController',
+          ),
         ),
-        'lease/' => array(
+        '(?P<type>lease)/' => array(
           '(?:query/(?P<queryKey>[^/]+)/)?' => 'DrydockLeaseListController',
-          '(?P<id>[1-9]\d*)/' => 'DrydockLeaseViewController',
-          '(?P<id>[1-9]\d*)/release/' => 'DrydockLeaseReleaseController',
+          '(?P<id>[1-9]\d*)/' => array(
+            '' => 'DrydockLeaseViewController',
+            'release/' => 'DrydockLeaseReleaseController',
+            'logs/(?:query/(?P<queryKey>[^/]+)/)?' =>
+              'DrydockLogListController',
+          ),
         ),
-        'log/' => array(
-          '(?:query/(?P<queryKey>[^/]+)/)?' => 'DrydockLogListController',
+        '(?P<type>authorization)/' => array(
+          '(?P<id>[1-9]\d*)/' => array(
+            '' => 'DrydockAuthorizationViewController',
+            '(?P<action>authorize|decline)/' =>
+              'DrydockAuthorizationAuthorizeController',
+          ),
+        ),
+        '(?P<type>operation)/' => array(
+          '(?:query/(?P<queryKey>[^/]+)/)?'
+            => 'DrydockRepositoryOperationListController',
+          '(?P<id>[1-9]\d*)/' => array(
+            '' => 'DrydockRepositoryOperationViewController',
+            'status/' => 'DrydockRepositoryOperationStatusController',
+            'dismiss/' => 'DrydockRepositoryOperationDismissController',
+          ),
         ),
       ),
     );

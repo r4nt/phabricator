@@ -3,26 +3,21 @@
 final class PhabricatorAuthRegisterController
   extends PhabricatorAuthController {
 
-  private $accountKey;
-
   public function shouldRequireLogin() {
     return false;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->accountKey = idx($data, 'akey');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $account_key = $request->getURIData('akey');
 
     if ($request->getUser()->isLoggedIn()) {
-      return $this->renderError(pht('You are already logged in.'));
+      return id(new AphrontRedirectResponse())->setURI('/');
     }
 
     $is_setup = false;
-    if (strlen($this->accountKey)) {
-      $result = $this->loadAccountForRegistrationOrLinking($this->accountKey);
+    if (strlen($account_key)) {
+      $result = $this->loadAccountForRegistrationOrLinking($account_key);
       list($account, $provider, $response) = $result;
       $is_default = false;
     } else if ($this->isFirstTimeSetup()) {
@@ -94,13 +89,14 @@ final class PhabricatorAuthRegisterController
       // user expectation and it's not clear the cases it enables are valuable.
       // See discussion in T3472.
       if (!PhabricatorUserEmail::isAllowedAddress($default_email)) {
+        $debug_email = new PHUIInvisibleCharacterView($default_email);
         return $this->renderError(
           array(
             pht(
               'The account you are attempting to register with has an invalid '.
               'email address (%s). This Phabricator install only allows '.
               'registration with specific email addresses:',
-              $default_email),
+              $debug_email),
             phutil_tag('br'),
             phutil_tag('br'),
             PhabricatorUserEmail::describeAllowedAddresses(),
@@ -502,6 +498,7 @@ final class PhabricatorAuthRegisterController
       $crumbs->addTextCrumb($provider->getProviderName());
         $title = pht('Phabricator Registration');
     }
+    $crumbs->setBorder(true);
 
     $welcome_view = null;
     if ($is_setup) {
@@ -516,7 +513,6 @@ final class PhabricatorAuthRegisterController
     }
 
     $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
       ->setForm($form)
       ->setFormErrors($errors);
 
@@ -525,16 +521,21 @@ final class PhabricatorAuthRegisterController
       $invite_header = $this->renderInviteHeader($invite);
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $welcome_view,
-        $invite_header,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+      $welcome_view,
+      $invite_header,
+      $object_box,
+    ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function loadDefaultAccount() {

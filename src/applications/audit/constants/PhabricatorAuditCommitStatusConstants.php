@@ -37,8 +37,10 @@ final class PhabricatorAuditCommitStatusConstants extends Phobject {
         $color = 'red';
         break;
       case self::NEEDS_AUDIT:
-      case self::PARTIALLY_AUDITED:
         $color = 'orange';
+        break;
+      case self::PARTIALLY_AUDITED:
+        $color = 'yellow';
         break;
       case self::FULLY_AUDITED:
         $color = 'green';
@@ -48,6 +50,25 @@ final class PhabricatorAuditCommitStatusConstants extends Phobject {
         break;
     }
     return $color;
+  }
+
+    public static function getStatusIcon($code) {
+    switch ($code) {
+      case self::CONCERN_RAISED:
+        $icon = 'fa-exclamation-circle';
+        break;
+      case self::NEEDS_AUDIT:
+      case self::PARTIALLY_AUDITED:
+        $icon = 'fa-exclamation-circle';
+        break;
+      case self::FULLY_AUDITED:
+        $icon = 'fa-check';
+        break;
+      default:
+        $icon = null;
+        break;
+    }
+    return $icon;
   }
 
 }

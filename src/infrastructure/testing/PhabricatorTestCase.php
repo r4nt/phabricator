@@ -113,15 +113,21 @@ abstract class PhabricatorTestCase extends PhutilTestCase {
     // We can't stub this service right now, and it's not generally useful
     // to publish notifications about test execution.
     $this->env->overrideEnvConfig(
-      'notification.enabled',
-      false);
+      'notification.servers',
+      array());
 
     $this->env->overrideEnvConfig(
       'phabricator.base-uri',
       'http://phabricator.example.com');
 
+    $this->env->overrideEnvConfig(
+      'auth.email-domains',
+      array());
+
     // Tests do their own stubbing/voiding for events.
     $this->env->overrideEnvConfig('phabricator.silent', false);
+
+    $this->env->overrideEnvConfig('cluster.read-only', false);
   }
 
   protected function didRunTests() {
@@ -196,6 +202,14 @@ abstract class PhabricatorTestCase extends PhutilTestCase {
     $editor->setActor($user);
     $editor->createNewUser($user, $email);
 
+    // When creating a new test user, we prefill their setting cache as empty.
+    // This is a little more efficient than doing a query to load the empty
+    // settings.
+    $user->attachRawCacheData(
+      array(
+        PhabricatorUserPreferencesCacheType::KEY_PREFERENCES => '[]',
+      ));
+
     return $user;
   }
 
@@ -225,5 +239,9 @@ abstract class PhabricatorTestCase extends PhutilTestCase {
     }
   }
 
+  protected function newContentSource() {
+    return PhabricatorContentSource::newForSource(
+      PhabricatorUnitTestContentSource::SOURCECONST);
+  }
 
 }

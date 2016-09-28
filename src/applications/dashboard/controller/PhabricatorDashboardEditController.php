@@ -3,20 +3,14 @@
 final class PhabricatorDashboardEditController
   extends PhabricatorDashboardController {
 
-  private $id;
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    if ($this->id) {
+    if ($id) {
       $dashboard = id(new PhabricatorDashboardQuery())
         ->setViewer($viewer)
-        ->withIDs(array($this->id))
+        ->withIDs(array($id))
         ->needPanels(true)
         ->requireCapabilities(
           array(
@@ -27,7 +21,10 @@ final class PhabricatorDashboardEditController
       if (!$dashboard) {
         return new Aphront404Response();
       }
-
+      $v_projects = PhabricatorEdgeQuery::loadDestinationPHIDs(
+        $dashboard->getPHID(),
+        PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
+      $v_projects = array_reverse($v_projects);
       $is_new = false;
     } else {
       if (!$request->getStr('edit')) {
@@ -44,7 +41,7 @@ final class PhabricatorDashboardEditController
       }
 
       $dashboard = PhabricatorDashboard::initializeNewDashboard($viewer);
-
+      $v_projects = array();
       $is_new = true;
     }
 
@@ -52,7 +49,7 @@ final class PhabricatorDashboardEditController
 
     if ($is_new) {
       $title = pht('Create Dashboard');
-      $header = pht('Create Dashboard');
+      $header_icon = 'fa-plus-square';
       $button = pht('Create Dashboard');
       $cancel_uri = $this->getApplicationURI();
 
@@ -61,11 +58,11 @@ final class PhabricatorDashboardEditController
       $id = $dashboard->getID();
       $cancel_uri = $this->getApplicationURI('manage/'.$id.'/');
 
-      $title = pht('Edit Dashboard %d', $dashboard->getID());
-      $header = pht('Edit Dashboard "%s"', $dashboard->getName());
+      $title = pht('Edit Dashboard: %s', $dashboard->getName());
+      $header_icon = 'fa-pencil';
       $button = pht('Save Changes');
 
-      $crumbs->addTextCrumb(pht('Dashboard %d', $id), $cancel_uri);
+      $crumbs->addTextCrumb($dashboard->getName(), $cancel_uri);
       $crumbs->addTextCrumb(pht('Edit'));
     }
 
@@ -79,6 +76,7 @@ final class PhabricatorDashboardEditController
       $v_layout_mode = $request->getStr('layout_mode');
       $v_view_policy = $request->getStr('viewPolicy');
       $v_edit_policy = $request->getStr('editPolicy');
+      $v_projects = $request->getArr('projects');
 
       $xactions = array();
 
@@ -99,6 +97,12 @@ final class PhabricatorDashboardEditController
       $xactions[] = id(new PhabricatorDashboardTransaction())
         ->setTransactionType($type_edit_policy)
         ->setNewValue($v_edit_policy);
+
+      $proj_edge_type = PhabricatorProjectObjectHasProjectEdgeType::EDGECONST;
+      $xactions[] = id(new PhabricatorDashboardTransaction())
+        ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
+        ->setMetadataValue('edge:type', $proj_edge_type)
+        ->setNewValue(array('=' => array_fuse($v_projects)));
 
       try {
         $editor = id(new PhabricatorDashboardTransactionEditor())
@@ -137,6 +141,12 @@ final class PhabricatorDashboardEditController
           ->setValue($v_name)
           ->setError($e_name))
       ->appendChild(
+        id(new AphrontFormSelectControl())
+          ->setLabel(pht('Layout Mode'))
+          ->setName('layout_mode')
+          ->setValue($v_layout_mode)
+          ->setOptions($layout_mode_options))
+      ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setName('viewPolicy')
           ->setPolicyObject($dashboard)
@@ -147,31 +157,40 @@ final class PhabricatorDashboardEditController
           ->setName('editPolicy')
           ->setPolicyObject($dashboard)
           ->setCapability(PhabricatorPolicyCapability::CAN_EDIT)
-          ->setPolicies($policies))
-      ->appendChild(
-        id(new AphrontFormSelectControl())
-          ->setLabel(pht('Layout Mode'))
-          ->setName('layout_mode')
-          ->setValue($v_layout_mode)
-          ->setOptions($layout_mode_options))
-      ->appendChild(
+          ->setPolicies($policies));
+
+    $form->appendControl(
+      id(new AphrontFormTokenizerControl())
+        ->setLabel(pht('Tags'))
+        ->setName('projects')
+        ->setValue($v_projects)
+        ->setDatasource(new PhabricatorProjectDatasource()));
+
+    $form->appendChild(
         id(new AphrontFormSubmitControl())
           ->setValue($button)
           ->addCancelButton($cancel_uri));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText($header)
+      ->setHeaderText(pht('Dashboard'))
       ->setForm($form)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setValidationException($validation_exception);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $crumbs->setBorder(true);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function processTemplateRequest(AphrontRequest $request) {
@@ -249,10 +268,10 @@ final class PhabricatorDashboardEditController
           $request,
           $viewer,
           'query',
-          pht('Recent Tasks'),
+          pht('Open Tasks'),
           array(
             'class' => 'ManiphestTaskSearchEngine',
-            'key' => 'all',
+            'key' => 'open',
           ));
         $panel_phids[] = $task_panel->getPHID();
 

@@ -4,6 +4,7 @@ final class PhabricatorAuthProviderConfigTransaction
   extends PhabricatorApplicationTransaction {
 
   const TYPE_ENABLE         = 'config:enable';
+  const TYPE_LOGIN          = 'config:login';
   const TYPE_REGISTRATION   = 'config:registration';
   const TYPE_LINK           = 'config:link';
   const TYPE_UNLINK         = 'config:unlink';
@@ -43,9 +44,9 @@ final class PhabricatorAuthProviderConfigTransaction
     switch ($this->getTransactionType()) {
       case self::TYPE_ENABLE:
         if ($new) {
-          return 'fa-play';
+          return 'fa-check';
         } else {
-          return 'fa-pause';
+          return 'fa-ban';
         }
     }
 
@@ -61,7 +62,7 @@ final class PhabricatorAuthProviderConfigTransaction
         if ($new) {
           return 'green';
         } else {
-          return 'red';
+          return 'indigo';
         }
     }
 
@@ -87,6 +88,17 @@ final class PhabricatorAuthProviderConfigTransaction
         } else {
           return pht(
             '%s disabled this provider.',
+            $this->renderHandleLink($author_phid));
+        }
+        break;
+      case self::TYPE_LOGIN:
+        if ($new) {
+          return pht(
+            '%s enabled login.',
+            $this->renderHandleLink($author_phid));
+        } else {
+          return pht(
+            '%s disabled login.',
             $this->renderHandleLink($author_phid));
         }
         break;

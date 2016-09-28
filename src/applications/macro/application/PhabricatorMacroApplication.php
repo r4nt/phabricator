@@ -14,7 +14,7 @@ final class PhabricatorMacroApplication extends PhabricatorApplication {
     return pht('Image Macros and Memes');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-file-image-o';
   }
 
@@ -39,13 +39,6 @@ final class PhabricatorMacroApplication extends PhabricatorApplication {
         'meme/' => 'PhabricatorMacroMemeController',
         'meme/create/' => 'PhabricatorMacroMemeDialogController',
       ),
-    );
-  }
-
-  public function getRemarkupRules() {
-    return array(
-      new PhabricatorIconRemarkupRule(),
-      new PhabricatorEmojiRemarkupRule(),
     );
   }
 

@@ -1,6 +1,7 @@
 <?php
 
-final class NuanceSourceViewController extends NuanceController {
+final class NuanceSourceViewController
+  extends NuanceSourceController {
 
   public function handleRequest(AphrontRequest $request) {
     $viewer = $this->getViewer();
@@ -13,36 +14,40 @@ final class NuanceSourceViewController extends NuanceController {
       return new Aphront404Response();
     }
 
-    $source_phid = $source->getPHID();
+    $source_id = $source->getID();
+
+    $header = $this->buildHeaderView($source);
+    $curtain = $this->buildCurtain($source);
+    $properties = $this->buildPropertyView($source);
+
+    $title = $source->getName();
+
+    $routing_list = id(new PHUIPropertyListView())
+      ->addProperty(
+        pht('Default Queue'),
+        $viewer->renderHandle($source->getDefaultQueuePHID()));
+
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb(pht('Sources'), $this->getApplicationURI('source/'));
+    $crumbs->addTextCrumb($title);
+    $crumbs->setBorder(true);
 
     $timeline = $this->buildTransactionTimeline(
       $source,
       new NuanceSourceTransactionQuery());
     $timeline->setShouldTerminate(true);
 
-    $header = $this->buildHeaderView($source);
-    $actions = $this->buildActionView($source);
-    $properties = $this->buildPropertyView($source, $actions);
-
-    $box = id(new PHUIObjectBoxView())
+    $view = id(new PHUITwoColumnView())
       ->setHeader($header)
-      ->addPropertyList($properties);
+      ->setCurtain($curtain)
+      ->addPropertySection(pht('Details'), $properties)
+      ->addPropertySection(pht('Routing'), $routing_list)
+      ->setMainColumn($timeline);
 
-    $title = $source->getName();
-    $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(pht('Sources'), $this->getApplicationURI('source/'));
-
-    $crumbs->addTextCrumb($title);
-
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
-        $timeline,
-      ),
-      array(
-        'title' => $title,
-      ));
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function buildHeaderView(NuanceSource $source) {
@@ -56,12 +61,11 @@ final class NuanceSourceViewController extends NuanceController {
     return $header;
   }
 
-  private function buildActionView(NuanceSource $source) {
+  private function buildCurtain(NuanceSource $source) {
     $viewer = $this->getViewer();
     $id = $source->getID();
 
     $actions = id(new PhabricatorActionListView())
-      ->setObjectURI($source->getURI())
       ->setUser($viewer);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
@@ -69,7 +73,9 @@ final class NuanceSourceViewController extends NuanceController {
       $source,
       PhabricatorPolicyCapability::CAN_EDIT);
 
-    $actions->addAction(
+    $curtain = $this->newCurtainView($source);
+
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Edit Source'))
         ->setIcon('fa-pencil')
@@ -77,31 +83,33 @@ final class NuanceSourceViewController extends NuanceController {
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
-    return $actions;
+    $request = $this->getRequest();
+    $definition = $source->getDefinition();
+
+    $definition
+      ->setViewer($viewer)
+      ->setSource($source);
+
+    $source_actions = $definition->getSourceViewActions($request);
+    foreach ($source_actions as $source_action) {
+      $curtain->addAction($source_action);
+    }
+
+    return $curtain;
   }
 
   private function buildPropertyView(
-    NuanceSource $source,
-    PhabricatorActionListView $actions) {
-    $viewer = $this->getRequest()->getUser();
+    NuanceSource $source) {
+    $viewer = $this->getViewer();
 
     $properties = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setObject($source)
-      ->setActionList($actions);
+      ->setViewer($viewer);
 
-    $definition = NuanceSourceDefinition::getDefinitionForSource($source);
+    $definition = $source->getDefinition();
+
     $properties->addProperty(
       pht('Source Type'),
       $definition->getName());
-
-    $descriptions = PhabricatorPolicyQuery::renderPolicyDescriptions(
-      $viewer,
-      $source);
-
-    $properties->addProperty(
-      pht('Editable By'),
-      $descriptions[PhabricatorPolicyCapability::CAN_EDIT]);
 
     return $properties;
   }

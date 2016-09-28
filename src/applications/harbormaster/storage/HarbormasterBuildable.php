@@ -13,8 +13,6 @@ final class HarbormasterBuildable extends HarbormasterDAO
 
   private $buildableObject = self::ATTACHABLE;
   private $containerObject = self::ATTACHABLE;
-  private $buildableHandle = self::ATTACHABLE;
-  private $containerHandle = self::ATTACHABLE;
   private $builds = self::ATTACHABLE;
 
   const STATUS_BUILDING = 'building';
@@ -22,16 +20,16 @@ final class HarbormasterBuildable extends HarbormasterDAO
   const STATUS_FAILED = 'failed';
 
   public static function getBuildableStatusName($status) {
-    switch ($status) {
-      case self::STATUS_BUILDING:
-        return pht('Building');
-      case self::STATUS_PASSED:
-        return pht('Passed');
-      case self::STATUS_FAILED:
-        return pht('Failed');
-      default:
-        return pht('Unknown');
-    }
+    $map = self::getBuildStatusMap();
+    return idx($map, $status, pht('Unknown ("%s")', $status));
+  }
+
+  public static function getBuildStatusMap() {
+    return array(
+      self::STATUS_BUILDING => pht('Building'),
+      self::STATUS_PASSED => pht('Passed'),
+      self::STATUS_FAILED => pht('Failed'),
+    );
   }
 
   public static function getBuildableStatusIcon($status) {
@@ -70,6 +68,10 @@ final class HarbormasterBuildable extends HarbormasterDAO
     return 'B'.$this->getID();
   }
 
+  public function getURI() {
+    return '/'.$this->getMonogram();
+  }
+
   /**
    * Returns an existing buildable for the object's PHID or creates a
    * new buildable implicitly if needed.
@@ -96,15 +98,21 @@ final class HarbormasterBuildable extends HarbormasterDAO
   }
 
   /**
-   * Looks up the plan PHIDs and applies the plans to the specified
-   * object identified by it's PHID.
+   * Start builds for a given buildable.
+   *
+   * @param phid PHID of the object to build.
+   * @param phid Container PHID for the buildable.
+   * @param list<HarbormasterBuildRequest> List of builds to perform.
+   * @return void
    */
   public static function applyBuildPlans(
     $phid,
     $container_phid,
-    array $plan_phids) {
+    array $requests) {
 
-    if (count($plan_phids) === 0) {
+    assert_instances_of($requests, 'HarbormasterBuildRequest');
+
+    if (!$requests) {
       return;
     }
 
@@ -116,32 +124,56 @@ final class HarbormasterBuildable extends HarbormasterDAO
       return;
     }
 
+    $viewer = PhabricatorUser::getOmnipotentUser();
+
     $buildable = self::createOrLoadExisting(
-      PhabricatorUser::getOmnipotentUser(),
+      $viewer,
       $phid,
       $container_phid);
 
+    $plan_phids = mpull($requests, 'getBuildPlanPHID');
     $plans = id(new HarbormasterBuildPlanQuery())
-      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->setViewer($viewer)
       ->withPHIDs($plan_phids)
       ->execute();
-    foreach ($plans as $plan) {
+    $plans = mpull($plans, null, 'getPHID');
+
+    foreach ($requests as $request) {
+      $plan_phid = $request->getBuildPlanPHID();
+      $plan = idx($plans, $plan_phid);
+
+      if (!$plan) {
+        throw new Exception(
+          pht(
+            'Failed to load build plan ("%s").',
+            $plan_phid));
+      }
+
       if ($plan->isDisabled()) {
         // TODO: This should be communicated more clearly -- maybe we should
         // create the build but set the status to "disabled" or "derelict".
         continue;
       }
 
-      $buildable->applyPlan($plan);
+      $parameters = $request->getBuildParameters();
+      $buildable->applyPlan($plan, $parameters, $request->getInitiatorPHID());
     }
   }
 
-  public function applyPlan(HarbormasterBuildPlan $plan) {
+  public function applyPlan(
+    HarbormasterBuildPlan $plan,
+    array $parameters,
+    $initiator_phid) {
+
     $viewer = PhabricatorUser::getOmnipotentUser();
     $build = HarbormasterBuild::initializeNewBuild($viewer)
       ->setBuildablePHID($this->getPHID())
       ->setBuildPlanPHID($plan->getPHID())
-      ->setBuildStatus(HarbormasterBuild::STATUS_PENDING);
+      ->setBuildParameters($parameters)
+      ->setBuildStatus(HarbormasterBuildStatus::STATUS_PENDING);
+    if ($initiator_phid) {
+      $build->setInitiatorPHID($initiator_phid);
+    }
 
     $auto_key = $plan->getPlanAutoKey();
     if ($auto_key) {
@@ -154,6 +186,9 @@ final class HarbormasterBuildable extends HarbormasterDAO
       'HarbormasterBuildWorker',
       array(
         'buildID' => $build->getID(),
+      ),
+      array(
+        'objectPHID' => $build->getPHID(),
       ));
 
     return $build;
@@ -202,24 +237,6 @@ final class HarbormasterBuildable extends HarbormasterDAO
 
   public function getContainerObject() {
     return $this->assertAttached($this->containerObject);
-  }
-
-  public function attachContainerHandle($container_handle) {
-    $this->containerHandle = $container_handle;
-    return $this;
-  }
-
-  public function getContainerHandle() {
-    return $this->assertAttached($this->containerHandle);
-  }
-
-  public function attachBuildableHandle($buildable_handle) {
-    $this->buildableHandle = $buildable_handle;
-    return $this;
-  }
-
-  public function getBuildableHandle() {
-    return $this->assertAttached($this->buildableHandle);
   }
 
   public function attachBuilds(array $builds) {
@@ -284,6 +301,10 @@ final class HarbormasterBuildable extends HarbormasterDAO
 
 /* -(  HarbormasterBuildableInterface  )------------------------------------- */
 
+
+  public function getHarbormasterBuildableDisplayPHID() {
+    return $this->getBuildableObject()->getHarbormasterBuildableDisplayPHID();
+  }
 
   public function getHarbormasterBuildablePHID() {
     // NOTE: This is essentially just for convenience, as it allows you create

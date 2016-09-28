@@ -141,37 +141,48 @@ final class AphrontCursorPagerView extends AphrontView {
 
     $first_uri = $this->getFirstPageURI();
     if ($first_uri) {
-      $links[] = phutil_tag(
-        'a',
-        array(
-          'href' => $first_uri,
-        ),
-        "\xC2\xAB ".pht('First'));
+      $icon = id(new PHUIIconView())
+        ->setIcon('fa-fast-backward');
+      $links[] = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setHref($first_uri)
+        ->setIcon($icon)
+        ->addClass('mml')
+        ->setColor(PHUIButtonView::GREY)
+        ->setText(pht('First'));
     }
 
     $prev_uri = $this->getPrevPageURI();
     if ($prev_uri) {
-      $links[] = phutil_tag(
-        'a',
-        array(
-          'href' => $prev_uri,
-        ),
-        "\xE2\x80\xB9 ".pht('Prev'));
+      $icon = id(new PHUIIconView())
+        ->setIcon('fa-backward');
+      $links[] = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setHref($prev_uri)
+        ->setIcon($icon)
+        ->addClass('mml')
+        ->setColor(PHUIButtonView::GREY)
+        ->setText(pht('Prev'));
     }
 
     $next_uri = $this->getNextPageURI();
     if ($next_uri) {
-      $links[] = phutil_tag(
-        'a',
-        array(
-          'href' => $next_uri,
-        ),
-        pht('Next')." \xE2\x80\xBA");
+      $icon = id(new PHUIIconView())
+        ->setIcon('fa-forward');
+      $links[] = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setHref($next_uri)
+        ->setIcon($icon, false)
+        ->addClass('mml')
+        ->setColor(PHUIButtonView::GREY)
+        ->setText(pht('Next'));
     }
 
     return phutil_tag(
       'div',
-      array('class' => 'aphront-pager-view'),
+      array(
+        'class' => 'phui-pager-view',
+      ),
       $links);
   }
 

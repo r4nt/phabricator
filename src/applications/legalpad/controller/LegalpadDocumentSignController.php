@@ -234,46 +234,55 @@ final class LegalpadDocumentSignController extends LegalpadController {
       $document,
       PhabricatorPolicyCapability::CAN_EDIT);
 
+    // Use the last content update as the modified date. We don't want to
+    // show that a document like a TOS was "updated" by an incidental change
+    // to a field like the preamble or privacy settings which does not acutally
+    // affect the content of the agreement.
+    $content_updated = $document_body->getDateCreated();
+
+    // NOTE: We're avoiding `setPolicyObject()` here so we don't pick up
+    // extra UI elements that are unnecessary and clutter the signature page.
+    // These details are available on the "Manage" page.
     $header = id(new PHUIHeaderView())
       ->setHeader($title)
       ->setUser($viewer)
-      ->setPolicyObject($document)
-      ->setEpoch($document->getDateModified())
+      ->setEpoch($content_updated)
       ->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-pencil'))
-          ->setText(pht('Manage Document'))
+          ->setIcon('fa-pencil')
+          ->setText(pht('Manage'))
           ->setHref($manage_uri)
           ->setDisabled(!$can_edit)
           ->setWorkflow(!$can_edit));
 
-    $preamble = null;
+    $preamble_box = null;
     if (strlen($document->getPreamble())) {
-      $preamble_text = PhabricatorMarkupEngine::renderOneObject(
-        id(new PhabricatorMarkupOneOff())->setContent(
-          $document->getPreamble()),
-        'default',
-        $viewer);
+      $preamble_text = new PHUIRemarkupView($viewer, $document->getPreamble());
 
+      // NOTE: We're avoiding `setObject()` here so we don't pick up extra UI
+      // elements like "Subscribers". This information is available on the
+      // "Manage" page, but just clutters up the "Signature" page.
       $preamble = id(new PHUIPropertyListView())
+        ->setUser($viewer)
         ->addSectionHeader(pht('Preamble'))
         ->addTextContent($preamble_text);
+
+      $preamble_box = new PHUIPropertyGroupView();
+      $preamble_box->addPropertyList($preamble);
     }
 
-    $content = id(new PHUIDocumentView())
+    $content = id(new PHUIDocumentViewPro())
       ->addClass('legalpad')
       ->setHeader($header)
-      ->setFontKit(PHUIDocumentView::FONT_SOURCE_SANS)
       ->appendChild(
         array(
           $signed_status,
-          $preamble,
+          $preamble_box,
           $document_markup,
         ));
 
+    $signature_box = null;
     if (!$has_signed) {
       $error_view = null;
       if ($errors) {
@@ -287,37 +296,37 @@ final class LegalpadDocumentSignController extends LegalpadController {
         $field_errors);
 
       switch ($document->getSignatureType()) {
-        case LegalpadDocument::SIGNATURE_TYPE_NONE:
-          $subheader = null;
+        default:
           break;
         case LegalpadDocument::SIGNATURE_TYPE_INDIVIDUAL:
         case LegalpadDocument::SIGNATURE_TYPE_CORPORATION:
-          $subheader = id(new PHUIHeaderView())
-            ->setHeader(pht('Agree and Sign Document'))
-            ->setBleedHeader(true);
+          $box = id(new PHUIObjectBoxView())
+            ->addClass('document-sign-box')
+            ->setHeaderText(pht('Agree and Sign Document'))
+            ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+            ->setForm($signature_form);
+          if ($error_view) {
+            $box->setInfoView($error_view);
+          }
+          $signature_box = phutil_tag_div(
+            'phui-document-view-pro-box plt', $box);
           break;
       }
 
-      $content->appendChild(
-        array(
-          $subheader,
-          $error_view,
-          $signature_form,
-        ));
+
     }
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->setBorder(true);
     $crumbs->addTextCrumb($document->getMonogram());
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->setPageObjectPHIDs(array($document->getPHID()))
+      ->appendChild(array(
         $content,
-      ),
-      array(
-        'title' => $title,
-        'pageObjects' => array($document->getPHID()),
+        $signature_box,
       ));
   }
 

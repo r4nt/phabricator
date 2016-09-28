@@ -192,23 +192,7 @@ abstract class ManiphestConduitAPIMethod extends ConduitAPIMethod {
       return;
     }
 
-    $event = new PhabricatorEvent(
-      PhabricatorEventType::TYPE_MANIPHEST_WILLEDITTASK,
-      array(
-        'task'          => $task,
-        'new'           => $is_new,
-        'transactions'  => $transactions,
-      ));
-    $event->setUser($request->getUser());
-    $event->setConduitRequest($request);
-    PhutilEventEngine::dispatchEvent($event);
-
-    $task = $event->getValue('task');
-    $transactions = $event->getValue('transactions');
-
-    $content_source = PhabricatorContentSource::newForSource(
-      PhabricatorContentSource::SOURCE_CONDUIT,
-      array());
+    $content_source = $request->newContentSource();
 
     $editor = id(new ManiphestTransactionEditor())
       ->setActor($request->getUser())
@@ -220,17 +204,6 @@ abstract class ManiphestConduitAPIMethod extends ConduitAPIMethod {
     }
 
     $editor->applyTransactions($task, $transactions);
-
-    $event = new PhabricatorEvent(
-      PhabricatorEventType::TYPE_MANIPHEST_DIDEDITTASK,
-      array(
-        'task'          => $task,
-        'new'           => $is_new,
-        'transactions'  => $transactions,
-      ));
-    $event->setUser($request->getUser());
-    $event->setConduitRequest($request);
-    PhutilEventEngine::dispatchEvent($event);
 
     // reload the task now that we've done all the fun stuff
     return id(new ManiphestTaskQuery())

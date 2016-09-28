@@ -5,13 +5,12 @@ final class PHUIObjectItemListView extends AphrontTagView {
   private $header;
   private $items;
   private $pager;
-  private $stackable;
   private $noDataString;
   private $flush;
-  private $plain;
+  private $simple;
+  private $big;
   private $allowEmptyList;
-  private $states;
-
+  private $itemClass = 'phui-object-item-standard';
 
   public function setAllowEmptyList($allow_empty_list) {
     $this->allowEmptyList = $allow_empty_list;
@@ -27,11 +26,6 @@ final class PHUIObjectItemListView extends AphrontTagView {
     return $this;
   }
 
-  public function setPlain($plain) {
-    $this->plain = $plain;
-    return $this;
-  }
-
   public function setHeader($header) {
     $this->header = $header;
     return $this;
@@ -39,6 +33,16 @@ final class PHUIObjectItemListView extends AphrontTagView {
 
   public function setPager($pager) {
     $this->pager = $pager;
+    return $this;
+  }
+
+  public function setSimple($simple) {
+    $this->simple = $simple;
+    return $this;
+  }
+
+  public function setBig($big) {
+    $this->big = $big;
     return $this;
   }
 
@@ -52,13 +56,8 @@ final class PHUIObjectItemListView extends AphrontTagView {
     return $this;
   }
 
-  public function setStackable($stackable) {
-    $this->stackable = $stackable;
-    return $this;
-  }
-
-  public function setStates($states) {
-    $this->states = $states;
+  public function setItemClass($item_class) {
+    $this->itemClass = $item_class;
     return $this;
   }
 
@@ -70,18 +69,14 @@ final class PHUIObjectItemListView extends AphrontTagView {
     $classes = array();
 
     $classes[] = 'phui-object-item-list-view';
-    if ($this->stackable) {
-      $classes[] = 'phui-object-list-stackable';
-    }
-    if ($this->states) {
-      $classes[] = 'phui-object-list-states';
-      $classes[] = 'phui-object-list-stackable';
-    }
     if ($this->flush) {
       $classes[] = 'phui-object-list-flush';
     }
-    if ($this->plain) {
-      $classes[] = 'phui-object-list-plain';
+    if ($this->simple) {
+      $classes[] = 'phui-object-list-simple';
+    }
+    if ($this->big) {
+      $classes[] = 'phui-object-list-big';
     }
 
     return array(
@@ -109,6 +104,11 @@ final class PHUIObjectItemListView extends AphrontTagView {
           $item->setUser($viewer);
         }
       }
+
+      foreach ($this->items as $item) {
+        $item->addClass($this->itemClass);
+      }
+
       $items = $this->items;
     } else if ($this->allowEmptyList) {
       $items = null;

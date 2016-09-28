@@ -4,25 +4,27 @@ final class AlmanacBinding
   extends AlmanacDAO
   implements
     PhabricatorPolicyInterface,
-    PhabricatorCustomFieldInterface,
     PhabricatorApplicationTransactionInterface,
-    AlmanacPropertyInterface {
+    AlmanacPropertyInterface,
+    PhabricatorDestructibleInterface,
+    PhabricatorExtendedPolicyInterface {
 
   protected $servicePHID;
   protected $devicePHID;
   protected $interfacePHID;
   protected $mailKey;
+  protected $isDisabled;
 
   private $service = self::ATTACHABLE;
   private $device = self::ATTACHABLE;
   private $interface = self::ATTACHABLE;
-  private $customFields = self::ATTACHABLE;
   private $almanacProperties = self::ATTACHABLE;
 
   public static function initializeNewBinding(AlmanacService $service) {
     return id(new AlmanacBinding())
       ->setServicePHID($service->getPHID())
-      ->attachAlmanacProperties(array());
+      ->attachAlmanacProperties(array())
+      ->setIsDisabled(0);
   }
 
   protected function getConfiguration() {
@@ -30,6 +32,7 @@ final class AlmanacBinding
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
         'mailKey' => 'bytes20',
+        'isDisabled' => 'bool',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_service' => array(
@@ -55,6 +58,10 @@ final class AlmanacBinding
       $this->mailKey = Filesystem::readRandomCharacters(20);
     }
     return parent::save();
+  }
+
+  public function getName() {
+    return pht('Binding %s', $this->getID());
   }
 
   public function getURI() {
@@ -123,6 +130,10 @@ final class AlmanacBinding
     return array();
   }
 
+  public function newAlmanacPropertyEditEngine() {
+    return new AlmanacBindingPropertyEditEngine();
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -150,37 +161,29 @@ final class AlmanacBinding
         'interface.'),
     );
 
-    if ($capability === PhabricatorPolicyCapability::CAN_EDIT) {
-      if ($this->getService()->getIsLocked()) {
-        $notes[] = pht(
-          'The service for this binding is locked, so it can not be edited.');
-      }
-    }
-
     return $notes;
   }
 
 
-/* -(  PhabricatorCustomFieldInterface  )------------------------------------ */
+/* -(  PhabricatorExtendedPolicyInterface  )--------------------------------- */
 
 
-  public function getCustomFieldSpecificationForRole($role) {
+  public function getExtendedPolicy($capability, PhabricatorUser $viewer) {
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        if ($this->getService()->isClusterService()) {
+          return array(
+            array(
+              new PhabricatorAlmanacApplication(),
+              AlmanacManageClusterServicesCapability::CAPABILITY,
+            ),
+          );
+        }
+        break;
+    }
+
     return array();
   }
-
-  public function getCustomFieldBaseClass() {
-    return 'AlmanacCustomField';
-  }
-
-  public function getCustomFields() {
-    return $this->assertAttached($this->customFields);
-  }
-
-  public function attachCustomFields(PhabricatorCustomFieldAttachment $fields) {
-    $this->customFields = $fields;
-    return $this;
-  }
-
 
 /* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
 
@@ -203,5 +206,15 @@ final class AlmanacBinding
 
     return $timeline;
   }
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->delete();
+  }
+
 
 }

@@ -62,9 +62,12 @@ final class ConpherenceViewController extends
     $latest_transaction = head($transactions);
     $participant = $conpherence->getParticipantIfExists($user->getPHID());
     if ($participant) {
-      $write_guard = AphrontWriteGuard::beginScopedUnguardedWrites();
-      $participant->markUpToDate($conpherence, $latest_transaction);
-      unset($write_guard);
+      if (!$participant->isUpToDate($conpherence)) {
+        $write_guard = AphrontWriteGuard::beginScopedUnguardedWrites();
+        $participant->markUpToDate($conpherence, $latest_transaction);
+        $user->clearCacheData(PhabricatorUserMessageCountCacheType::KEY_COUNT);
+        unset($write_guard);
+      }
     }
 
     $data = ConpherenceTransactionRenderer::renderTransactions(
@@ -125,12 +128,10 @@ final class ConpherenceViewController extends
       ->setLatestTransactionID($data['latest_transaction_id'])
       ->setRole('thread');
 
-   return $this->buildApplicationPage(
-      $layout,
-      array(
-        'title' => $title,
-        'pageObjects' => array($conpherence->getPHID()),
-      ));
+    return $this->newPage()
+      ->setTitle($title)
+      ->setPageObjectPHIDs(array($conpherence->getPHID()))
+      ->appendChild($layout);
   }
 
   private function renderFormContent() {
@@ -153,7 +154,7 @@ final class ConpherenceViewController extends
       $button_text = pht('Send');
     } else if ($user->isLoggedIn()) {
       $action = ConpherenceUpdateActions::JOIN_ROOM;
-      $button_text = pht('Join');
+      $button_text = pht('Join Room');
     } else {
       // user not logged in so give them a login button.
       $login_href = id(new PhutilURI('/auth/start/'))

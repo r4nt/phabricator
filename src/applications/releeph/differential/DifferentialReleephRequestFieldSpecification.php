@@ -301,8 +301,7 @@ final class DifferentialReleephRequestFieldSpecification extends Phobject {
         ->setContinueOnNoEffect(true)
         ->setContentSource(
           PhabricatorContentSource::newForSource(
-            PhabricatorContentSource::SOURCE_UNKNOWN,
-            array()));
+            PhabricatorUnknownContentSource::SOURCECONST));
 
       $editor->applyTransactions($releeph_request, $xactions);
     }
@@ -372,7 +371,7 @@ final class DifferentialReleephRequestFieldSpecification extends Phobject {
             'part of a Releeph branch, but also has %d path change(s) not '.
             'part of a Releeph branch!',
             $commit->getCommitIdentifier(),
-            $repo->getCallsign(),
+            $repo->getDisplayName(),
             count($in_branch),
             count($ex_branch));
           phlog($error);

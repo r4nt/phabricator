@@ -8,9 +8,6 @@ final class PonderAnswerQuery
   private $authorPHIDs;
   private $questionIDs;
 
-  private $needViewerVotes;
-
-
   public function withIDs(array $ids) {
     $this->ids = $ids;
     return $this;
@@ -31,53 +28,39 @@ final class PonderAnswerQuery
     return $this;
   }
 
-  public function needViewerVotes($need_viewer_votes) {
-    $this->needViewerVotes = $need_viewer_votes;
-    return $this;
-  }
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
-    $where = array();
-
-    if ($this->ids) {
+    if ($this->ids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'id IN (%Ld)',
         $this->ids);
     }
 
-    if ($this->phids) {
+    if ($this->phids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'phid IN (%Ls)',
         $this->phids);
     }
 
-    if ($this->authorPHIDs) {
+    if ($this->authorPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'authorPHID IN (%Ls)',
         $this->authorPHIDs);
     }
 
-    $where[] = $this->buildPagingClause($conn_r);
+    return $where;
+  }
 
-    return $this->formatWhereClause($where);
+  public function newResultObject() {
+    return new PonderAnswer();
   }
 
   protected function loadPage() {
-    $answer = new PonderAnswer();
-    $conn_r = $answer->establishConnection('r');
-
-    $data = queryfx_all(
-      $conn_r,
-      'SELECT a.* FROM %T a %Q %Q %Q',
-      $answer->getTableName(),
-      $this->buildWhereClause($conn_r),
-      $this->buildOrderClause($conn_r),
-      $this->buildLimitClause($conn_r));
-
-    return $answer->loadAllFromArray($data);
+    return $this->loadStandardPage(new PonderAnswer());
   }
 
   protected function willFilterPage(array $answers) {
@@ -93,26 +76,6 @@ final class PonderAnswerQuery
         continue;
       }
       $answer->attachQuestion($question);
-    }
-
-    if ($this->needViewerVotes) {
-      $viewer_phid = $this->getViewer()->getPHID();
-
-      $etype = PonderAnswerHasVotingUserEdgeType::EDGECONST;
-      $edges = id(new PhabricatorEdgeQuery())
-        ->withSourcePHIDs(mpull($answers, 'getPHID'))
-        ->withDestinationPHIDs(array($viewer_phid))
-        ->withEdgeTypes(array($etype))
-        ->needEdgeData(true)
-        ->execute();
-      foreach ($answers as $answer) {
-        $user_edge = idx(
-          $edges[$answer->getPHID()][$etype],
-          $viewer_phid,
-          array());
-
-        $answer->attachUserVote($viewer_phid, idx($user_edge, 'data', 0));
-      }
     }
 
     return $answers;

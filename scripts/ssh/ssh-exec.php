@@ -103,6 +103,9 @@ try {
           'Invalid username ("%s"). There is no user with this username.',
           $user_name));
     }
+
+    id(new PhabricatorAuthSessionEngine())
+      ->willServeRequestForUser($user);
   } else if (strlen($device_name)) {
     if (!$remote_address) {
       throw new Exception(
@@ -129,7 +132,7 @@ try {
       throw new Exception(
         pht(
           'Invalid device name ("%s"). There is no device with this name.',
-          $device->getName()));
+          $device_name));
     }
 
     // We're authenticated as a device, but we're going to read the user out of
@@ -153,48 +156,54 @@ try {
     ->splitArguments($original_command);
 
   if ($device) {
-    $act_as_name = array_shift($original_argv);
-    if (!preg_match('/^@/', $act_as_name)) {
-      throw new Exception(
-        pht(
-          'Commands executed by devices must identify an acting user in the '.
-          'first command argument. This request was not constructed '.
-          'properly.'));
+    // If we're authenticating as a device, the first argument may be a
+    // "@username" argument to act as a particular user.
+    $first_argument = head($original_argv);
+    if (preg_match('/^@/', $first_argument)) {
+      $act_as_name = array_shift($original_argv);
+      $act_as_name = substr($act_as_name, 1);
+      $user = id(new PhabricatorPeopleQuery())
+        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->withUsernames(array($act_as_name))
+        ->executeOne();
+      if (!$user) {
+        throw new Exception(
+          pht(
+            'Device request identifies an acting user with an invalid '.
+            'username ("%s"). There is no user with this username.',
+            $act_as_name));
+      }
+    } else {
+      $user = PhabricatorUser::getOmnipotentUser();
     }
+  }
 
-    $act_as_name = substr($act_as_name, 1);
-    $user = id(new PhabricatorPeopleQuery())
-      ->setViewer(PhabricatorUser::getOmnipotentUser())
-      ->withUsernames(array($act_as_name))
-      ->executeOne();
-    if (!$user) {
-      throw new Exception(
-        pht(
-          'Device request identifies an acting user with an invalid '.
-          'username ("%s"). There is no user with this username.',
-          $act_as_name));
-    }
+  if ($user->isOmnipotent()) {
+    $user_name = 'device/'.$device->getName();
+  } else {
+    $user_name = $user->getUsername();
   }
 
   $ssh_log->setData(
     array(
-      'u' => $user->getUsername(),
+      'u' => $user_name,
       'P' => $user->getPHID(),
     ));
 
-  if (!$user->canEstablishSSHSessions()) {
-    throw new Exception(
-      pht(
-        'Your account ("%s") does not have permission to establish SSH '.
-        'sessions. Visit the web interface for more information.',
-        $user->getUsername()));
+  if (!$device) {
+    if (!$user->canEstablishSSHSessions()) {
+      throw new Exception(
+        pht(
+          'Your account ("%s") does not have permission to establish SSH '.
+          'sessions. Visit the web interface for more information.',
+          $user_name));
+    }
   }
 
-  $workflows = id(new PhutilSymbolLoader())
+  $workflows = id(new PhutilClassMapQuery())
     ->setAncestorClass('PhabricatorSSHWorkflow')
-    ->loadObjects();
-
-  $workflow_names = mpull($workflows, 'getName', 'getName');
+    ->setUniqueMethod('getName')
+    ->execute();
 
   if (!$original_argv) {
     throw new Exception(
@@ -207,10 +216,10 @@ try {
         "Usually, you should run a command like `%s` or `%s` ".
         "rather than connecting directly with SSH.\n\n".
         "Supported commands are: %s.",
-        $user->getUsername(),
+        $user_name,
         'git clone',
         'hg push',
-        implode(', ', $workflow_names)));
+        implode(', ', array_keys($workflows))));
   }
 
   $log_argv = implode(' ', $original_argv);
@@ -231,7 +240,7 @@ try {
 
   $parsed_args = new PhutilArgumentParser($parseable_argv);
 
-  if (empty($workflow_names[$command])) {
+  if (empty($workflows[$command])) {
     throw new Exception(pht('Invalid command.'));
   }
 

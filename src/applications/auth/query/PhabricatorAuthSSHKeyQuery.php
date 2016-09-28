@@ -4,11 +4,18 @@ final class PhabricatorAuthSSHKeyQuery
   extends PhabricatorCursorPagedPolicyAwareQuery {
 
   private $ids;
+  private $phids;
   private $objectPHIDs;
   private $keys;
+  private $isActive;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
+    return $this;
+  }
+
+  public function withPHIDs(array $phids) {
+    $this->phids = $phids;
     return $this;
   }
 
@@ -23,19 +30,17 @@ final class PhabricatorAuthSSHKeyQuery
     return $this;
   }
 
+  public function withIsActive($active) {
+    $this->isActive = $active;
+    return $this;
+  }
+
+  public function newResultObject() {
+    return new PhabricatorAuthSSHKey();
+  }
+
   protected function loadPage() {
-    $table = new PhabricatorAuthSSHKey();
-    $conn_r = $table->establishConnection('r');
-
-    $data = queryfx_all(
-      $conn_r,
-      'SELECT * FROM %T %Q %Q %Q',
-      $table->getTableName(),
-      $this->buildWhereClause($conn_r),
-      $this->buildOrderClause($conn_r),
-      $this->buildLimitClause($conn_r));
-
-    return $table->loadAllFromArray($data);
+    return $this->loadStandardPage($this->newResultObject());
   }
 
   protected function willFilterPage(array $keys) {
@@ -54,6 +59,7 @@ final class PhabricatorAuthSSHKeyQuery
       // We must have an object, and that object must be a valid object for
       // SSH keys.
       if (!$object || !($object instanceof PhabricatorSSHPublicKeyInterface)) {
+        $this->didRejectResult($ssh_key);
         unset($keys[$key]);
         continue;
       }
@@ -64,19 +70,26 @@ final class PhabricatorAuthSSHKeyQuery
     return $keys;
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
-    $where = array();
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
     if ($this->ids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'id IN (%Ld)',
         $this->ids);
     }
 
+    if ($this->phids !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'phid IN (%Ls)',
+        $this->phids);
+    }
+
     if ($this->objectPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'objectPHID IN (%Ls)',
         $this->objectPHIDs);
     }
@@ -85,7 +98,7 @@ final class PhabricatorAuthSSHKeyQuery
       $sql = array();
       foreach ($this->keys as $key) {
         $sql[] = qsprintf(
-          $conn_r,
+          $conn,
           '(keyType = %s AND keyIndex = %s)',
           $key->getType(),
           $key->getHash());
@@ -93,9 +106,21 @@ final class PhabricatorAuthSSHKeyQuery
       $where[] = implode(' OR ', $sql);
     }
 
-    $where[] = $this->buildPagingClause($conn_r);
+    if ($this->isActive !== null) {
+      if ($this->isActive) {
+        $where[] = qsprintf(
+          $conn,
+          'isActive = %d',
+          1);
+      } else {
+        $where[] = qsprintf(
+          $conn,
+          'isActive IS NULL');
+      }
+    }
 
-    return $this->formatWhereClause($where);
+    return $where;
+
   }
 
   public function getQueryApplicationClass() {

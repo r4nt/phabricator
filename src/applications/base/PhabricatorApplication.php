@@ -151,11 +151,7 @@ abstract class PhabricatorApplication
     return $this->getBaseURI().ltrim($path, '/');
   }
 
-  public function getIconURI() {
-    return null;
-  }
-
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-puzzle-piece';
   }
 
@@ -183,7 +179,8 @@ abstract class PhabricatorApplication
         $item = id(new PHUIListItemView())
           ->setName($article['name'])
           ->setIcon('fa-book')
-          ->setHref($article['href']);
+          ->setHref($article['href'])
+          ->setOpenInNewWindow(true);
 
         $items[] = $item;
       }
@@ -203,7 +200,8 @@ abstract class PhabricatorApplication
         $item = id(new PHUIListItemView())
           ->setName($spec['name'])
           ->setIcon('fa-envelope-o')
-          ->setHref($href);
+          ->setHref($href)
+          ->setOpenInNewWindow(true);
         $items[] = $item;
       }
     }
@@ -240,6 +238,10 @@ abstract class PhabricatorApplication
 
 
   public function getRoutes() {
+    return array();
+  }
+
+  public function getResourceRoutes() {
     return array();
   }
 
@@ -282,22 +284,6 @@ abstract class PhabricatorApplication
    */
   public function loadStatus(PhabricatorUser $user) {
     return array();
-  }
-
-  /**
-   * @return string
-   * @task ui
-   */
-  final public static function formatStatusCount(
-    $count,
-    $limit_string = '%s',
-    $base_string = '%d') {
-    if ($count == self::MAX_STATUS_ITEMS) {
-      $count_str = pht($limit_string, ($count - 1).'+');
-    } else {
-      $count_str = pht($base_string, $count);
-    }
-    return $count_str;
   }
 
 
@@ -347,17 +333,6 @@ abstract class PhabricatorApplication
   }
 
 
-  /**
-   * Build items for the "quick create" menu.
-   *
-   * @param   PhabricatorUser         The viewing user.
-   * @return  list<PHUIListItemView>  List of menu items.
-   */
-  public function getQuickCreateItems(PhabricatorUser $viewer) {
-    return array();
-  }
-
-
 /* -(  Application Management  )--------------------------------------------- */
 
 
@@ -383,13 +358,13 @@ abstract class PhabricatorApplication
     static $applications;
 
     if ($applications === null) {
-      $apps = id(new PhutilSymbolLoader())
+      $apps = id(new PhutilClassMapQuery())
         ->setAncestorClass(__CLASS__)
-        ->loadObjects();
+        ->setSortMethod('getApplicationOrder')
+        ->execute();
 
       // Reorder the applications into "application order". Notably, this
       // ensures their event handlers register in application order.
-      $apps = msort($apps, 'getApplicationOrder');
       $apps = mgroup($apps, 'getApplicationGroup');
 
       $group_order = array_keys(self::getApplicationGroups());
@@ -629,6 +604,38 @@ abstract class PhabricatorApplication
 
   public function getApplicationSearchDocumentTypes() {
     return array();
+  }
+
+  protected function getEditRoutePattern($base = null) {
+    return $base.'(?:'.
+      '(?P<id>[0-9]\d*)/)?'.
+      '(?:'.
+        '(?:'.
+          '(?P<editAction>parameters|nodefault|nocreate|nomanage|comment)/'.
+          '|'.
+          '(?:form/(?P<formKey>[^/]+)/)?(?:page/(?P<pageKey>[^/]+)/)?'.
+        ')'.
+      ')?';
+  }
+
+  protected function getQueryRoutePattern($base = null) {
+    return $base.'(?:query/(?P<queryKey>[^/]+)/)?';
+  }
+
+  protected function getPanelRouting($controller) {
+    $edit_route = $this->getEditRoutePattern();
+
+    return array(
+      '(?P<panelAction>view)/(?P<panelID>[^/]+)/' => $controller,
+      '(?P<panelAction>hide)/(?P<panelID>[^/]+)/' => $controller,
+      '(?P<panelAction>default)/(?P<panelID>[^/]+)/' => $controller,
+      '(?P<panelAction>configure)/' => $controller,
+      '(?P<panelAction>reorder)/' => $controller,
+      '(?P<panelAction>edit)/'.$edit_route => $controller,
+      '(?P<panelAction>new)/(?<panelKey>[^/]+)/'.$edit_route => $controller,
+      '(?P<panelAction>builtin)/(?<panelID>[^/]+)/'.$edit_route
+        => $controller,
+    );
   }
 
 }

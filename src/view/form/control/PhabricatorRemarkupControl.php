@@ -31,14 +31,25 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
     // currently ship JS or CSS.
     require_celerity_resource('lightbox-attachment-css');
 
-    Javelin::initBehavior(
-      'aphront-drag-and-drop-textarea',
-      array(
-        'target' => $id,
-        'activatedClass' => 'aphront-textarea-drag-and-drop',
-        'uri' => '/file/dropupload/',
-        'chunkThreshold' => PhabricatorFileStorageEngine::getChunkThreshold(),
-      ));
+    if (!$this->getDisabled()) {
+      Javelin::initBehavior(
+        'aphront-drag-and-drop-textarea',
+        array(
+          'target' => $id,
+          'activatedClass' => 'aphront-textarea-drag-and-drop',
+          'uri' => '/file/dropupload/',
+          'chunkThreshold' => PhabricatorFileStorageEngine::getChunkThreshold(),
+        ));
+    }
+
+    $root_id = celerity_generate_unique_node_id();
+
+    $user_datasource = new PhabricatorPeopleDatasource();
+    $proj_datasource = id(new PhabricatorProjectDatasource())
+      ->setParameters(
+        array(
+          'autocomplete' => 1,
+        ));
 
     Javelin::initBehavior(
       'phabricator-remarkup-assist',
@@ -53,39 +64,65 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           'name' => pht('name'),
           'URL' => pht('URL'),
         ),
+        'disabled' => $this->getDisabled(),
+        'rootID' => $root_id,
+        'autocompleteMap' => (object)array(
+          64 => array( // "@"
+            'datasourceURI' => $user_datasource->getDatasourceURI(),
+            'headerIcon' => 'fa-user',
+            'headerText' => pht('Find User:'),
+            'hintText' => $user_datasource->getPlaceholderText(),
+          ),
+          35 => array( // "#"
+            'datasourceURI' => $proj_datasource->getDatasourceURI(),
+            'headerIcon' => 'fa-briefcase',
+            'headerText' => pht('Find Project:'),
+            'hintText' => $proj_datasource->getPlaceholderText(),
+          ),
+        ),
       ));
     Javelin::initBehavior('phabricator-tooltips', array());
 
     $actions = array(
       'fa-bold' => array(
         'tip' => pht('Bold'),
+        'nodevice' => true,
       ),
       'fa-italic' => array(
         'tip' => pht('Italics'),
+        'nodevice' => true,
       ),
       'fa-text-width' => array(
         'tip' => pht('Monospaced'),
+        'nodevice' => true,
       ),
       'fa-link' => array(
         'tip' => pht('Link'),
+        'nodevice' => true,
       ),
       array(
         'spacer' => true,
+        'nodevice' => true,
       ),
       'fa-list-ul' => array(
         'tip' => pht('Bulleted List'),
+        'nodevice' => true,
       ),
       'fa-list-ol' => array(
         'tip' => pht('Numbered List'),
+        'nodevice' => true,
       ),
       'fa-code' => array(
         'tip' => pht('Code Block'),
+        'nodevice' => true,
       ),
       'fa-quote-right' => array(
         'tip' => pht('Quote'),
+        'nodevice' => true,
       ),
       'fa-table' => array(
         'tip' => pht('Table'),
+        'nodevice' => true,
       ),
       'fa-cloud-upload' => array(
         'tip' => pht('Upload File'),
@@ -111,11 +148,22 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       );
     }
 
+    $actions['fa-eye'] = array(
+      'tip' => pht('Preview'),
+      'align' => 'right',
+    );
+
+    $actions[] = array(
+      'spacer' => true,
+      'align' => 'right',
+    );
+
     $actions['fa-life-bouy'] = array(
-        'tip' => pht('Help'),
-        'align' => 'right',
-        'href'  => PhabricatorEnv::getDoclink('Remarkup Reference'),
-      );
+      'tip' => pht('Help'),
+      'align' => 'right',
+      'href'  => PhabricatorEnv::getDoclink('Remarkup Reference'),
+    );
+
 
     if (!$this->disableFullScreen) {
       $actions[] = array(
@@ -136,6 +184,10 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
 
       if (idx($spec, 'align') == 'right') {
         $classes[] = 'remarkup-assist-right';
+      }
+
+      if (idx($spec, 'nodevice')) {
+        $classes[] = 'remarkup-assist-nodevice';
       }
 
       if (idx($spec, 'spacer')) {
@@ -175,12 +227,18 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
           $tip);
       }
 
+      $sigils = array();
+      $sigils[] = 'remarkup-assist';
+      if (!$this->getDisabled()) {
+        $sigils[] = 'has-tooltip';
+      }
+
       $buttons[] = javelin_tag(
         'a',
         array(
           'class'       => implode(' ', $classes),
           'href'        => $href,
-          'sigil'       => 'remarkup-assist has-tooltip',
+          'sigil'       => implode(' ', $sigils),
           'meta'        => $meta,
           'mustcapture' => $mustcapture,
           'target'      => $target,
@@ -202,15 +260,14 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       ),
       $buttons);
 
-    $monospaced_textareas = null;
-    $monospaced_textareas_class = null;
+    $use_monospaced = $viewer->compareUserSetting(
+      PhabricatorMonospacedTextareasSetting::SETTINGKEY,
+      PhabricatorMonospacedTextareasSetting::VALUE_TEXT_MONOSPACED);
 
-    $monospaced_textareas = $viewer
-      ->loadPreferences()
-      ->getPreference(
-        PhabricatorUserPreferences::PREFERENCE_MONOSPACED_TEXTAREAS);
-    if ($monospaced_textareas == 'enabled') {
+    if ($use_monospaced) {
       $monospaced_textareas_class = 'PhabricatorMonospaced';
+    } else {
+      $monospaced_textareas_class = null;
     }
 
     $this->setCustomClass(
@@ -220,6 +277,8 @@ final class PhabricatorRemarkupControl extends AphrontFormTextAreaControl {
       'div',
       array(
         'sigil' => 'remarkup-assist-control',
+        'class' => $this->getDisabled() ? 'disabled-control' : null,
+        'id' => $root_id,
       ),
       array(
         $buttons,

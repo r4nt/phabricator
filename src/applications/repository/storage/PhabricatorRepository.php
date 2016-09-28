@@ -3,6 +3,7 @@
 /**
  * @task uri        Repository URI Management
  * @task autoclose  Autoclose
+ * @task sync       Cluster Synchronization
  */
 final class PhabricatorRepository extends PhabricatorRepositoryDAO
   implements
@@ -12,7 +13,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     PhabricatorMarkupInterface,
     PhabricatorDestructibleInterface,
     PhabricatorProjectInterface,
-    PhabricatorSpacesInterface {
+    PhabricatorSpacesInterface,
+    PhabricatorConduitResultInterface {
 
   /**
    * Shortest hash we'll recognize in raw "a829f32" form.
@@ -24,18 +26,18 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
    */
   const MINIMUM_QUALIFIED_HASH = 5;
 
+  /**
+   * Minimum number of commits to an empty repository to trigger "import" mode.
+   */
+  const IMPORT_THRESHOLD = 7;
+
   const TABLE_PATH = 'repository_path';
   const TABLE_PATHCHANGE = 'repository_pathchange';
   const TABLE_FILESYSTEM = 'repository_filesystem';
   const TABLE_SUMMARY = 'repository_summary';
-  const TABLE_BADCOMMIT = 'repository_badcommit';
   const TABLE_LINTMESSAGE = 'repository_lintmessage';
   const TABLE_PARENTS = 'repository_parents';
   const TABLE_COVERAGE = 'repository_coverage';
-
-  const SERVE_OFF = 'off';
-  const SERVE_READONLY = 'readonly';
-  const SERVE_READWRITE = 'readwrite';
 
   const BECAUSE_REPOSITORY_IMPORTING = 'auto/importing';
   const BECAUSE_AUTOCLOSE_DISABLED = 'auto/disabled';
@@ -44,8 +46,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   const BECAUSE_BRANCH_NOT_AUTOCLOSE = 'auto/noclose';
   const BECAUSE_AUTOCLOSE_FORCED = 'auto/forced';
 
+  const STATUS_ACTIVE = 'active';
+  const STATUS_INACTIVE = 'inactive';
+
   protected $name;
   protected $callsign;
+  protected $repositorySlug;
   protected $uuid;
   protected $viewPolicy;
   protected $editPolicy;
@@ -56,10 +62,13 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   protected $credentialPHID;
   protected $almanacServicePHID;
   protected $spacePHID;
+  protected $localPath;
 
   private $commitCount = self::ATTACHABLE;
   private $mostRecentCommit = self::ATTACHABLE;
   private $projectPHIDs = self::ATTACHABLE;
+  private $uris = self::ATTACHABLE;
+
 
   public static function initializeNewRepository(PhabricatorUser $actor) {
     $app = id(new PhabricatorApplicationQuery())
@@ -92,19 +101,16 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       ),
       self::CONFIG_COLUMN_SCHEMA => array(
         'name' => 'sort255',
-        'callsign' => 'sort32',
+        'callsign' => 'sort32?',
+        'repositorySlug' => 'sort64?',
         'versionControlSystem' => 'text32',
         'uuid' => 'text64?',
         'pushPolicy' => 'policy',
         'credentialPHID' => 'phid?',
         'almanacServicePHID' => 'phid?',
+        'localPath' => 'text128?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
-        'key_phid' => null,
-        'phid' => array(
-          'columns' => array('phid'),
-          'unique' => true,
-        ),
         'callsign' => array(
           'columns' => array('callsign'),
           'unique' => true,
@@ -115,6 +121,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         'key_vcs' => array(
           'columns' => array('versionControlSystem'),
         ),
+        'key_slug' => array(
+          'columns' => array('repositorySlug'),
+          'unique' => true,
+        ),
+        'key_local' => array(
+          'columns' => array('localPath'),
+          'unique' => true,
+        ),
       ),
     ) + parent::getConfiguration();
   }
@@ -122,6 +136,31 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
       PhabricatorRepositoryRepositoryPHIDType::TYPECONST);
+  }
+
+  public static function getStatusMap() {
+    return array(
+      self::STATUS_ACTIVE => array(
+        'name' => pht('Active'),
+        'isTracked' => 1,
+      ),
+      self::STATUS_INACTIVE => array(
+        'name' => pht('Inactive'),
+        'isTracked' => 0,
+      ),
+    );
+  }
+
+  public static function getStatusNameMap() {
+    return ipull(self::getStatusMap(), 'name');
+  }
+
+  public function getStatus() {
+    if ($this->isTracked()) {
+      return self::STATUS_ACTIVE;
+    } else {
+      return self::STATUS_INACTIVE;
+    }
   }
 
   public function toDictionary() {
@@ -138,7 +177,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       'isActive'    => $this->isTracked(),
       'isHosted'    => $this->isHosted(),
       'isImporting' => $this->isImporting(),
-      'encoding'    => $this->getDetail('encoding'),
+      'encoding'    => $this->getDefaultTextEncoding(),
       'staging' => array(
         'supported' => $this->supportsStaging(),
         'prefix' => 'phabricator',
@@ -147,8 +186,47 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     );
   }
 
+  public function getDefaultTextEncoding() {
+    return $this->getDetail('encoding', 'UTF-8');
+  }
+
   public function getMonogram() {
-    return 'r'.$this->getCallsign();
+    $callsign = $this->getCallsign();
+    if (strlen($callsign)) {
+      return "r{$callsign}";
+    }
+
+    $id = $this->getID();
+    return "R{$id}";
+  }
+
+  public function getDisplayName() {
+    $slug = $this->getRepositorySlug();
+    if (strlen($slug)) {
+      return $slug;
+    }
+
+    return $this->getMonogram();
+  }
+
+  public function getAllMonograms() {
+    $monograms = array();
+
+    $monograms[] = 'R'.$this->getID();
+
+    $callsign = $this->getCallsign();
+    if (strlen($callsign)) {
+      $monograms[] = 'r'.$callsign;
+    }
+
+    return $monograms;
+  }
+
+  public function setLocalPath($path) {
+    // Convert any extra slashes ("//") in the path to a single slash ("/").
+    $path = preg_replace('(//+)', '/', $path);
+
+    return parent::setLocalPath($path);
   }
 
   public function getDetail($key, $default = null) {
@@ -214,10 +292,6 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       ));
   }
 
-  public function getLocalPath() {
-    return $this->getDetail('local-path');
-  }
-
   public function getSubversionBaseURI($commit = null) {
     $subpath = $this->getDetail('svn-subpath');
     if (!strlen($subpath)) {
@@ -277,14 +351,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
    * @return string
    */
   public function getCloneName() {
-    $name = $this->getDetail('clone-name');
+    $name = $this->getRepositorySlug();
 
     // Make some reasonable effort to produce reasonable default directory
     // names from repository names.
     if (!strlen($name)) {
       $name = $this->getName();
       $name = phutil_utf8_strtolower($name);
-      $name = preg_replace('@[/ -:]+@', '-', $name);
+      $name = preg_replace('@[/ -:<>]+@', '-', $name);
       $name = trim($name, '-');
       if (!strlen($name)) {
         $name = $this->getCallsign();
@@ -292,6 +366,106 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     }
 
     return $name;
+  }
+
+  public static function isValidRepositorySlug($slug) {
+    try {
+      self::assertValidRepositorySlug($slug);
+      return true;
+    } catch (Exception $ex) {
+      return false;
+    }
+  }
+
+  public static function assertValidRepositorySlug($slug) {
+    if (!strlen($slug)) {
+      throw new Exception(
+        pht(
+          'The empty string is not a valid repository short name. '.
+          'Repository short names must be at least one character long.'));
+    }
+
+    if (strlen($slug) > 64) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names must not be longer than 64 characters.',
+          $slug));
+    }
+
+    if (preg_match('/[^a-zA-Z0-9._-]/', $slug)) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names may only contain letters, numbers, periods, hyphens '.
+          'and underscores.',
+          $slug));
+    }
+
+    if (!preg_match('/^[a-zA-Z0-9]/', $slug)) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names must begin with a letter or number.',
+          $slug));
+    }
+
+    if (!preg_match('/[a-zA-Z0-9]\z/', $slug)) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names must end with a letter or number.',
+          $slug));
+    }
+
+    if (preg_match('/__|--|\\.\\./', $slug)) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names must not contain multiple consecutive underscores, '.
+          'hyphens, or periods.',
+          $slug));
+    }
+
+    if (preg_match('/^[A-Z]+\z/', $slug)) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names may not contain only uppercase letters.',
+          $slug));
+    }
+
+    if (preg_match('/^\d+\z/', $slug)) {
+      throw new Exception(
+        pht(
+          'The name "%s" is not a valid repository short name. Repository '.
+          'short names may not contain only numbers.',
+          $slug));
+    }
+  }
+
+  public static function assertValidCallsign($callsign) {
+    if (!strlen($callsign)) {
+      throw new Exception(
+        pht(
+          'A repository callsign must be at least one character long.'));
+    }
+
+    if (strlen($callsign) > 32) {
+      throw new Exception(
+        pht(
+          'The callsign "%s" is not a valid repository callsign. Callsigns '.
+          'must be no more than 32 bytes long.',
+          $callsign));
+    }
+
+    if (!preg_match('/^[A-Z]+\z/', $callsign)) {
+      throw new Exception(
+        pht(
+          'The callsign "%s" is not a valid repository callsign. Callsigns '.
+          'may only contain UPPERCASE letters.',
+          $callsign));
+    }
   }
 
 
@@ -319,19 +493,22 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   }
 
   private function newRemoteCommandFuture(array $argv) {
-    $argv = $this->formatRemoteCommand($argv);
-    $future = newv('ExecFuture', $argv);
-    $future->setEnv($this->getRemoteCommandEnvironment());
-    return $future;
+    return $this->newRemoteCommandEngine($argv)
+      ->newFuture();
   }
 
   private function newRemoteCommandPassthru(array $argv) {
-    $argv = $this->formatRemoteCommand($argv);
-    $passthru = newv('PhutilExecPassthru', $argv);
-    $passthru->setEnv($this->getRemoteCommandEnvironment());
-    return $passthru;
+    return $this->newRemoteCommandEngine($argv)
+      ->setPassthru(true)
+      ->newFuture();
   }
 
+  private function newRemoteCommandEngine(array $argv) {
+    return DiffusionCommandEngine::newCommandEngine($this)
+      ->setArgv($argv)
+      ->setCredentialPHID($this->getCredentialPHID())
+      ->setURI($this->getRemoteURIObject());
+  }
 
 /* -(  Local Command Execution  )-------------------------------------------- */
 
@@ -359,9 +536,9 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   private function newLocalCommandFuture(array $argv) {
     $this->assertLocalExists();
 
-    $argv = $this->formatLocalCommand($argv);
-    $future = newv('ExecFuture', $argv);
-    $future->setEnv($this->getLocalCommandEnvironment());
+    $future = DiffusionCommandEngine::newCommandEngine($this)
+      ->setArgv($argv)
+      ->newFuture();
 
     if ($this->usesLocalWorkingCopy()) {
       $future->setCWD($this->getLocalPath());
@@ -373,9 +550,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   private function newLocalCommandPassthru(array $argv) {
     $this->assertLocalExists();
 
-    $argv = $this->formatLocalCommand($argv);
-    $future = newv('PhutilExecPassthru', $argv);
-    $future->setEnv($this->getLocalCommandEnvironment());
+    $future = DiffusionCommandEngine::newCommandEngine($this)
+      ->setArgv($argv)
+      ->setPassthru(true)
+      ->newFuture();
 
     if ($this->usesLocalWorkingCopy()) {
       $future->setCWD($this->getLocalPath());
@@ -384,231 +562,284 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return $future;
   }
 
-
-/* -(  Command Infrastructure  )--------------------------------------------- */
-
-
-  private function getSSHWrapper() {
-    $root = dirname(phutil_get_library_root('phabricator'));
-    return $root.'/bin/ssh-connect';
-  }
-
-  private function getCommonCommandEnvironment() {
-    $env = array(
-      // NOTE: Force the language to "en_US.UTF-8", which overrides locale
-      // settings. This makes stuff print in English instead of, e.g., French,
-      // so we can parse the output of some commands, error messages, etc.
-      'LANG' => 'en_US.UTF-8',
-
-      // Propagate PHABRICATOR_ENV explicitly. For discussion, see T4155.
-      'PHABRICATOR_ENV' => PhabricatorEnv::getSelectedEnvironmentName(),
-    );
-
-    switch ($this->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-        // NOTE: See T2965. Some time after Git 1.7.5.4, Git started fataling if
-        // it can not read $HOME. For many users, $HOME points at /root (this
-        // seems to be a default result of Apache setup). Instead, explicitly
-        // point $HOME at a readable, empty directory so that Git looks for the
-        // config file it's after, fails to locate it, and moves on. This is
-        // really silly, but seems like the least damaging approach to
-        // mitigating the issue.
-
-        $root = dirname(phutil_get_library_root('phabricator'));
-        $env['HOME'] = $root.'/support/empty/';
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        // NOTE: This overrides certain configuration, extensions, and settings
-        // which make Mercurial commands do random unusual things.
-        $env['HGPLAIN'] = 1;
-        break;
-      default:
-        throw new Exception(pht('Unrecognized version control system.'));
-    }
-
-    return $env;
-  }
-
-  private function getLocalCommandEnvironment() {
-    return $this->getCommonCommandEnvironment();
-  }
-
-  private function getRemoteCommandEnvironment() {
-    $env = $this->getCommonCommandEnvironment();
-
-    if ($this->shouldUseSSH()) {
-      // NOTE: This is read by `bin/ssh-connect`, and tells it which credentials
-      // to use.
-      $env['PHABRICATOR_CREDENTIAL'] = $this->getCredentialPHID();
-      switch ($this->getVersionControlSystem()) {
-        case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-          // Force SVN to use `bin/ssh-connect`.
-          $env['SVN_SSH'] = $this->getSSHWrapper();
-          break;
-        case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-          // Force Git to use `bin/ssh-connect`.
-          $env['GIT_SSH'] = $this->getSSHWrapper();
-          break;
-        case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-          // We force Mercurial through `bin/ssh-connect` too, but it uses a
-          // command-line flag instead of an environmental variable.
-          break;
-        default:
-          throw new Exception(pht('Unrecognized version control system.'));
-      }
-    }
-
-    return $env;
-  }
-
-  private function formatRemoteCommand(array $args) {
-    $pattern = $args[0];
-    $args = array_slice($args, 1);
-
-    switch ($this->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-        if ($this->shouldUseHTTP() || $this->shouldUseSVNProtocol()) {
-          $flags = array();
-          $flag_args = array();
-          $flags[] = '--non-interactive';
-          $flags[] = '--no-auth-cache';
-          if ($this->shouldUseHTTP()) {
-            $flags[] = '--trust-server-cert';
-          }
-
-          $credential_phid = $this->getCredentialPHID();
-          if ($credential_phid) {
-            $key = PassphrasePasswordKey::loadFromPHID(
-              $credential_phid,
-              PhabricatorUser::getOmnipotentUser());
-            $flags[] = '--username %P';
-            $flags[] = '--password %P';
-            $flag_args[] = $key->getUsernameEnvelope();
-            $flag_args[] = $key->getPasswordEnvelope();
-          }
-
-          $flags = implode(' ', $flags);
-          $pattern = "svn {$flags} {$pattern}";
-          $args = array_mergev(array($flag_args, $args));
-        } else {
-          $pattern = "svn --non-interactive {$pattern}";
-        }
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-        $pattern = "git {$pattern}";
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        if ($this->shouldUseSSH()) {
-          $pattern = "hg --config ui.ssh=%s {$pattern}";
-          array_unshift(
-            $args,
-            $this->getSSHWrapper());
-        } else {
-          $pattern = "hg {$pattern}";
-        }
-        break;
-      default:
-        throw new Exception(pht('Unrecognized version control system.'));
-    }
-
-    array_unshift($args, $pattern);
-
-    return $args;
-  }
-
-  private function formatLocalCommand(array $args) {
-    $pattern = $args[0];
-    $args = array_slice($args, 1);
-
-    switch ($this->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-        $pattern = "svn --non-interactive {$pattern}";
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-        $pattern = "git {$pattern}";
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        $pattern = "hg {$pattern}";
-        break;
-      default:
-        throw new Exception(pht('Unrecognized version control system.'));
-    }
-
-    array_unshift($args, $pattern);
-
-    return $args;
-  }
-
-  /**
-   * Sanitize output of an `hg` command invoked with the `--debug` flag to make
-   * it usable.
-   *
-   * @param string Output from `hg --debug ...`
-   * @return string Usable output.
-   */
-  public static function filterMercurialDebugOutput($stdout) {
-    // When hg commands are run with `--debug` and some config file isn't
-    // trusted, Mercurial prints out a warning to stdout, twice, after Feb 2011.
-    //
-    // http://selenic.com/pipermail/mercurial-devel/2011-February/028541.html
-    //
-    // After Jan 2015, it may also fail to write to a revision branch cache.
-
-    $ignore = array(
-      'ignoring untrusted configuration option',
-      "couldn't write revision branch cache:",
-    );
-
-    foreach ($ignore as $key => $pattern) {
-      $ignore[$key] = preg_quote($pattern, '/');
-    }
-
-    $ignore = '('.implode('|', $ignore).')';
-
-    $lines = preg_split('/(?<=\n)/', $stdout);
-    $regex = '/'.$ignore.'.*\n$/';
-
-    foreach ($lines as $key => $line) {
-      $lines[$key] = preg_replace($regex, '', $line);
-    }
-
-    return implode('', $lines);
-  }
-
   public function getURI() {
-    return '/diffusion/'.$this->getCallsign().'/';
-  }
-
-  public function getNormalizedPath() {
-    $uri = (string)$this->getCloneURIObject();
-
-    switch ($this->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-        $normalized_uri = new PhabricatorRepositoryURINormalizer(
-          PhabricatorRepositoryURINormalizer::TYPE_GIT,
-          $uri);
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-        $normalized_uri = new PhabricatorRepositoryURINormalizer(
-          PhabricatorRepositoryURINormalizer::TYPE_SVN,
-          $uri);
-        break;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        $normalized_uri = new PhabricatorRepositoryURINormalizer(
-          PhabricatorRepositoryURINormalizer::TYPE_MERCURIAL,
-          $uri);
-        break;
-      default:
-        throw new Exception(pht('Unrecognized version control system.'));
+    $callsign = $this->getCallsign();
+    if (strlen($callsign)) {
+      return "/diffusion/{$callsign}/";
     }
 
-    return $normalized_uri->getNormalizedPath();
+    $id = $this->getID();
+    return "/diffusion/{$id}/";
+  }
+
+  public function getPathURI($path) {
+    return $this->getURI().$path;
+  }
+
+  public function getCommitURI($identifier) {
+    $callsign = $this->getCallsign();
+    if (strlen($callsign)) {
+      return "/r{$callsign}{$identifier}";
+    }
+
+    $id = $this->getID();
+    return "/R{$id}:{$identifier}";
+  }
+
+  public static function parseRepositoryServicePath($request_path) {
+    // NOTE: In Mercurial over SSH, the path will begin without a leading "/",
+    // so we're matching it optionally.
+
+    $patterns = array(
+      '(^'.
+        '(?P<base>/?diffusion/(?P<identifier>[A-Z]+|[0-9]\d*))'.
+        '(?P<path>(?:/.*)?)'.
+      '\z)',
+    );
+
+    $identifier = null;
+    foreach ($patterns as $pattern) {
+      $matches = null;
+      if (!preg_match($pattern, $request_path, $matches)) {
+        continue;
+      }
+
+      $identifier = $matches['identifier'];
+      $base = $matches['base'];
+      $path = $matches['path'];
+      break;
+    }
+
+    if ($identifier === null) {
+      return null;
+    }
+
+    return array(
+      'identifier' => $identifier,
+      'base' => $base,
+      'path' => $path,
+    );
+  }
+
+  public function getCanonicalPath($request_path) {
+    $standard_pattern =
+      '(^'.
+        '(?P<prefix>/diffusion/)'.
+        '(?P<identifier>[^/]+)'.
+        '(?P<suffix>(?:/.*)?)'.
+      '\z)';
+
+    $matches = null;
+    if (preg_match($standard_pattern, $request_path, $matches)) {
+      $prefix = $matches['prefix'];
+
+      $callsign = $this->getCallsign();
+      if ($callsign) {
+        $identifier = $callsign;
+      } else {
+        $identifier = $this->getID();
+      }
+
+      $suffix = $matches['suffix'];
+      if (!strlen($suffix)) {
+        $suffix = '/';
+      }
+
+      return $prefix.$identifier.$suffix;
+    }
+
+    $commit_pattern =
+      '(^'.
+        '(?P<prefix>/)'.
+        '(?P<monogram>'.
+          '(?:'.
+            'r(?P<repositoryCallsign>[A-Z]+)'.
+            '|'.
+            'R(?P<repositoryID>[1-9]\d*):'.
+          ')'.
+          '(?P<commit>[a-f0-9]+)'.
+        ')'.
+      '\z)';
+
+    $matches = null;
+    if (preg_match($commit_pattern, $request_path, $matches)) {
+      $commit = $matches['commit'];
+      return $this->getCommitURI($commit);
+    }
+
+    return null;
+  }
+
+  public function generateURI(array $params) {
+    $req_branch = false;
+    $req_commit = false;
+
+    $action = idx($params, 'action');
+    switch ($action) {
+      case 'history':
+      case 'browse':
+      case 'change':
+      case 'lastmodified':
+      case 'tags':
+      case 'branches':
+      case 'lint':
+      case 'pathtree':
+      case 'refs':
+        break;
+      case 'branch':
+        // NOTE: This does not actually require a branch, and won't have one
+        // in Subversion. Possibly this should be more clear.
+        break;
+      case 'commit':
+      case 'rendering-ref':
+        $req_commit = true;
+        break;
+      default:
+        throw new Exception(
+          pht(
+            'Action "%s" is not a valid repository URI action.',
+            $action));
+    }
+
+    $path     = idx($params, 'path');
+    $branch   = idx($params, 'branch');
+    $commit   = idx($params, 'commit');
+    $line     = idx($params, 'line');
+
+    if ($req_commit && !strlen($commit)) {
+      throw new Exception(
+        pht(
+          'Diffusion URI action "%s" requires commit!',
+          $action));
+    }
+
+    if ($req_branch && !strlen($branch)) {
+      throw new Exception(
+        pht(
+          'Diffusion URI action "%s" requires branch!',
+          $action));
+    }
+
+    if ($action === 'commit') {
+      return $this->getCommitURI($commit);
+    }
+
+
+    $identifier = $this->getID();
+
+    $callsign = $this->getCallsign();
+    if ($callsign !== null) {
+      $identifier = $callsign;
+    }
+
+    if (strlen($identifier)) {
+      $identifier = phutil_escape_uri_path_component($identifier);
+    }
+
+    if (strlen($path)) {
+      $path = ltrim($path, '/');
+      $path = str_replace(array(';', '$'), array(';;', '$$'), $path);
+      $path = phutil_escape_uri($path);
+    }
+
+    if (strlen($branch)) {
+      $branch = phutil_escape_uri_path_component($branch);
+      $path = "{$branch}/{$path}";
+    }
+
+    if (strlen($commit)) {
+      $commit = str_replace('$', '$$', $commit);
+      $commit = ';'.phutil_escape_uri($commit);
+    }
+
+    if (strlen($line)) {
+      $line = '$'.phutil_escape_uri($line);
+    }
+
+    switch ($action) {
+      case 'change':
+      case 'history':
+      case 'browse':
+      case 'lastmodified':
+      case 'tags':
+      case 'branches':
+      case 'lint':
+      case 'pathtree':
+      case 'refs':
+        $uri = "/diffusion/{$identifier}/{$action}/{$path}{$commit}{$line}";
+        break;
+      case 'branch':
+        if (strlen($path)) {
+          $uri = "/diffusion/{$identifier}/repository/{$path}";
+        } else {
+          $uri = "/diffusion/{$identifier}/";
+        }
+        break;
+      case 'external':
+        $commit = ltrim($commit, ';');
+        $uri = "/diffusion/external/{$commit}/";
+        break;
+      case 'rendering-ref':
+        // This isn't a real URI per se, it's passed as a query parameter to
+        // the ajax changeset stuff but then we parse it back out as though
+        // it came from a URI.
+        $uri = rawurldecode("{$path}{$commit}");
+        break;
+    }
+
+    if ($action == 'rendering-ref') {
+      return $uri;
+    }
+
+    $uri = new PhutilURI($uri);
+
+    if (isset($params['lint'])) {
+      $params['params'] = idx($params, 'params', array()) + array(
+        'lint' => $params['lint'],
+      );
+    }
+
+    if (idx($params, 'params')) {
+      $uri->setQueryParams($params['params']);
+    }
+
+    return $uri;
+  }
+
+  public function updateURIIndex() {
+    $indexes = array();
+
+    $uris = $this->getURIs();
+    foreach ($uris as $uri) {
+      if ($uri->getIsDisabled()) {
+        continue;
+      }
+
+      $indexes[] = $uri->getNormalizedURI();
+    }
+
+    PhabricatorRepositoryURIIndex::updateRepositoryURIs(
+      $this->getPHID(),
+      $indexes);
+
+    return $this;
   }
 
   public function isTracked() {
-    return $this->getDetail('tracking-enabled', false);
+    $status = $this->getDetail('tracking-enabled');
+    $map = self::getStatusMap();
+    $spec = idx($map, $status);
+
+    if (!$spec) {
+      if ($status) {
+        $status = self::STATUS_ACTIVE;
+      } else {
+        $status = self::STATUS_INACTIVE;
+      }
+      $spec = idx($map, $status);
+    }
+
+    return (bool)idx($spec, 'isTracked', false);
   }
 
   public function getDefaultBranch() {
@@ -678,11 +909,26 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return null;
   }
 
+  public function shouldTrackRef(DiffusionRepositoryRef $ref) {
+    // At least for now, don't track the staging area tags.
+    if ($ref->isTag()) {
+      if (preg_match('(^phabricator/)', $ref->getShortName())) {
+        return false;
+      }
+    }
+
+    if (!$ref->isBranch()) {
+      return true;
+    }
+
+    return $this->shouldTrackBranch($ref->getShortName());
+  }
+
   public function shouldTrackBranch($branch) {
     return $this->isBranchInFilter($branch, 'branch-filter');
   }
 
-  public function formatCommitName($commit_identifier) {
+  public function formatCommitName($commit_identifier, $local = false) {
     $vcs = $this->getVersionControlSystem();
 
     $type_git = PhabricatorRepositoryType::REPOSITORY_TYPE_GIT;
@@ -691,18 +937,80 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $is_git = ($vcs == $type_git);
     $is_hg = ($vcs == $type_hg);
     if ($is_git || $is_hg) {
-      $short_identifier = substr($commit_identifier, 0, 12);
+      $name = substr($commit_identifier, 0, 12);
+      $need_scope = false;
     } else {
-      $short_identifier = $commit_identifier;
+      $name = $commit_identifier;
+      $need_scope = true;
     }
 
-    return 'r'.$this->getCallsign().$short_identifier;
+    if (!$local) {
+      $need_scope = true;
+    }
+
+    if ($need_scope) {
+      $callsign = $this->getCallsign();
+      if ($callsign) {
+        $scope = "r{$callsign}";
+      } else {
+        $id = $this->getID();
+        $scope = "R{$id}:";
+      }
+      $name = $scope.$name;
+    }
+
+    return $name;
   }
 
   public function isImporting() {
     return (bool)$this->getDetail('importing', false);
   }
 
+  public function isNewlyInitialized() {
+    return (bool)$this->getDetail('newly-initialized', false);
+  }
+
+  public function loadImportProgress() {
+    $progress = queryfx_all(
+      $this->establishConnection('r'),
+      'SELECT importStatus, count(*) N FROM %T WHERE repositoryID = %d
+        GROUP BY importStatus',
+      id(new PhabricatorRepositoryCommit())->getTableName(),
+      $this->getID());
+
+    $done = 0;
+    $total = 0;
+    foreach ($progress as $row) {
+      $total += $row['N'] * 4;
+      $status = $row['importStatus'];
+      if ($status & PhabricatorRepositoryCommit::IMPORTED_MESSAGE) {
+        $done += $row['N'];
+      }
+      if ($status & PhabricatorRepositoryCommit::IMPORTED_CHANGE) {
+        $done += $row['N'];
+      }
+      if ($status & PhabricatorRepositoryCommit::IMPORTED_OWNERS) {
+        $done += $row['N'];
+      }
+      if ($status & PhabricatorRepositoryCommit::IMPORTED_HERALD) {
+        $done += $row['N'];
+      }
+    }
+
+    if ($total) {
+      $ratio = ($done / $total);
+    } else {
+      $ratio = 0;
+    }
+
+    // Cap this at "99.99%", because it's confusing to users when the actual
+    // fraction is "99.996%" and it rounds up to "100.00%".
+    if ($ratio > 0.9999) {
+      $ratio = 0.9999;
+    }
+
+    return $ratio;
+  }
 
   /**
    * Should this repository publish feed, notifications, audits, and email?
@@ -715,7 +1023,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return false;
     }
 
-    if ($this->getDetail('disable-herald')) {
+    if ($this->getDetail('herald-disabled')) {
       return false;
     }
 
@@ -725,6 +1033,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
 /* -(  Autoclose  )---------------------------------------------------------- */
 
+
+  public function shouldAutocloseRef(DiffusionRepositoryRef $ref) {
+    if (!$ref->isBranch()) {
+      return false;
+    }
+
+    return $this->shouldAutocloseBranch($ref->getShortName());
+  }
 
   /**
    * Determine if autoclose is active for a branch.
@@ -895,26 +1211,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
    * @task uri
    */
   public function getPublicCloneURI() {
-    $uri = $this->getCloneURIObject();
-
-    // Make sure we don't leak anything if this repo is using HTTP Basic Auth
-    // with the credentials in the URI or something zany like that.
-
-    // If repository is not accessed over SSH we remove both username and
-    // password.
-    if (!$this->isHosted()) {
-      if (!$this->shouldUseSSH()) {
-        $uri->setUser(null);
-
-        // This might be a Git URI or a normal URI. If it's Git, there's no
-        // password support.
-        if ($uri instanceof PhutilURI) {
-          $uri->setPass(null);
-        }
-      }
-    }
-
-    return (string)$uri;
+    return (string)$this->getCloneURIObject();
   }
 
 
@@ -926,27 +1223,19 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
    */
   public function getRemoteProtocol() {
     $uri = $this->getRemoteURIObject();
-
-    if ($uri instanceof PhutilGitURI) {
-      return 'ssh';
-    } else {
-      return $uri->getProtocol();
-    }
+    return $uri->getProtocol();
   }
 
 
   /**
-   * Get a parsed object representation of the repository's remote URI. This
-   * may be a normal URI (returned as a @{class@libphutil:PhutilURI}) or a git
-   * URI (returned as a @{class@libphutil:PhutilGitURI}).
+   * Get a parsed object representation of the repository's remote URI..
    *
-   * @return wild A @{class@libphutil:PhutilURI} or
-   *              @{class@libphutil:PhutilGitURI}.
+   * @return wild A @{class@libphutil:PhutilURI}.
    * @task uri
    */
   public function getRemoteURIObject() {
     $raw_uri = $this->getDetail('remote-uri');
-    if (!$raw_uri) {
+    if (!strlen($raw_uri)) {
       return new PhutilURI('');
     }
 
@@ -954,17 +1243,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return new PhutilURI('file://'.$raw_uri);
     }
 
-    $uri = new PhutilURI($raw_uri);
-    if ($uri->getProtocol()) {
-      return $uri;
-    }
-
-    $uri = new PhutilGitURI($raw_uri);
-    if ($uri->getDomain()) {
-      return $uri;
-    }
-
-    throw new Exception(pht("Remote URI '%s' could not be parsed!", $raw_uri));
+    return new PhutilURI($raw_uri);
   }
 
 
@@ -997,90 +1276,22 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       }
     }
 
-    // Choose the best URI: pick a read/write URI over a URI which is not
-    // read/write, and SSH over HTTP.
+    // TODO: This should be cleaned up to deal with all the new URI handling.
+    $another_copy = id(new PhabricatorRepositoryQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($this->getPHID()))
+      ->needURIs(true)
+      ->executeOne();
 
-    $serve_ssh = $this->getServeOverSSH();
-    $serve_http = $this->getServeOverHTTP();
-
-    if ($serve_ssh === self::SERVE_READWRITE) {
-      return $this->getSSHCloneURIObject();
-    } else if ($serve_http === self::SERVE_READWRITE) {
-      return $this->getHTTPCloneURIObject();
-    } else if ($serve_ssh !== self::SERVE_OFF) {
-      return $this->getSSHCloneURIObject();
-    } else if ($serve_http !== self::SERVE_OFF) {
-      return $this->getHTTPCloneURIObject();
-    } else {
+    $clone_uris = $another_copy->getCloneURIs();
+    if (!$clone_uris) {
       return null;
     }
+
+    return head($clone_uris)->getEffectiveURI();
   }
 
-
-  /**
-   * Get the repository's SSH clone/checkout URI, if one exists.
-   */
-  public function getSSHCloneURIObject() {
-    if (!$this->isHosted()) {
-      if ($this->shouldUseSSH()) {
-        return $this->getRemoteURIObject();
-      } else {
-        return null;
-      }
-    }
-
-    $serve_ssh = $this->getServeOverSSH();
-    if ($serve_ssh === self::SERVE_OFF) {
-      return null;
-    }
-
-    $uri = new PhutilURI(PhabricatorEnv::getProductionURI($this->getURI()));
-
-    if ($this->isSVN()) {
-      $uri->setProtocol('svn+ssh');
-    } else {
-      $uri->setProtocol('ssh');
-    }
-
-    if ($this->isGit()) {
-      $uri->setPath($uri->getPath().$this->getCloneName().'.git');
-    } else if ($this->isHg()) {
-      $uri->setPath($uri->getPath().$this->getCloneName().'/');
-    }
-
-    $ssh_user = PhabricatorEnv::getEnvConfig('diffusion.ssh-user');
-    if ($ssh_user) {
-      $uri->setUser($ssh_user);
-    }
-
-    $ssh_host = PhabricatorEnv::getEnvConfig('diffusion.ssh-host');
-    if (strlen($ssh_host)) {
-      $uri->setDomain($ssh_host);
-    }
-
-    $uri->setPort(PhabricatorEnv::getEnvConfig('diffusion.ssh-port'));
-
-    return $uri;
-  }
-
-
-  /**
-   * Get the repository's HTTP clone/checkout URI, if one exists.
-   */
-  public function getHTTPCloneURIObject() {
-    if (!$this->isHosted()) {
-      if ($this->shouldUseHTTP()) {
-        return $this->getRemoteURIObject();
-      } else {
-        return null;
-      }
-    }
-
-    $serve_http = $this->getServeOverHTTP();
-    if ($serve_http === self::SERVE_OFF) {
-      return null;
-    }
-
+  private function getRawHTTPCloneURIObject() {
     $uri = PhabricatorEnv::getProductionURI($this->getURI());
     $uri = new PhutilURI($uri);
 
@@ -1169,12 +1380,6 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         $path->delete();
       }
 
-      $projects = id(new PhabricatorRepositoryArcanistProject())
-        ->loadAllWhere('repositoryID = %d', $this->getID());
-      foreach ($projects as $project) {
-        $project->delete();
-      }
-
       queryfx(
         $this->establishConnection('w'),
         'DELETE FROM %T WHERE repositoryPHID = %s',
@@ -1189,10 +1394,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         $commit->delete();
       }
 
-      $mirrors = id(new PhabricatorRepositoryMirror())
+      $uris = id(new PhabricatorRepositoryURI())
         ->loadAllWhere('repositoryPHID = %s', $this->getPHID());
-      foreach ($mirrors as $mirror) {
-        $mirror->delete();
+      foreach ($uris as $uri) {
+        $uri->delete();
       }
 
       $ref_cursors = id(new PhabricatorRepositoryRefCursor())
@@ -1250,56 +1455,40 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return $this->setDetail('hosting-enabled', $enabled);
   }
 
-  public function getServeOverHTTP() {
-    if ($this->isSVN()) {
-      return self::SERVE_OFF;
+  public function canServeProtocol($protocol, $write) {
+    if (!$this->isTracked()) {
+      return false;
     }
-    $serve = $this->getDetail('serve-over-http', self::SERVE_OFF);
-    return $this->normalizeServeConfigSetting($serve);
-  }
 
-  public function setServeOverHTTP($mode) {
-    return $this->setDetail('serve-over-http', $mode);
-  }
+    $clone_uris = $this->getCloneURIs();
+    foreach ($clone_uris as $uri) {
+      if ($uri->getBuiltinProtocol() !== $protocol) {
+        continue;
+      }
 
-  public function getServeOverSSH() {
-    $serve = $this->getDetail('serve-over-ssh', self::SERVE_OFF);
-    return $this->normalizeServeConfigSetting($serve);
-  }
+      $io_type = $uri->getEffectiveIoType();
+      if ($io_type == PhabricatorRepositoryURI::IO_READWRITE) {
+        return true;
+      }
 
-  public function setServeOverSSH($mode) {
-    return $this->setDetail('serve-over-ssh', $mode);
-  }
-
-  public static function getProtocolAvailabilityName($constant) {
-    switch ($constant) {
-      case self::SERVE_OFF:
-        return pht('Off');
-      case self::SERVE_READONLY:
-        return pht('Read Only');
-      case self::SERVE_READWRITE:
-        return pht('Read/Write');
-      default:
-        return pht('Unknown');
-    }
-  }
-
-  private function normalizeServeConfigSetting($value) {
-    switch ($value) {
-      case self::SERVE_OFF:
-      case self::SERVE_READONLY:
-        return $value;
-      case self::SERVE_READWRITE:
-        if ($this->isHosted()) {
-          return self::SERVE_READWRITE;
-        } else {
-          return self::SERVE_READONLY;
+      if (!$write) {
+        if ($io_type == PhabricatorRepositoryURI::IO_READ) {
+          return true;
         }
-      default:
-        return self::SERVE_OFF;
+      }
     }
+
+    return false;
   }
 
+  public function hasLocalWorkingCopy() {
+    try {
+      self::assertLocalExists();
+      return true;
+    } catch (Exception $ex) {
+      return false;
+    }
+  }
 
   /**
    * Raise more useful errors when there are basic filesystem problems.
@@ -1388,6 +1577,38 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return !$this->isSVN();
   }
 
+  public function canUseGitLFS() {
+    if (!$this->isGit()) {
+      return false;
+    }
+
+    if (!$this->isHosted()) {
+      return false;
+    }
+
+    // TODO: Unprototype this feature.
+    if (!PhabricatorEnv::getEnvConfig('phabricator.show-prototypes')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  public function getGitLFSURI($path = null) {
+    if (!$this->canUseGitLFS()) {
+      throw new Exception(
+        pht(
+          'This repository does not support Git LFS, so Git LFS URIs can '.
+          'not be generated for it.'));
+    }
+
+    $uri = $this->getRawHTTPCloneURIObject();
+    $uri = (string)$uri;
+    $uri = $uri.'/'.$path;
+
+    return $uri;
+  }
+
   public function canMirror() {
     if ($this->isGit() || $this->isHg()) {
       return true;
@@ -1401,11 +1622,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return false;
     }
 
-    if ($this->isGit() || $this->isHg()) {
-      return true;
-    }
+    // In Git and Mercurial, ref deletions and rewrites are dangerous.
+    // In Subversion, editing revprops is dangerous.
 
-    return false;
+    return true;
   }
 
   public function shouldAllowDangerousChanges() {
@@ -1429,38 +1649,36 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         $this->getID(),
         $status_type);
     } else {
+      // If the existing message has the same code (e.g., we just hit an
+      // error and also previously hit an error) we increment the message
+      // count by 1. This allows us to determine how many times in a row
+      // we've run into an error.
+
       queryfx(
         $conn_w,
         'INSERT INTO %T
-          (repositoryID, statusType, statusCode, parameters, epoch)
-          VALUES (%d, %s, %s, %s, %d)
+          (repositoryID, statusType, statusCode, parameters, epoch,
+            messageCount)
+          VALUES (%d, %s, %s, %s, %d, %d)
           ON DUPLICATE KEY UPDATE
             statusCode = VALUES(statusCode),
             parameters = VALUES(parameters),
-            epoch = VALUES(epoch)',
+            epoch = VALUES(epoch),
+            messageCount =
+              IF(
+                statusCode = VALUES(statusCode),
+                messageCount + 1,
+                VALUES(messageCount))',
         $table_name,
         $this->getID(),
         $status_type,
         $status_code,
         json_encode($parameters),
-        time());
+        time(),
+        1);
     }
 
     return $this;
-  }
-
-  public static function getRemoteURIProtocol($raw_uri) {
-    $uri = new PhutilURI($raw_uri);
-    if ($uri->getProtocol()) {
-      return strtolower($uri->getProtocol());
-    }
-
-    $git_uri = new PhutilGitURI($raw_uri);
-    if (strlen($git_uri->getDomain()) && strlen($git_uri->getPath())) {
-      return 'ssh';
-    }
-
-    return null;
   }
 
   public static function assertValidRemoteURI($uri) {
@@ -1469,7 +1687,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         pht('The remote URI has leading or trailing whitespace.'));
     }
 
-    $protocol = self::getRemoteURIProtocol($uri);
+    $uri_object = new PhutilURI($uri);
+    $protocol = $uri_object->getProtocol();
 
     // Catch confusion between Git/SCP-style URIs and normal URIs. See T3619
     // for discussion. This is usually a user adding "ssh://" to an implicit
@@ -1502,8 +1721,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
         throw new Exception(
           pht(
-            "The URI protocol is unrecognized. It should begin ".
-            "'%s', '%s', '%s', '%s', '%s', '%s', or be in the form '%s'.",
+            'The URI protocol is unrecognized. It should begin with '.
+            '"%s", "%s", "%s", "%s", "%s", "%s", or be in the form "%s".',
             'ssh://',
             'http://',
             'https://',
@@ -1531,6 +1750,33 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
    * @return  int   Repository update interval, in seconds.
    */
   public function loadUpdateInterval($minimum = 15) {
+    // First, check if we've hit errors recently. If we have, wait one period
+    // for each consecutive error. Normally, this corresponds to a backoff of
+    // 15s, 30s, 45s, etc.
+
+    $message_table = new PhabricatorRepositoryStatusMessage();
+    $conn = $message_table->establishConnection('r');
+    $error_count = queryfx_one(
+      $conn,
+      'SELECT MAX(messageCount) error_count FROM %T
+        WHERE repositoryID = %d
+        AND statusType IN (%Ls)
+        AND statusCode IN (%Ls)',
+      $message_table->getTableName(),
+      $this->getID(),
+      array(
+        PhabricatorRepositoryStatusMessage::TYPE_INIT,
+        PhabricatorRepositoryStatusMessage::TYPE_FETCH,
+      ),
+      array(
+        PhabricatorRepositoryStatusMessage::CODE_ERROR,
+      ));
+
+    $error_count = (int)$error_count['error_count'];
+    if ($error_count > 0) {
+      return (int)($minimum * $error_count);
+    }
+
     // If a repository is still importing, always pull it as frequently as
     // possible. This prevents us from hanging for a long time at 99.9% when
     // importing an inactive repository.
@@ -1551,32 +1797,35 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       $window_start);
     if ($last_commit) {
       $time_since_commit = ($window_start - $last_commit['epoch']);
-
-      $last_few_days = phutil_units('3 days in seconds');
-
-      if ($time_since_commit <= $last_few_days) {
-        // For repositories with activity in the recent past, we wait one
-        // extra second for every 10 minutes since the last commit. This
-        // shorter backoff is intended to handle weekends and other short
-        // breaks from development.
-        $smart_wait = ($time_since_commit / 600);
-      } else {
-        // For repositories without recent activity, we wait one extra second
-        // for every 4 minutes since the last commit. This longer backoff
-        // handles rarely used repositories, up to the maximum.
-        $smart_wait = ($time_since_commit / 240);
-      }
-
-      // We'll never wait more than 6 hours to pull a repository.
-      $longest_wait = phutil_units('6 hours in seconds');
-      $smart_wait = min($smart_wait, $longest_wait);
-
-      $smart_wait = max($minimum, $smart_wait);
     } else {
-      $smart_wait = $minimum;
+      // If the repository has no commits, treat the creation date as
+      // though it were the date of the last commit. This makes empty
+      // repositories update quickly at first but slow down over time
+      // if they don't see any activity.
+      $time_since_commit = ($window_start - $this->getDateCreated());
     }
 
-    return $smart_wait;
+    $last_few_days = phutil_units('3 days in seconds');
+
+    if ($time_since_commit <= $last_few_days) {
+      // For repositories with activity in the recent past, we wait one
+      // extra second for every 10 minutes since the last commit. This
+      // shorter backoff is intended to handle weekends and other short
+      // breaks from development.
+      $smart_wait = ($time_since_commit / 600);
+    } else {
+      // For repositories without recent activity, we wait one extra second
+      // for every 4 minutes since the last commit. This longer backoff
+      // handles rarely used repositories, up to the maximum.
+      $smart_wait = ($time_since_commit / 240);
+    }
+
+    // We'll never wait more than 6 hours to pull a repository.
+    $longest_wait = phutil_units('6 hours in seconds');
+    $smart_wait = min($smart_wait, $longest_wait);
+    $smart_wait = max($minimum, $smart_wait);
+
+    return (int)$smart_wait;
   }
 
 
@@ -1597,33 +1846,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $never_proxy,
     array $protocols) {
 
-    $service_phid = $this->getAlmanacServicePHID();
-    if (!$service_phid) {
-      // No service, so this is a local repository.
+    $service = $this->loadAlmanacService();
+    if (!$service) {
       return null;
     }
 
-    $service = id(new AlmanacServiceQuery())
-      ->setViewer(PhabricatorUser::getOmnipotentUser())
-      ->withPHIDs(array($service_phid))
-      ->needBindings(true)
-      ->executeOne();
-    if (!$service) {
-      throw new Exception(
-        pht(
-          'The Almanac service for this repository is invalid or could not '.
-          'be loaded.'));
-    }
-
-    $service_type = $service->getServiceType();
-    if (!($service_type instanceof AlmanacClusterRepositoryServiceType)) {
-      throw new Exception(
-        pht(
-          'The Almanac service for this repository does not have the correct '.
-          'service type.'));
-    }
-
-    $bindings = $service->getBindings();
+    $bindings = $service->getActiveBindings();
     if (!$bindings) {
       throw new Exception(
         pht(
@@ -1659,16 +1887,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         }
       }
 
-      $protocol = $binding->getAlmanacPropertyValue('protocol');
-      if ($protocol === null) {
-        $protocol = 'https';
-      }
+      $uri = $this->getClusterRepositoryURIFromBinding($binding);
 
+      $protocol = $uri->getProtocol();
       if (empty($protocol_map[$protocol])) {
         continue;
       }
 
-      $uris[] = $protocol.'://'.$iface->renderDisplayAddress().'/';
+      $uris[] = $uri;
     }
 
     if (!$uris) {
@@ -1793,6 +2019,209 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return $client;
   }
 
+/* -(  Repository URIs  )---------------------------------------------------- */
+
+
+  public function attachURIs(array $uris) {
+    $custom_map = array();
+    foreach ($uris as $key => $uri) {
+      $builtin_key = $uri->getRepositoryURIBuiltinKey();
+      if ($builtin_key !== null) {
+        $custom_map[$builtin_key] = $key;
+      }
+    }
+
+    $builtin_uris = $this->newBuiltinURIs();
+    $seen_builtins = array();
+    foreach ($builtin_uris as $builtin_uri) {
+      $builtin_key = $builtin_uri->getRepositoryURIBuiltinKey();
+      $seen_builtins[$builtin_key] = true;
+
+      // If this builtin URI is disabled, don't attach it and remove the
+      // persisted version if it exists.
+      if ($builtin_uri->getIsDisabled()) {
+        if (isset($custom_map[$builtin_key])) {
+          unset($uris[$custom_map[$builtin_key]]);
+        }
+        continue;
+      }
+
+      // If the URI exists, make sure it's marked as not being disabled.
+      if (isset($custom_map[$builtin_key])) {
+        $uris[$custom_map[$builtin_key]]->setIsDisabled(false);
+      }
+    }
+
+    // Remove any builtins which no longer exist.
+    foreach ($custom_map as $builtin_key => $key) {
+      if (empty($seen_builtins[$builtin_key])) {
+        unset($uris[$key]);
+      }
+    }
+
+    $this->uris = $uris;
+
+    return $this;
+  }
+
+  public function getURIs() {
+    return $this->assertAttached($this->uris);
+  }
+
+  public function getCloneURIs() {
+    $uris = $this->getURIs();
+
+    $clone = array();
+    foreach ($uris as $uri) {
+      if (!$uri->isBuiltin()) {
+        continue;
+      }
+
+      if ($uri->getIsDisabled()) {
+        continue;
+      }
+
+      $io_type = $uri->getEffectiveIoType();
+      $is_clone =
+        ($io_type == PhabricatorRepositoryURI::IO_READ) ||
+        ($io_type == PhabricatorRepositoryURI::IO_READWRITE);
+
+      if (!$is_clone) {
+        continue;
+      }
+
+      $clone[] = $uri;
+    }
+
+    $clone = msort($clone, 'getURIScore');
+    $clone = array_reverse($clone);
+
+    return $clone;
+  }
+
+
+  public function newBuiltinURIs() {
+    $has_callsign = ($this->getCallsign() !== null);
+    $has_shortname = ($this->getRepositorySlug() !== null);
+
+    // TODO: For now, never enable these because they don't work yet.
+    $has_shortname = false;
+
+    $identifier_map = array(
+      PhabricatorRepositoryURI::BUILTIN_IDENTIFIER_CALLSIGN => $has_callsign,
+      PhabricatorRepositoryURI::BUILTIN_IDENTIFIER_SHORTNAME => $has_shortname,
+      PhabricatorRepositoryURI::BUILTIN_IDENTIFIER_ID => true,
+    );
+
+    // If the view policy of the repository is public, support anonymous HTTP
+    // even if authenticated HTTP is not supported.
+    if ($this->getViewPolicy() === PhabricatorPolicies::POLICY_PUBLIC) {
+      $allow_http = true;
+    } else {
+      $allow_http = PhabricatorEnv::getEnvConfig('diffusion.allow-http-auth');
+    }
+
+    $base_uri = PhabricatorEnv::getURI('/');
+    $base_uri = new PhutilURI($base_uri);
+    $has_https = ($base_uri->getProtocol() == 'https');
+    $has_https = ($has_https && $allow_http);
+
+    $has_http = !PhabricatorEnv::getEnvConfig('security.require-https');
+    $has_http = ($has_http && $allow_http);
+
+    // HTTP is not supported for Subversion.
+    if ($this->isSVN()) {
+      $has_http = false;
+      $has_https = false;
+    }
+
+    $has_ssh = (bool)strlen(PhabricatorEnv::getEnvConfig('phd.user'));
+
+    $protocol_map = array(
+      PhabricatorRepositoryURI::BUILTIN_PROTOCOL_SSH => $has_ssh,
+      PhabricatorRepositoryURI::BUILTIN_PROTOCOL_HTTPS => $has_https,
+      PhabricatorRepositoryURI::BUILTIN_PROTOCOL_HTTP => $has_http,
+    );
+
+    $uris = array();
+    foreach ($protocol_map as $protocol => $proto_supported) {
+      foreach ($identifier_map as $identifier => $id_supported) {
+        // This is just a dummy value because it can't be empty; we'll force
+        // it to a proper value when using it in the UI.
+        $builtin_uri = "{$protocol}://{$identifier}";
+        $uris[] = PhabricatorRepositoryURI::initializeNewURI()
+          ->setRepositoryPHID($this->getPHID())
+          ->attachRepository($this)
+          ->setBuiltinProtocol($protocol)
+          ->setBuiltinIdentifier($identifier)
+          ->setURI($builtin_uri)
+          ->setIsDisabled((int)(!$proto_supported || !$id_supported));
+      }
+    }
+
+    return $uris;
+  }
+
+
+  public function getClusterRepositoryURIFromBinding(
+    AlmanacBinding $binding) {
+    $protocol = $binding->getAlmanacPropertyValue('protocol');
+    if ($protocol === null) {
+      $protocol = 'https';
+    }
+
+    $iface = $binding->getInterface();
+    $address = $iface->renderDisplayAddress();
+
+    $path = $this->getURI();
+
+    return id(new PhutilURI("{$protocol}://{$address}"))
+      ->setPath($path);
+  }
+
+  public function loadAlmanacService() {
+    $service_phid = $this->getAlmanacServicePHID();
+    if (!$service_phid) {
+      // No service, so this is a local repository.
+      return null;
+    }
+
+    $service = id(new AlmanacServiceQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs(array($service_phid))
+      ->needBindings(true)
+      ->needProperties(true)
+      ->executeOne();
+    if (!$service) {
+      throw new Exception(
+        pht(
+          'The Almanac service for this repository is invalid or could not '.
+          'be loaded.'));
+    }
+
+    $service_type = $service->getServiceImplementation();
+    if (!($service_type instanceof AlmanacClusterRepositoryServiceType)) {
+      throw new Exception(
+        pht(
+          'The Almanac service for this repository does not have the correct '.
+          'service type.'));
+    }
+
+    return $service;
+  }
+
+  public function markImporting() {
+    $this->openTransaction();
+      $this->beginReadLocking();
+        $repository = $this->reload();
+        $repository->setDetail('importing', true);
+        $repository->save();
+      $this->endReadLocking();
+    $this->saveTransaction();
+
+    return $repository;
+  }
+
 
 /* -(  Symbols  )-------------------------------------------------------------*/
 
@@ -1805,7 +2234,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   }
 
 
-/* -(  Staging  )-------------------------------------------------------------*/
+/* -(  Staging  )------------------------------------------------------------ */
 
 
   public function supportsStaging() {
@@ -1818,6 +2247,33 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return null;
     }
     return $this->getDetail('staging-uri', null);
+  }
+
+
+/* -(  Automation  )--------------------------------------------------------- */
+
+
+  public function supportsAutomation() {
+    return $this->isGit();
+  }
+
+  public function canPerformAutomation() {
+    if (!$this->supportsAutomation()) {
+      return false;
+    }
+
+    if (!$this->getAutomationBlueprintPHIDs()) {
+      return false;
+    }
+
+    return true;
+  }
+
+  public function getAutomationBlueprintPHIDs() {
+    if (!$this->supportsAutomation()) {
+      return array();
+    }
+    return $this->getDetail('automation.blueprintPHIDs', array());
   }
 
 
@@ -1916,13 +2372,17 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   public function destroyObjectPermanently(
     PhabricatorDestructionEngine $engine) {
 
+    $phid = $this->getPHID();
+
     $this->openTransaction();
 
       $this->delete();
 
+      PhabricatorRepositoryURIIndex::updateRepositoryURIs($phid, array());
+
       $books = id(new DivinerBookQuery())
         ->setViewer($engine->getViewer())
-        ->withRepositoryPHIDs(array($this->getPHID()))
+        ->withRepositoryPHIDs(array($phid))
         ->execute();
       foreach ($books as $book) {
         $engine->destroyObject($book);
@@ -1930,10 +2390,18 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
       $atoms = id(new DivinerAtomQuery())
         ->setViewer($engine->getViewer())
-        ->withRepositoryPHIDs(array($this->getPHID()))
+        ->withRepositoryPHIDs(array($phid))
         ->execute();
       foreach ($atoms as $atom) {
         $engine->destroyObject($atom);
+      }
+
+      $lfs_refs = id(new PhabricatorRepositoryGitLFSRefQuery())
+        ->setViewer($engine->getViewer())
+        ->withRepositoryPHIDs(array($phid))
+        ->execute();
+      foreach ($lfs_refs as $ref) {
+        $engine->destroyObject($ref);
       }
 
     $this->saveTransaction();
@@ -1945,6 +2413,59 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
   public function getSpacePHID() {
     return $this->spacePHID;
+  }
+
+/* -(  PhabricatorConduitResultInterface  )---------------------------------- */
+
+
+  public function getFieldSpecificationsForConduit() {
+    return array(
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('name')
+        ->setType('string')
+        ->setDescription(pht('The repository name.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('vcs')
+        ->setType('string')
+        ->setDescription(
+          pht('The VCS this repository uses ("git", "hg" or "svn").')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('callsign')
+        ->setType('string')
+        ->setDescription(pht('The repository callsign, if it has one.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('shortName')
+        ->setType('string')
+        ->setDescription(pht('Unique short name, if the repository has one.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('status')
+        ->setType('string')
+        ->setDescription(pht('Active or inactive status.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('isImporting')
+        ->setType('bool')
+        ->setDescription(
+          pht(
+            'True if the repository is importing initial commits.')),
+    );
+  }
+
+  public function getFieldValuesForConduit() {
+    return array(
+      'name' => $this->getName(),
+      'vcs' => $this->getVersionControlSystem(),
+      'callsign' => $this->getCallsign(),
+      'shortName' => $this->getRepositorySlug(),
+      'status' => $this->getStatus(),
+      'isImporting' => (bool)$this->isImporting(),
+    );
+  }
+
+  public function getConduitSearchAttachments() {
+    return array(
+      id(new DiffusionRepositoryURIsSearchEngineAttachment())
+        ->setAttachmentKey('uris'),
+    );
   }
 
 }

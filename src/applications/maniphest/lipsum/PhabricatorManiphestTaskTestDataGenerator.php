@@ -3,7 +3,11 @@
 final class PhabricatorManiphestTaskTestDataGenerator
   extends PhabricatorTestDataGenerator {
 
-  public function generate() {
+  public function getGeneratorName() {
+    return pht('Maniphest Tasks');
+  }
+
+  public function generateObject() {
     $author_phid = $this->loadPhabrictorUserPHID();
     $author = id(new PhabricatorUser())
       ->loadOneWhere('phid = %s', $author_phid);
@@ -11,9 +15,7 @@ final class PhabricatorManiphestTaskTestDataGenerator
       ->setSubPriority($this->generateTaskSubPriority())
       ->setTitle($this->generateTitle());
 
-    $content_source = PhabricatorContentSource::newForSource(
-      PhabricatorContentSource::SOURCE_UNKNOWN,
-      array());
+    $content_source = $this->getLipsumContentSource();
 
     $template = new ManiphestTransaction();
     // Accumulate Transactions

@@ -13,12 +13,13 @@ final class PhabricatorOwnersDetailController
     $package = id(new PhabricatorOwnersPackageQuery())
       ->setViewer($viewer)
       ->withIDs(array($request->getURIData('id')))
+      ->needPaths(true)
       ->executeOne();
     if (!$package) {
       return new Aphront404Response();
     }
 
-    $paths = $package->loadPaths();
+    $paths = $package->getPaths();
 
     $repository_phids = array();
     foreach ($paths as $path) {
@@ -35,18 +36,32 @@ final class PhabricatorOwnersDetailController
       $repositories = array();
     }
 
-    $actions = $this->buildPackageActionView($package);
-    $properties = $this->buildPackagePropertyView($package);
-    $properties->setActionList($actions);
+    $field_list = PhabricatorCustomField::getObjectFields(
+      $package,
+      PhabricatorCustomField::ROLE_VIEW);
+    $field_list
+      ->setViewer($viewer)
+      ->readFieldsFromStorage($package);
+
+    $curtain = $this->buildCurtain($package);
+    $details = $this->buildPackageDetailView($package, $field_list);
+
+    if ($package->isArchived()) {
+      $header_icon = 'fa-ban';
+      $header_name = pht('Archived');
+      $header_color = 'dark';
+    } else {
+      $header_icon = 'fa-check';
+      $header_name = pht('Active');
+      $header_color = 'bluegrey';
+    }
 
     $header = id(new PHUIHeaderView())
       ->setUser($viewer)
       ->setHeader($package->getName())
-      ->setPolicyObject($package);
-
-    $panel = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->addPropertyList($properties);
+      ->setStatus($header_icon, $header_color, $header_name)
+      ->setPolicyObject($package)
+      ->setHeaderIcon('fa-gift');
 
     $commit_views = array();
 
@@ -56,27 +71,30 @@ final class PhabricatorOwnersDetailController
           'auditorPHIDs' => $package->getPHID(),
         ));
 
+    $status_concern = DiffusionCommitQuery::AUDIT_STATUS_CONCERN;
+
     $attention_commits = id(new DiffusionCommitQuery())
       ->setViewer($request->getUser())
       ->withAuditorPHIDs(array($package->getPHID()))
-      ->withAuditStatus(DiffusionCommitQuery::AUDIT_STATUS_CONCERN)
+      ->withAuditStatus($status_concern)
       ->needCommitData(true)
       ->setLimit(10)
       ->execute();
-    if ($attention_commits) {
-      $view = id(new PhabricatorAuditListView())
-        ->setUser($viewer)
-        ->setCommits($attention_commits);
+    $view = id(new PhabricatorAuditListView())
+      ->setUser($viewer)
+      ->setNoDataString(pht('This package has no open problem commits.'))
+      ->setCommits($attention_commits);
 
-      $commit_views[] = array(
-        'view'    => $view,
-        'header'  => pht('Commits in this Package that Need Attention'),
-        'button'  => id(new PHUIButtonView())
-          ->setTag('a')
-          ->setHref($commit_uri->alter('status', 'open'))
-          ->setText(pht('View All Problem Commits')),
-      );
-    }
+    $commit_views[] = array(
+      'view'    => $view,
+      'header'  => pht('Needs Attention'),
+      'icon'    => 'fa-warning',
+      'button'  => id(new PHUIButtonView())
+        ->setTag('a')
+        ->setHref($commit_uri->alter('status', $status_concern))
+        ->setIcon('fa-list-ul')
+        ->setText(pht('View All')),
+    );
 
     $all_commits = id(new DiffusionCommitQuery())
       ->setViewer($request->getUser())
@@ -92,11 +110,13 @@ final class PhabricatorOwnersDetailController
 
     $commit_views[] = array(
       'view'    => $view,
-      'header'  => pht('Recent Commits in Package'),
+      'header'  => pht('Recent Commits'),
+      'icon'    => 'fa-code',
       'button'  => id(new PHUIButtonView())
         ->setTag('a')
         ->setHref($commit_uri)
-        ->setText(pht('View All Package Commits')),
+        ->setIcon('fa-list-ul')
+        ->setText(pht('View All')),
     );
 
     $phids = array();
@@ -108,63 +128,74 @@ final class PhabricatorOwnersDetailController
 
     $commit_panels = array();
     foreach ($commit_views as $commit_view) {
-      $commit_panel = new PHUIObjectBoxView();
-      $header = new PHUIHeaderView();
-      $header->setHeader($commit_view['header']);
+      $commit_panel = id(new PHUIObjectBoxView())
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY);
+      $commit_header = id(new PHUIHeaderView())
+        ->setHeader($commit_view['header'])
+        ->setHeaderIcon($commit_view['icon']);
       if (isset($commit_view['button'])) {
-        $header->addActionLink($commit_view['button']);
+        $commit_header->addActionLink($commit_view['button']);
       }
       $commit_view['view']->setHandles($handles);
-      $commit_panel->setHeader($header);
+      $commit_panel->setHeader($commit_header);
       $commit_panel->appendChild($commit_view['view']);
 
       $commit_panels[] = $commit_panel;
     }
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb($package->getName());
+    $crumbs->addTextCrumb($package->getMonogram());
+    $crumbs->setBorder(true);
 
     $timeline = $this->buildTransactionTimeline(
       $package,
       new PhabricatorOwnersPackageTransactionQuery());
     $timeline->setShouldTerminate(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $panel,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
         $this->renderPathsTable($paths, $repositories),
         $commit_panels,
         $timeline,
-      ),
-      array(
-        'title' => $package->getName(),
-      ));
+      ))
+      ->addPropertySection(pht('Details'), $details);
+
+    return $this->newPage()
+      ->setTitle($package->getName())
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
+  private function buildPackageDetailView(
+    PhabricatorOwnersPackage $package,
+    PhabricatorCustomFieldList $field_list) {
 
-  private function buildPackagePropertyView(PhabricatorOwnersPackage $package) {
     $viewer = $this->getViewer();
-
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer);
 
-    $primary_phid = $package->getPrimaryOwnerPHID();
-    if ($primary_phid) {
-      $primary_owner = $viewer->renderHandle($primary_phid);
-    } else {
-      $primary_owner = phutil_tag('em', array(), pht('None'));
-    }
-    $view->addProperty(pht('Primary Owner'), $primary_owner);
-
-    // TODO: needOwners() this on the Query.
-    $owners = $package->loadOwners();
+    $owners = $package->getOwners();
     if ($owners) {
       $owner_list = $viewer->renderHandleList(mpull($owners, 'getUserPHID'));
     } else {
       $owner_list = phutil_tag('em', array(), pht('None'));
     }
     $view->addProperty(pht('Owners'), $owner_list);
+
+
+    $dominion = $package->getDominion();
+    $dominion_map = PhabricatorOwnersPackage::getDominionOptionsMap();
+    $spec = idx($dominion_map, $dominion, array());
+    $name = idx($spec, 'short', $dominion);
+    $view->addProperty(pht('Dominion'), $name);
+
+    $auto = $package->getAutoReview();
+    $autoreview_map = PhabricatorOwnersPackage::getAutoreviewOptionsMap();
+    $spec = idx($autoreview_map, $auto, array());
+    $name = idx($spec, 'name', $auto);
+    $view->addProperty(pht('Auto Review'), $name);
 
     if ($package->getAuditingEnabled()) {
       $auditing = pht('Enabled');
@@ -175,46 +206,68 @@ final class PhabricatorOwnersDetailController
 
     $description = $package->getDescription();
     if (strlen($description)) {
+      $description = new PHUIRemarkupView($viewer, $description);
       $view->addSectionHeader(pht('Description'));
-      $view->addTextContent(
-        $output = PhabricatorMarkupEngine::renderOneObject(
-          id(new PhabricatorMarkupOneOff())->setContent($description),
-          'default',
-          $viewer));
+      $view->addTextContent($description);
     }
+
+    $field_list->appendFieldsToPropertyList(
+      $package,
+      $viewer,
+      $view);
 
     return $view;
   }
 
-  private function buildPackageActionView(PhabricatorOwnersPackage $package) {
+  private function buildCurtain(PhabricatorOwnersPackage $package) {
     $viewer = $this->getViewer();
 
-    // TODO: Implement this capability.
-    $can_edit = true;
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $package,
+      PhabricatorPolicyCapability::CAN_EDIT);
 
     $id = $package->getID();
     $edit_uri = $this->getApplicationURI("/edit/{$id}/");
     $paths_uri = $this->getApplicationURI("/paths/{$id}/");
 
-    $view = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObject($package)
-      ->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Edit Package'))
-          ->setIcon('fa-pencil')
-          ->setDisabled(!$can_edit)
-          ->setWorkflow(!$can_edit)
-          ->setHref($edit_uri))
-      ->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Edit Paths'))
-          ->setIcon('fa-folder-open')
-          ->setDisabled(!$can_edit)
-          ->setWorkflow(!$can_edit)
-          ->setHref($paths_uri));
+    $curtain = $this->newCurtainView($package);
 
-    return $view;
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Edit Package'))
+        ->setIcon('fa-pencil')
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit)
+        ->setHref($edit_uri));
+
+    if ($package->isArchived()) {
+      $curtain->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('Activate Package'))
+          ->setIcon('fa-check')
+          ->setDisabled(!$can_edit)
+          ->setWorkflow($can_edit)
+          ->setHref($this->getApplicationURI("/archive/{$id}/")));
+    } else {
+      $curtain->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('Archive Package'))
+          ->setIcon('fa-ban')
+          ->setDisabled(!$can_edit)
+          ->setWorkflow($can_edit)
+          ->setHref($this->getApplicationURI("/archive/{$id}/")));
+    }
+
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Edit Paths'))
+        ->setIcon('fa-folder-open')
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit)
+        ->setHref($paths_uri));
+
+    return $curtain;
   }
 
   private function renderPathsTable(array $paths, array $repositories) {
@@ -226,9 +279,8 @@ final class PhabricatorOwnersDetailController
       if (!$repo) {
         continue;
       }
-      $href = DiffusionRequest::generateDiffusionURI(
+      $href = $repo->generateURI(
         array(
-          'callsign' => $repo->getCallsign(),
           'branch'   => $repo->getDefaultBranch(),
           'path'     => $path->getPath(),
           'action'   => 'browse',
@@ -274,9 +326,14 @@ final class PhabricatorOwnersDetailController
           'wide',
         ));
 
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Paths'))
+      ->setHeaderIcon('fa-folder-open');
+
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Paths'))
-      ->appendChild($table);
+      ->setHeader($header)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($table);
 
     if ($info) {
       $box->setInfoView($info);

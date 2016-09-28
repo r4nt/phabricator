@@ -143,6 +143,39 @@ final class PhabricatorCaches extends Phobject {
   }
 
 
+/* -(  Server State Cache  )------------------------------------------------- */
+
+
+  /**
+   * Highly specialized cache for storing server process state.
+   *
+   * We use this cache to track initial steps in the setup phase, before
+   * configuration is loaded.
+   *
+   * This cache does NOT use the cache namespace (it must be accessed before
+   * we build configuration), and is global across all instances on the host.
+   *
+   * @return PhutilKeyValueCacheStack Best available server state cache stack.
+   * @task setup
+   */
+  public static function getServerStateCache() {
+    static $cache;
+    if (!$cache) {
+      $caches = self::buildSetupCaches('phabricator-server');
+
+      // NOTE: We are NOT adding a cache namespace here! This cache is shared
+      // across all instances on the host.
+
+      $caches = self::addProfilerToCaches($caches);
+      $cache = id(new PhutilKeyValueCacheStack())
+        ->setCaches($caches);
+
+    }
+    return $cache;
+  }
+
+
+
 /* -(  Setup Cache  )-------------------------------------------------------- */
 
 
@@ -163,7 +196,7 @@ final class PhabricatorCaches extends Phobject {
   public static function getSetupCache() {
     static $cache;
     if (!$cache) {
-      $caches = self::buildSetupCaches();
+      $caches = self::buildSetupCaches('phabricator-setup');
       $cache = self::newStackFromCaches($caches);
     }
     return $cache;
@@ -173,7 +206,12 @@ final class PhabricatorCaches extends Phobject {
   /**
    * @task setup
    */
-  private static function buildSetupCaches() {
+  private static function buildSetupCaches($cache_name) {
+    // If this is the CLI, just build a setup cache.
+    if (php_sapi_name() == 'cli') {
+      return array();
+    }
+
     // In most cases, we should have APC. This is an ideal cache for our
     // purposes -- it's fast and empties on server restart.
     $apc = new PhutilAPCKeyValueCache();
@@ -183,7 +221,7 @@ final class PhabricatorCaches extends Phobject {
 
     // If we don't have APC, build a poor approximation on disk. This is still
     // much better than nothing; some setup steps are quite slow.
-    $disk_path = self::getSetupCacheDiskCachePath();
+    $disk_path = self::getSetupCacheDiskCachePath($cache_name);
     if ($disk_path) {
       $disk = new PhutilOnDiskKeyValueCache();
       $disk->setCacheFile($disk_path);
@@ -200,46 +238,18 @@ final class PhabricatorCaches extends Phobject {
   /**
    * @task setup
    */
-  private static function getSetupCacheDiskCachePath() {
+  private static function getSetupCacheDiskCachePath($name) {
     // The difficulty here is in choosing a path which will change on server
     // restart (we MUST have this property), but as rarely as possible
     // otherwise (we desire this property to give the cache the best hit rate
     // we can).
 
-    // In some setups, the parent PID is more stable and longer-lived that the
-    // PID (e.g., under apache, our PID will be a worker while the ppid will
-    // be the main httpd process). If we're confident we're running under such
-    // a setup, we can try to use the PPID as the basis for our cache instead
-    // of our own PID.
-    $use_ppid = false;
-
-    switch (php_sapi_name()) {
-      case 'cli-server':
-        // This is the PHP5.4+ built-in webserver. We should use the pid
-        // (the server), not the ppid (probably a shell or something).
-        $use_ppid = false;
-        break;
-      case 'fpm-fcgi':
-        // We should be safe to use PPID here.
-        $use_ppid = true;
-        break;
-      case 'apache2handler':
-        // We're definitely safe to use the PPID.
-        $use_ppid = true;
-        break;
-    }
+    // Unfortunately, we don't have a very good strategy for minimizing the
+    // churn rate of the cache. We previously tried to use the parent process
+    // PID in some cases, but this was not reliable. See T9599 for one case of
+    // this.
 
     $pid_basis = getmypid();
-    if ($use_ppid) {
-      if (function_exists('posix_getppid')) {
-        $parent_pid = posix_getppid();
-        // On most systems, normal processes can never have PIDs lower than 100,
-        // so something likely went wrong if we we get one of these.
-        if ($parent_pid > 100) {
-          $pid_basis = $parent_pid;
-        }
-      }
-    }
 
     // If possible, we also want to know when the process launched, so we can
     // drop the cache if a process restarts but gets the same PID an earlier
@@ -253,7 +263,7 @@ final class PhabricatorCaches extends Phobject {
 
     $tmp_dir = sys_get_temp_dir();
 
-    $tmp_path = $tmp_dir.DIRECTORY_SEPARATOR.'phabricator-setup';
+    $tmp_path = $tmp_dir.DIRECTORY_SEPARATOR.$name;
     if (!file_exists($tmp_path)) {
       @mkdir($tmp_path);
     }

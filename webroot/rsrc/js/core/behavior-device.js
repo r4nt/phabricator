@@ -10,7 +10,7 @@
 JX.install('Device', {
   statics : {
     _device : null,
-    _tabletBreakpoint: 768,
+    _tabletBreakpoint: 920,
 
     setTabletBreakpoint: function(width) {
       var self = JX.Device;
@@ -25,6 +25,19 @@ JX.install('Device', {
     recalculate: function() {
       var v = JX.Vector.getViewport();
       var self = JX.Device;
+
+      // Even when we emit a '<meta name="viewport" ... />' tag which tells
+      // devices to fit the conent to the screen width, we'll sometimes measure
+      // a viewport dimension which is larger than the available screen width,
+      // particularly if we check too early.
+
+      // If the device provides a screen width and the screen width is smaller
+      // than the viewport width, use the screen width.
+
+      var screen_width = (window.screen && window.screen.availWidth);
+      if (screen_width) {
+        v.x = Math.min(v.x, screen_width);
+      }
 
       var device = 'desktop';
       if (v.x <= self._tabletBreakpoint) {
@@ -47,6 +60,11 @@ JX.install('Device', {
       JX.DOM.alterClass(e, 'device', (device != 'desktop'));
 
       JX.Stratcom.invoke('phabricator-device-change', null, device);
+    },
+
+    isDesktop: function() {
+      var self = JX.Device;
+      return (self.getDevice() == 'desktop');
     },
 
     getDevice : function() {

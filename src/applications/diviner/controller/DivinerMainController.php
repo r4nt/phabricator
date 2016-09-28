@@ -17,23 +17,19 @@ final class DivinerMainController extends DivinerController {
     $crumbs->setBorder(true);
     $crumbs->addTextCrumb(pht('Books'));
 
-    $search_icon = id(new PHUIIconView())
-      ->setIconFont('fa-search');
-
     $query_button = id(new PHUIButtonView())
       ->setTag('a')
       ->setHref($this->getApplicationURI('query/'))
       ->setText(pht('Advanced Search'))
-      ->setIcon($search_icon);
+      ->setIcon('fa-search');
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Documentation Books'))
       ->addActionLink($query_button);
 
-    $document = id(new PHUIDocumentView())
-      ->setHeader($header)
-      ->setFontKit(PHUIDocumentView::FONT_SOURCE_SANS)
-      ->addClass('diviner-view');
+    $document = new PHUIDocumentViewPro();
+    $document->setHeader($header);
+    $document->addClass('diviner-view');
 
     if ($books) {
       $books = msort($books, 'getTitle');
@@ -46,10 +42,7 @@ final class DivinerMainController extends DivinerController {
         $list[] = $item;
       }
       $list = id(new PHUIBoxView())
-        ->addPadding(PHUI::PADDING_LARGE_LEFT)
-        ->addPadding(PHUI::PADDING_LARGE_RIGHT)
-        ->addPadding(PHUI::PADDING_SMALL_TOP)
-        ->addPadding(PHUI::PADDING_SMALL_BOTTOM)
+        ->addPadding(PHUI::PADDING_MEDIUM_TOP)
         ->appendChild($list);
 
       $document->appendChild($list);
@@ -68,22 +61,15 @@ final class DivinerMainController extends DivinerController {
         "  %s\n\n",
         'phabricator/ $ ./bin/diviner generate');
 
-      $text = PhabricatorMarkupEngine::renderOneObject(
-        id(new PhabricatorMarkupOneOff())->setContent($text),
-        'default',
-        $viewer);
-
+      $text = new PHUIRemarkupView($viewer, $text);
       $document->appendChild($text);
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    return $this->newPage()
+      ->setTitle(pht('Documentation Books'))
+      ->setCrumbs($crumbs)
+      ->appendChild(array(
         $document,
-      ),
-      array(
-        'title' => pht('Documentation Books'),
-        'fonts' => true,
       ));
   }
 }

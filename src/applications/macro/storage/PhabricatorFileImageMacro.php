@@ -5,6 +5,7 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
     PhabricatorSubscribableInterface,
     PhabricatorApplicationTransactionInterface,
     PhabricatorFlaggableInterface,
+    PhabricatorTokenReceiverInterface,
     PhabricatorPolicyInterface {
 
   protected $authorPHID;
@@ -110,12 +111,14 @@ final class PhabricatorFileImageMacro extends PhabricatorFileDAO
     return false;
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
 
-  public function shouldAllowSubscription($phid) {
-    return true;
+/* -(  PhabricatorTokenRecevierInterface  )---------------------------------- */
+
+
+  public function getUsersToNotifyOfTokenGiven() {
+    return array(
+      $this->getAuthorPHID(),
+    );
   }
 
 

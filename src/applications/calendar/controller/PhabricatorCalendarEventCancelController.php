@@ -3,69 +3,46 @@
 final class PhabricatorCalendarEventCancelController
   extends PhabricatorCalendarController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
-    $request  = $this->getRequest();
-    $user     = $request->getUser();
-    $sequence = $request->getURIData('sequence');
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     $event = id(new PhabricatorCalendarEventQuery())
-      ->setViewer($user)
-      ->withIDs(array($this->id))
+      ->setViewer($viewer)
+      ->withIDs(array($id))
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
           PhabricatorPolicyCapability::CAN_EDIT,
         ))
       ->executeOne();
-
-    if ($sequence) {
-      $parent_event = $event;
-      $event = $parent_event->generateNthGhost($sequence, $user);
-      $event->attachParentEvent($parent_event);
-    }
-
     if (!$event) {
       return new Aphront404Response();
     }
 
-    if (!$sequence) {
-      $cancel_uri = '/E'.$event->getID();
+    $cancel_uri = $event->getURI();
+
+    $is_parent = $event->isParentEvent();
+    $is_child = $event->isChildEvent();
+    $is_cancelled = $event->getIsCancelled();
+
+    if ($is_child) {
+      $is_parent_cancelled = $event->getParentEvent()->getIsCancelled();
     } else {
-      $cancel_uri = '/E'.$event->getID().'/'.$sequence;
+      $is_parent_cancelled = false;
     }
 
-    $is_cancelled = $event->getIsCancelled();
-    $is_parent_cancelled = $event->getIsParentCancelled();
-    $is_parent = $event->getIsRecurrenceParent();
-
     $validation_exception = null;
-
     if ($request->isFormPost()) {
-      if ($is_cancelled && $sequence) {
-        return id(new AphrontRedirectResponse())->setURI($cancel_uri);
-      } else if ($sequence) {
-        $event = $this->createEventFromGhost(
-          $user,
-          $event,
-          $sequence);
-        $event->applyViewerTimezone($user);
-      }
-
       $xactions = array();
 
       $xaction = id(new PhabricatorCalendarEventTransaction())
         ->setTransactionType(
-          PhabricatorCalendarEventTransaction::TYPE_CANCEL)
+          PhabricatorCalendarEventCancelTransaction::TRANSACTIONTYPE)
         ->setNewValue(!$is_cancelled);
 
       $editor = id(new PhabricatorCalendarEventEditor())
-        ->setActor($user)
+        ->setActor($viewer)
         ->setContentSourceFromRequest($request)
         ->setContinueOnNoEffect(true)
         ->setContinueOnMissingFields(true);
@@ -79,42 +56,47 @@ final class PhabricatorCalendarEventCancelController
     }
 
     if ($is_cancelled) {
-      if ($sequence || $is_parent_cancelled) {
+      if ($is_parent_cancelled) {
         $title = pht('Cannot Reinstate Instance');
-        $paragraph = pht('Cannot reinstate an instance of a ' .
-          'cancelled recurring event.');
-        $cancel = pht('Cancel');
+        $paragraph = pht(
+          'You cannot reinstate an instance of a cancelled recurring event.');
+        $cancel = pht('Back');
         $submit = null;
+      } else if ($is_child) {
+        $title = pht('Reinstate Instance');
+        $paragraph = pht(
+          'Reinstate this instance of this recurring event?');
+        $cancel = pht('Back');
+        $submit = pht('Reinstate Instance');
       } else if ($is_parent) {
-        $title = pht('Reinstate Recurrence');
-        $paragraph = pht('Reinstate the entire series ' .
-          'of recurring events?');
-        $cancel = pht('Don\'t Reinstate Recurrence');
-        $submit = pht('Reinstate Recurrence');
+        $title = pht('Reinstate Recurring Event');
+        $paragraph = pht(
+          'Reinstate all instances of this recurring event which have not '.
+          'been individually cancelled?');
+        $cancel = pht('Back');
+        $submit = pht('Reinstate Recurring Event');
       } else {
         $title = pht('Reinstate Event');
         $paragraph = pht('Reinstate this event?');
-        $cancel = pht('Don\'t Reinstate Event');
+        $cancel = pht('Back');
         $submit = pht('Reinstate Event');
       }
     } else {
-      if ($sequence) {
+      if ($is_child) {
         $title = pht('Cancel Instance');
-        $paragraph = pht('Cancel just this instance ' .
-          'of a recurring event.');
-        $cancel = pht('Don\'t Cancel Instance');
+        $paragraph = pht('Cancel this instance of this recurring event?');
+        $cancel = pht('Back');
         $submit = pht('Cancel Instance');
       } else if ($is_parent) {
-        $title = pht('Cancel Recurrence');
-        $paragraph = pht('Cancel the entire series ' .
-          'of recurring events?');
-        $cancel = pht('Don\'t Cancel Recurrence');
-        $submit = pht('Cancel Recurrence');
+        $title = pht('Cancel Recurrin Event');
+        $paragraph = pht('Cancel this entire series of recurring events?');
+        $cancel = pht('Back');
+        $submit = pht('Cancel Recurring Event');
       } else {
         $title = pht('Cancel Event');
-        $paragraph = pht('You can always reinstate ' .
-          'the event later.');
-        $cancel = pht('Don\'t Cancel Event');
+        $paragraph = pht(
+          'Cancel this event? You can always reinstate the event later.');
+        $cancel = pht('Back');
         $submit = pht('Cancel Event');
       }
     }

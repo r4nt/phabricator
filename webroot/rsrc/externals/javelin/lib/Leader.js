@@ -34,6 +34,7 @@ JX.install('Leader', {
 
   statics: {
     _interval: null,
+    _timeout: null,
     _broadcastKey: 'JX.Leader.broadcast',
     _leaderKey: 'JX.Leader.id',
 
@@ -63,7 +64,7 @@ JX.install('Leader', {
      */
     start: function() {
       var self = JX.Leader;
-      self.callIfLeader(JX.bag);
+      self.call(JX.bag);
     },
 
     /**
@@ -117,6 +118,10 @@ JX.install('Leader', {
       // Read the current leadership lease.
       var lease = self._read();
 
+      // Stagger these delays so that they are unlikely to race one another.
+      var expire_delay = 50;
+      var usurp_delay = 75;
+
       // If the lease is good, we're all set.
       var now = +new Date();
       if (lease.until > now) {
@@ -132,8 +137,23 @@ JX.install('Leader', {
           self._becomeLeader();
           leader_callback();
         } else {
+
+          // Set a callback to try to become the leader shortly after the
+          // current lease expires. This lets us quickly recover from cases
+          // where the leader goes missing.
+
+          // In particular, this can happen in Safari if you close windows or
+          // quit the browser instead of browsing away: the "pagehide" event
+          // does not fire when the leader is simply destroyed, so it does not
+          // evict itself from the throne of power.
+          if (!self._timeout) {
+            var usurp_at = (lease.until - now) + usurp_delay;
+            self._timeout = window.setTimeout(self._usurp, usurp_at);
+          }
+
           follower_callback();
         }
+
         return;
       }
 
@@ -160,7 +180,7 @@ JX.install('Leader', {
 
       window.setTimeout(
         JX.bind(null, self._callIf, leader_callback, follower_callback),
-        50);
+        expire_delay);
     },
 
 
@@ -284,6 +304,17 @@ JX.install('Leader', {
       self._isLeader = true;
       new JX.Leader().invoke('onBecomeLeader');
     },
+
+
+    /**
+     * Try to usurp leadership position after a lease expiration.
+     */
+    _usurp: function() {
+      var self = JX.Leader;
+      self.call(JX.bag);
+      self._timeout = null;
+    },
+
 
     /**
      * Mark a message as seen.

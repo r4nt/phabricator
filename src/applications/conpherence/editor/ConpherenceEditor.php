@@ -18,10 +18,10 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     array $participant_phids,
     $title,
     $message,
-    PhabricatorContentSource $source) {
+    PhabricatorContentSource $source,
+    $topic) {
 
     $conpherence = ConpherenceThread::initializeNewRoom($creator);
-    $files = array();
     $errors = array();
     if (empty($participant_phids)) {
       $errors[] = self::ERROR_EMPTY_PARTICIPANTS;
@@ -34,30 +34,20 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
       $errors[] = self::ERROR_EMPTY_MESSAGE;
     }
 
-    $file_phids = PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
-      $creator,
-      array($message));
-    if ($file_phids) {
-      $files = id(new PhabricatorFileQuery())
-        ->setViewer($creator)
-        ->withPHIDs($file_phids)
-        ->execute();
-    }
-
     if (!$errors) {
       $xactions = array();
       $xactions[] = id(new ConpherenceTransaction())
         ->setTransactionType(ConpherenceTransaction::TYPE_PARTICIPANTS)
         ->setNewValue(array('+' => $participant_phids));
-      if ($files) {
-        $xactions[] = id(new ConpherenceTransaction())
-          ->setTransactionType(ConpherenceTransaction::TYPE_FILES)
-          ->setNewValue(array('+' => mpull($files, 'getPHID')));
-      }
       if ($title) {
         $xactions[] = id(new ConpherenceTransaction())
           ->setTransactionType(ConpherenceTransaction::TYPE_TITLE)
           ->setNewValue($title);
+      }
+      if (strlen($topic)) {
+        $xactions[] = id(new ConpherenceTransaction())
+          ->setTransactionType(ConpherenceTransaction::TYPE_TOPIC)
+          ->setNewValue($topic);
       }
 
       $xactions[] = id(new ConpherenceTransaction())
@@ -82,27 +72,7 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     ConpherenceThread $conpherence,
     $text) {
 
-    $files = array();
-    $file_phids = PhabricatorMarkupEngine::extractFilePHIDsFromEmbeddedFiles(
-      $viewer,
-      array($text));
-    // Since these are extracted from text, we might be re-including the
-    // same file -- e.g. a mock under discussion. Filter files we
-    // already have.
-    $existing_file_phids = $conpherence->getFilePHIDs();
-    $file_phids = array_diff($file_phids, $existing_file_phids);
-    if ($file_phids) {
-      $files = id(new PhabricatorFileQuery())
-        ->setViewer($this->getActor())
-        ->withPHIDs($file_phids)
-        ->execute();
-    }
     $xactions = array();
-    if ($files) {
-      $xactions[] = id(new ConpherenceTransaction())
-        ->setTransactionType(ConpherenceTransaction::TYPE_FILES)
-        ->setNewValue(array('+' => mpull($files, 'getPHID')));
-    }
     $xactions[] = id(new ConpherenceTransaction())
       ->setTransactionType(PhabricatorTransactions::TYPE_COMMENT)
       ->attachComment(
@@ -118,8 +88,8 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     $types[] = PhabricatorTransactions::TYPE_COMMENT;
 
     $types[] = ConpherenceTransaction::TYPE_TITLE;
+    $types[] = ConpherenceTransaction::TYPE_TOPIC;
     $types[] = ConpherenceTransaction::TYPE_PARTICIPANTS;
-    $types[] = ConpherenceTransaction::TYPE_FILES;
     $types[] = ConpherenceTransaction::TYPE_PICTURE;
     $types[] = ConpherenceTransaction::TYPE_PICTURE_CROP;
     $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
@@ -136,6 +106,8 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     switch ($xaction->getTransactionType()) {
       case ConpherenceTransaction::TYPE_TITLE:
         return $object->getTitle();
+      case ConpherenceTransaction::TYPE_TOPIC:
+        return $object->getTopic();
       case ConpherenceTransaction::TYPE_PICTURE:
         return $object->getImagePHID(ConpherenceImageData::SIZE_ORIG);
       case ConpherenceTransaction::TYPE_PICTURE_CROP:
@@ -145,8 +117,6 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
           return array();
         }
         return $object->getParticipantPHIDs();
-      case ConpherenceTransaction::TYPE_FILES:
-        return $object->getFilePHIDs();
     }
   }
 
@@ -156,13 +126,13 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
     switch ($xaction->getTransactionType()) {
       case ConpherenceTransaction::TYPE_TITLE:
+      case ConpherenceTransaction::TYPE_TOPIC:
       case ConpherenceTransaction::TYPE_PICTURE_CROP:
         return $xaction->getNewValue();
       case ConpherenceTransaction::TYPE_PICTURE:
         $file = $xaction->getNewValue();
         return $file->getPHID();
       case ConpherenceTransaction::TYPE_PARTICIPANTS:
-      case ConpherenceTransaction::TYPE_FILES:
         return $this->getPHIDTransactionNewValue($xaction);
     }
   }
@@ -250,6 +220,9 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
       case ConpherenceTransaction::TYPE_TITLE:
         $object->setTitle($xaction->getNewValue());
         break;
+      case ConpherenceTransaction::TYPE_TOPIC:
+        $object->setTopic($xaction->getNewValue());
+        break;
       case ConpherenceTransaction::TYPE_PICTURE:
         $object->setImagePHID(
           $xaction->getNewValue(),
@@ -322,27 +295,6 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     PhabricatorApplicationTransaction $xaction) {
 
     switch ($xaction->getTransactionType()) {
-      case ConpherenceTransaction::TYPE_FILES:
-        $editor = new PhabricatorEdgeEditor();
-        $edge_type = PhabricatorObjectHasFileEdgeType::EDGECONST;
-        $old = array_fill_keys($xaction->getOldValue(), true);
-        $new = array_fill_keys($xaction->getNewValue(), true);
-        $add_edges = array_keys(array_diff_key($new, $old));
-        $remove_edges = array_keys(array_diff_key($old, $new));
-        foreach ($add_edges as $file_phid) {
-          $editor->addEdge(
-            $object->getPHID(),
-            $edge_type,
-            $file_phid);
-        }
-        foreach ($remove_edges as $file_phid) {
-          $editor->removeEdge(
-            $object->getPHID(),
-            $edge_type,
-            $file_phid);
-        }
-        $editor->save();
-        break;
       case ConpherenceTransaction::TYPE_PARTICIPANTS:
         if ($this->getIsNewObject()) {
           continue;
@@ -422,6 +374,10 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
       $participant->save();
     }
 
+    PhabricatorUserCache::clearCaches(
+      PhabricatorUserMessageCountCacheType::KEY_COUNT,
+      array_keys($participants));
+
     if ($xactions) {
       $data = array(
         'type'        => 'message',
@@ -471,15 +427,8 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
             PhabricatorPolicyCapability::CAN_EDIT);
         }
         break;
-      // This is similar to PhabricatorTransactions::TYPE_COMMENT so
-      // use CAN_VIEW
-      case ConpherenceTransaction::TYPE_FILES:
-        PhabricatorPolicyFilter::requireCapability(
-          $this->requireActor(),
-          $object,
-          PhabricatorPolicyCapability::CAN_VIEW);
-        break;
       case ConpherenceTransaction::TYPE_TITLE:
+      case ConpherenceTransaction::TYPE_TOPIC:
         PhabricatorPolicyFilter::requireCapability(
           $this->requireActor(),
           $object,
@@ -496,7 +445,6 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     switch ($type) {
       case ConpherenceTransaction::TYPE_TITLE:
         return $v;
-      case ConpherenceTransaction::TYPE_FILES:
       case ConpherenceTransaction::TYPE_PARTICIPANTS:
         return $this->mergePHIDOrEdgeTransactions($u, $v);
     }
@@ -533,30 +481,41 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
   protected function getMailTo(PhabricatorLiskDAO $object) {
     $to_phids = array();
+
     $participants = $object->getParticipants();
-    if (empty($participants)) {
+    if (!$participants) {
       return $to_phids;
     }
-    $preferences = id(new PhabricatorUserPreferences())
-      ->loadAllWhere('userPHID in (%Ls)', array_keys($participants));
-    $preferences = mpull($preferences, null, 'getUserPHID');
+
+    $participant_phids = mpull($participants, 'getParticipantPHID');
+
+    $users = id(new PhabricatorPeopleQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withPHIDs($participant_phids)
+      ->needUserSettings(true)
+      ->execute();
+    $users = mpull($users, null, 'getPHID');
+
+    $notification_key = PhabricatorConpherenceNotificationsSetting::SETTINGKEY;
+    $notification_email =
+      PhabricatorConpherenceNotificationsSetting::VALUE_CONPHERENCE_EMAIL;
+
     foreach ($participants as $phid => $participant) {
-      $default = ConpherenceSettings::EMAIL_ALWAYS;
-      $preference = idx($preferences, $phid);
-      if ($preference) {
-        $default = $preference->getPreference(
-          PhabricatorUserPreferences::PREFERENCE_CONPH_NOTIFICATIONS,
-          ConpherenceSettings::EMAIL_ALWAYS);
+      $user = idx($users, $phid);
+      if ($user) {
+        $default = $user->getUserSetting($notification_key);
+      } else {
+        $default = $notification_email;
       }
+
       $settings = $participant->getSettings();
-      $notifications = idx(
-        $settings,
-        'notifications',
-        $default);
-      if ($notifications == ConpherenceSettings::EMAIL_ALWAYS) {
+      $notifications = idx($settings, 'notifications', $default);
+
+      if ($notifications == $notification_email) {
         $to_phids[] = $phid;
       }
     }
+
     return $to_phids;
   }
 
@@ -594,27 +553,22 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
   protected function shouldPublishFeedStory(
     PhabricatorLiskDAO $object,
     array $xactions) {
+
+    foreach ($xactions as $xaction) {
+      switch ($xaction->getTransactionType()) {
+        case ConpherenceTransaction::TYPE_TITLE:
+        case ConpherenceTransaction::TYPE_TOPIC:
+        case ConpherenceTransaction::TYPE_PICTURE:
+          return true;
+        default:
+          return false;
+      }
+    }
     return false;
   }
 
   protected function supportsSearch() {
     return true;
-  }
-
-  protected function getSearchContextParameter(
-    PhabricatorLiskDAO $object,
-    array $xactions) {
-
-    $comment_phids = array();
-    foreach ($xactions as $xaction) {
-      if ($xaction->hasComment()) {
-        $comment_phids[] = $xaction->getPHID();
-      }
-    }
-
-    return array(
-      'commentPHIDs' => $comment_phids,
-    );
   }
 
   protected function extractFilePHIDsFromCustomTransaction(
@@ -623,9 +577,8 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
     switch ($xaction->getTransactionType()) {
       case ConpherenceTransaction::TYPE_PICTURE:
-          return array($xaction->getNewValue()->getPHID());
       case ConpherenceTransaction::TYPE_PICTURE_CROP:
-          return array($xaction->getNewValue());
+        return array($xaction->getNewValue());
     }
 
     return parent::extractFilePHIDsFromCustomTransaction($object, $xaction);

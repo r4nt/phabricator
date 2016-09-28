@@ -8,47 +8,32 @@ final class PhabricatorDatabaseSetupCheck extends PhabricatorSetupCheck {
 
   public function getExecutionOrder() {
     // This must run after basic PHP checks, but before most other checks.
-    return 0.5;
+    return 500;
   }
 
   protected function executeChecks() {
-    $conf = PhabricatorEnv::newObjectFromConfig('mysql.configuration-provider');
-    $conn_user = $conf->getUser();
-    $conn_pass = $conf->getPassword();
-    $conn_host = $conf->getHost();
-    $conn_port = $conf->getPort();
+    $master = PhabricatorDatabaseRef::getMasterDatabaseRef();
+    if (!$master) {
+      // If we're implicitly in read-only mode during disaster recovery,
+      // don't bother with these setup checks.
+      return;
+    }
 
-    ini_set('mysql.connect_timeout', 2);
-
-    $config = array(
-      'user'      => $conn_user,
-      'pass'      => $conn_pass,
-      'host'      => $conn_host,
-      'port'      => $conn_port,
-      'database'  => null,
-    );
-
-    $conn_raw = PhabricatorEnv::newObjectFromConfig(
-      'mysql.implementation',
-      array($config));
+    $conn_raw = $master->newManagementConnection();
 
     try {
       queryfx($conn_raw, 'SELECT 1');
+      $database_exception = null;
+    } catch (AphrontInvalidCredentialsQueryException $ex) {
+      $database_exception = $ex;
     } catch (AphrontConnectionQueryException $ex) {
-      $message = pht(
-        "Unable to connect to MySQL!\n\n".
-        "%s\n\n".
-        "Make sure Phabricator and MySQL are correctly configured.",
-        $ex->getMessage());
+      $database_exception = $ex;
+    }
 
-      $this->newIssue('mysql.connect')
-        ->setName(pht('Can Not Connect to MySQL'))
-        ->setMessage($message)
-        ->setIsFatal(true)
-        ->addRelatedPhabricatorConfig('mysql.host')
-        ->addRelatedPhabricatorConfig('mysql.port')
-        ->addRelatedPhabricatorConfig('mysql.user')
-        ->addRelatedPhabricatorConfig('mysql.pass');
+    if ($database_exception) {
+      $issue = PhabricatorSetupIssue::newDatabaseConnectionIssue(
+        $database_exception);
+      $this->addIssue($issue);
       return;
     }
 
@@ -88,11 +73,8 @@ final class PhabricatorDatabaseSetupCheck extends PhabricatorSetupCheck {
         ->setIsFatal(true)
         ->addCommand(hsprintf('<tt>phabricator/ $</tt> ./bin/storage upgrade'));
     } else {
-
-      $config['database'] = $namespace.'_meta_data';
-      $conn_meta = PhabricatorEnv::newObjectFromConfig(
-        'mysql.implementation',
-        array($config));
+      $conn_meta = $master->newApplicationConnection(
+        $namespace.'_meta_data');
 
       $applied = queryfx_all($conn_meta, 'SELECT patch FROM patch_status');
       $applied = ipull($applied, 'patch', 'patch');
@@ -112,7 +94,6 @@ final class PhabricatorDatabaseSetupCheck extends PhabricatorSetupCheck {
             hsprintf('<tt>phabricator/ $</tt> ./bin/storage upgrade'));
       }
     }
-
 
     $host = PhabricatorEnv::getEnvConfig('mysql.host');
     $matches = null;

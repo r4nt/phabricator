@@ -15,16 +15,15 @@ final class DrydockConsoleController extends DrydockController {
     $nav->addFilter('blueprint', pht('Blueprints'));
     $nav->addFilter('resource', pht('Resources'));
     $nav->addFilter('lease', pht('Leases'));
-    $nav->addFilter('log', pht('Logs'));
+    $nav->addFilter('operation', pht('Repository Operations'));
 
     $nav->selectFilter(null);
 
     return $nav;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
 
     $menu = id(new PHUIObjectItemListView())
       ->setUser($viewer);
@@ -32,6 +31,7 @@ final class DrydockConsoleController extends DrydockController {
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Blueprints'))
+        ->setImageIcon('fa-map-o')
         ->setHref($this->getApplicationURI('blueprint/'))
         ->addAttribute(
           pht(
@@ -41,6 +41,7 @@ final class DrydockConsoleController extends DrydockController {
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Resources'))
+        ->setImageIcon('fa-map')
         ->setHref($this->getApplicationURI('resource/'))
         ->addAttribute(
           pht('View and manage resources Drydock has built, like hosts.')));
@@ -48,27 +49,38 @@ final class DrydockConsoleController extends DrydockController {
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Leases'))
+        ->setImageIcon('fa-link')
         ->setHref($this->getApplicationURI('lease/'))
         ->addAttribute(pht('Manage leases on resources.')));
 
     $menu->addItem(
       id(new PHUIObjectItemView())
-        ->setHeader(pht('Logs'))
-        ->setHref($this->getApplicationURI('log/'))
-        ->addAttribute(pht('View logs.')));
-
+        ->setHeader(pht('Repository Operations'))
+        ->setImageIcon('fa-fighter-jet')
+        ->setHref($this->getApplicationURI('operation/'))
+        ->addAttribute(pht('Review the repository operation queue.')));
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Console'));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $menu,
-      ),
-      array(
-        'title'  => pht('Drydock Console'),
-      ));
+    $box = id(new PHUIObjectBoxView())
+      ->setObjectList($menu);
+
+    $title = pht('Drydock Console');
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-truck');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

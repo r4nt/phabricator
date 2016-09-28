@@ -37,6 +37,7 @@ final class PhabricatorConduitSearchEngine
     $query->withIsStable($saved->getParameter('isStable'));
     $query->withIsUnstable($saved->getParameter('isUnstable'));
     $query->withIsDeprecated($saved->getParameter('isDeprecated'));
+    $query->withIsInternal(false);
 
     $names = $saved->getParameter('applicationNames', array());
     if ($names) {
@@ -159,6 +160,7 @@ final class PhabricatorConduitSearchEngine
           $out[] = $list;
         }
         $list = id(new PHUIObjectItemListView());
+        $list->setHeader($app);
 
         $app_object = $method->getApplication();
         if ($app_object) {
@@ -173,18 +175,18 @@ final class PhabricatorConduitSearchEngine
       $item = id(new PHUIObjectItemView())
         ->setHeader($method_name)
         ->setHref($this->getApplicationURI('method/'.$method_name.'/'))
-        ->addAttribute($method->getMethodDescription());
+        ->addAttribute($method->getMethodSummary());
 
       switch ($method->getMethodStatus()) {
         case ConduitAPIMethod::METHOD_STATUS_STABLE:
           break;
         case ConduitAPIMethod::METHOD_STATUS_UNSTABLE:
-          $item->addIcon('warning-grey', pht('Unstable'));
-          $item->setBarColor('yellow');
+          $item->addIcon('fa-warning', pht('Unstable'));
+          $item->setStatusIcon('fa-warning yellow');
           break;
         case ConduitAPIMethod::METHOD_STATUS_DEPRECATED:
-          $item->addIcon('warning', pht('Deprecated'));
-          $item->setBarColor('red');
+          $item->addIcon('fa-warning', pht('Deprecated'));
+          $item->setStatusIcon('fa-warning red');
           break;
       }
 
@@ -195,7 +197,10 @@ final class PhabricatorConduitSearchEngine
       $out[] = $list;
     }
 
-    return $out;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setContent($out);
+
+    return $result;
   }
 
 }

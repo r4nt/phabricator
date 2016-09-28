@@ -9,7 +9,9 @@ final class PHUIRemarkupPreviewPanel extends AphrontTagView {
   private $loadingText;
   private $controlID;
   private $previewURI;
-  private $skin = 'default';
+  private $previewType;
+
+  const DOCUMENT = 'document';
 
   protected function canAppendChild() {
     return false;
@@ -35,21 +37,8 @@ final class PHUIRemarkupPreviewPanel extends AphrontTagView {
     return $this;
   }
 
-  public function setSkin($skin) {
-    static $skins = array(
-      'default' => true,
-      'document' => true,
-    );
-
-    if (empty($skins[$skin])) {
-      throw new Exception(
-        pht(
-          "Invalid skin '%s'. Valid skins are: %s.",
-          $skin,
-          implode(', ', array_keys($skins))));
-    }
-
-    $this->skin = $skin;
+  public function setPreviewType($type) {
+    $this->previewType = $type;
     return $this;
   }
 
@@ -60,10 +49,6 @@ final class PHUIRemarkupPreviewPanel extends AphrontTagView {
   protected function getTagAttributes() {
     $classes = array();
     $classes[] = 'phui-remarkup-preview';
-
-    if ($this->skin) {
-      $classes[] = 'phui-remarkup-preview-skin-'.$this->skin;
-    }
 
     return array(
       'class' => $classes,
@@ -96,43 +81,38 @@ final class PHUIRemarkupPreviewPanel extends AphrontTagView {
       ),
       nonempty($this->loadingText, pht('Loading preview...')));
 
-    $header = null;
-    if ($this->header) {
-      $header = phutil_tag(
-        'div',
-        array(
-          'class' => 'phui-preview-header',
-        ),
-        $this->header);
-    }
-
     $preview = phutil_tag(
       'div',
       array(
         'id' => $preview_id,
-        'class' => 'phabricator-remarkup',
+        'class' => 'phabricator-remarkup phui-preview-body',
       ),
       $loading);
 
-    $content = array($header, $preview);
+    if (!$this->previewType) {
+      $header = null;
+      if ($this->header) {
+        $header = phutil_tag(
+          'div',
+          array(
+            'class' => 'phui-preview-header',
+          ),
+          $this->header);
+      }
+      $content = array($header, $preview);
 
-    switch ($this->skin) {
-      case 'document':
-        $content = id(new PHUIDocumentView())
-          ->appendChild($content)
-          ->setFontKit(PHUIDocumentView::FONT_SOURCE_SANS);
-        break;
-      default:
-        $content = id(new PHUIBoxView())
-          ->appendChild($content)
-          ->setBorder(true)
-          ->addMargin(PHUI::MARGIN_LARGE)
-          ->addPadding(PHUI::PADDING_LARGE)
-          ->addClass('phui-panel-preview');
-        break;
+    } else if ($this->previewType == self::DOCUMENT) {
+      $header = id(new PHUIHeaderView())
+        ->setHeader(pht('%s (Preview)', $this->header));
+
+      $content = id(new PHUIDocumentViewPro())
+        ->setHeader($header)
+        ->appendChild($preview);
     }
 
-    return $content;
+    return id(new PHUIObjectBoxView())
+      ->appendChild($content)
+      ->setCollapsed(true);
   }
 
 }

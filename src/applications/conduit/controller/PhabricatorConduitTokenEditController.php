@@ -5,8 +5,8 @@ final class PhabricatorConduitTokenEditController
 
   public function handleRequest(AphrontRequest $request) {
     $viewer = $request->getViewer();
-
     $id = $request->getURIData('id');
+
     if ($id) {
       $token = id(new PhabricatorConduitTokenQuery())
         ->setViewer($viewer)
@@ -49,11 +49,10 @@ final class PhabricatorConduitTokenEditController
       $submit_button = pht('Generate Token');
     }
 
-    if ($viewer->getPHID() == $object->getPHID()) {
-      $panel_uri = '/settings/panel/apitokens/';
-    } else {
-      $panel_uri = '/settings/'.$object->getID().'/panel/apitokens/';
-    }
+    $panel_uri = id(new PhabricatorConduitTokensSettingsPanel())
+      ->setViewer($viewer)
+      ->setUser($object)
+      ->getPanelURI();
 
     id(new PhabricatorAuthSessionEngine())->requireHighSecuritySession(
       $viewer,

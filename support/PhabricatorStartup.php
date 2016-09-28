@@ -34,6 +34,7 @@
  * @task apocalypse   In Case Of Apocalypse
  * @task validation   Validation
  * @task ratelimit    Rate Limiting
+ * @task phases       Startup Phase Timers
  */
 final class PhabricatorStartup {
 
@@ -43,6 +44,7 @@ final class PhabricatorStartup {
   private static $capturingOutput;
   private static $rawInput;
   private static $oldMemoryLimit;
+  private static $phases;
 
   // TODO: For now, disable rate limiting entirely by default. We need to
   // iterate on it a bit for Conduit, some of the specific score levels, and
@@ -81,6 +83,26 @@ final class PhabricatorStartup {
    * @task info
    */
   public static function getRawInput() {
+    if (self::$rawInput === null) {
+      $stream = new AphrontRequestStream();
+
+      if (isset($_SERVER['HTTP_CONTENT_ENCODING'])) {
+        $encoding = trim($_SERVER['HTTP_CONTENT_ENCODING']);
+        $stream->setEncoding($encoding);
+      }
+
+      $input = '';
+      do {
+        $bytes = $stream->readData();
+        if ($bytes === null) {
+          break;
+        }
+        $input .= $bytes;
+      } while (true);
+
+      self::$rawInput = $input;
+    }
+
     return self::$rawInput;
   }
 
@@ -89,10 +111,14 @@ final class PhabricatorStartup {
 
 
   /**
+   * @param float Request start time, from `microtime(true)`.
    * @task hook
    */
-  public static function didStartup() {
-    self::$startTime = microtime(true);
+  public static function didStartup($start_time) {
+    self::$startTime = $start_time;
+
+    self::$phases = array();
+
     self::$accessLog = null;
 
     static $registered;
@@ -122,8 +148,6 @@ final class PhabricatorStartup {
     self::detectPostMaxSizeTriggered();
 
     self::beginOutputCapture();
-
-    self::$rawInput = (string)file_get_contents('php://input');
   }
 
 
@@ -350,7 +374,7 @@ final class PhabricatorStartup {
       $http_error = 500);
 
     error_log($log_message);
-    echo $message;
+    echo $message."\n";
 
     exit(1);
   }
@@ -504,6 +528,13 @@ final class PhabricatorStartup {
           "cause Phabricator to fatal unrecoverably with nonsense errors). ".
           "Downgrade to version 3.1.13.");
       }
+    }
+
+    if (isset($_SERVER['HTTP_PROXY'])) {
+      self::didFatal(
+        'This HTTP request included a "Proxy:" header, poisoning the '.
+        'environment (CVE-2016-5385 / httpoxy). Declining to process this '.
+        'request. For details, see: https://phurl.io/u/httpoxy');
     }
   }
 
@@ -852,6 +883,60 @@ final class PhabricatorStartup {
     echo $message;
 
     exit(1);
+  }
+
+
+/* -(  Startup Timers  )----------------------------------------------------- */
+
+
+  /**
+   * Record the beginning of a new startup phase.
+   *
+   * For phases which occur before @{class:PhabricatorStartup} loads, save the
+   * time and record it with @{method:recordStartupPhase} after the class is
+   * available.
+   *
+   * @param string Phase name.
+   * @task phases
+   */
+  public static function beginStartupPhase($phase) {
+    self::recordStartupPhase($phase, microtime(true));
+  }
+
+
+  /**
+   * Record the start time of a previously executed startup phase.
+   *
+   * For startup phases which occur after @{class:PhabricatorStartup} loads,
+   * use @{method:beginStartupPhase} instead. This method can be used to
+   * record a time before the class loads, then hand it over once the class
+   * becomes available.
+   *
+   * @param string Phase name.
+   * @param float Phase start time, from `microtime(true)`.
+   * @task phases
+   */
+  public static function recordStartupPhase($phase, $time) {
+    self::$phases[$phase] = $time;
+  }
+
+
+  /**
+   * Get information about startup phase timings.
+   *
+   * Sometimes, performance problems can occur before we start the profiler.
+   * Since the profiler can't examine these phases, it isn't useful in
+   * understanding their performance costs.
+   *
+   * Instead, the startup process marks when it enters various phases using
+   * @{method:beginStartupPhase}. A later call to this method can retrieve this
+   * information, which can be examined to gain greater insight into where
+   * time was spent. The output is still crude, but better than nothing.
+   *
+   * @task phases
+   */
+  public static function getPhases() {
+    return self::$phases;
   }
 
 }

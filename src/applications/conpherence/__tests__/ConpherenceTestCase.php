@@ -7,13 +7,14 @@ abstract class ConpherenceTestCase extends PhabricatorTestCase {
     ConpherenceThread $conpherence,
     array $participant_phids) {
 
-    $xactions = array(id(new ConpherenceTransaction())
-      ->setTransactionType(ConpherenceTransaction::TYPE_PARTICIPANTS)
-      ->setNewValue(array('+' => $participant_phids)),
+    $xactions = array(
+      id(new ConpherenceTransaction())
+        ->setTransactionType(ConpherenceTransaction::TYPE_PARTICIPANTS)
+        ->setNewValue(array('+' => $participant_phids)),
     );
     $editor = id(new ConpherenceEditor())
       ->setActor($actor)
-      ->setContentSource(PhabricatorContentSource::newConsoleSource())
+      ->setContentSource($this->newContentSource())
       ->applyTransactions($conpherence, $xactions);
 
   }
@@ -23,13 +24,14 @@ abstract class ConpherenceTestCase extends PhabricatorTestCase {
     ConpherenceThread $conpherence,
     array $participant_phids) {
 
-    $xactions = array(id(new ConpherenceTransaction())
-      ->setTransactionType(ConpherenceTransaction::TYPE_PARTICIPANTS)
-      ->setNewValue(array('-' => $participant_phids)),
+    $xactions = array(
+      id(new ConpherenceTransaction())
+        ->setTransactionType(ConpherenceTransaction::TYPE_PARTICIPANTS)
+        ->setNewValue(array('-' => $participant_phids)),
     );
     $editor = id(new ConpherenceEditor())
       ->setActor($actor)
-      ->setContentSource(PhabricatorContentSource::newConsoleSource())
+      ->setContentSource($this->newContentSource())
       ->applyTransactions($conpherence, $xactions);
   }
 
@@ -43,7 +45,7 @@ abstract class ConpherenceTestCase extends PhabricatorTestCase {
 
     $editor = id(new ConpherenceEditor())
       ->setActor($actor)
-      ->setContentSource(PhabricatorContentSource::newConsoleSource());
+      ->setContentSource($this->newContentSource());
 
     $xactions = $editor->generateTransactionsFromText(
       $actor,

@@ -11,9 +11,10 @@ final class PhabricatorTypeaheadFunctionHelpController
     $viewer = $this->getViewer();
     $class = $request->getURIData('class');
 
-    $sources = id(new PhutilSymbolLoader())
+    $sources = id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorTypeaheadDatasource')
-      ->loadObjects();
+      ->execute();
+
     if (!isset($sources[$class])) {
       return new Aphront404Response();
     }
@@ -120,31 +121,23 @@ final class PhabricatorTypeaheadFunctionHelpController
     }
 
     $content = implode("\n\n", $content);
-
-    $content_box = PhabricatorMarkupEngine::renderOneObject(
-      id(new PhabricatorMarkupOneOff())->setContent($content),
-      'default',
-      $viewer);
+    $content_box = new PHUIRemarkupView($viewer, $content);
 
     $header = id(new PHUIHeaderView())
       ->setHeader($title);
 
-    $document = id(new PHUIDocumentView())
+    $document = id(new PHUIDocumentViewPro())
       ->setHeader($header)
-      ->setFontKit(PHUIDocumentView::FONT_SOURCE_SANS)
       ->appendChild($content_box);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Function Help'));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $document,
-      ),
-      array(
-        'title' => $title,
-      ));
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($document);
   }
 
 }

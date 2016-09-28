@@ -3,7 +3,11 @@
 final class PhabricatorConduitTokensSettingsPanel
   extends PhabricatorSettingsPanel {
 
-  public function isEditableByAdministrators() {
+  public function isManagementPanel() {
+    if ($this->getUser()->getIsMailingList()) {
+      return false;
+    }
+
     return true;
   }
 
@@ -15,15 +19,11 @@ final class PhabricatorConduitTokensSettingsPanel
     return pht('Conduit API Tokens');
   }
 
-  public function getPanelGroup() {
-    return pht('Sessions and Logs');
+  public function getPanelGroupKey() {
+    return PhabricatorSettingsLogsPanelGroup::PANELGROUPKEY;
   }
 
   public function isEnabled() {
-    if ($this->getUser()->getIsMailingList()) {
-      return false;
-    }
-
     return true;
   }
 
@@ -87,23 +87,19 @@ final class PhabricatorConduitTokensSettingsPanel
         'action',
       ));
 
-    $generate_icon = id(new PHUIIconView())
-      ->setIconFont('fa-plus');
     $generate_button = id(new PHUIButtonView())
       ->setText(pht('Generate API Token'))
       ->setHref('/conduit/token/edit/?objectPHID='.$user->getPHID())
       ->setTag('a')
       ->setWorkflow(true)
-      ->setIcon($generate_icon);
+      ->setIcon('fa-plus');
 
-    $terminate_icon = id(new PHUIIconView())
-      ->setIconFont('fa-exclamation-triangle');
     $terminate_button = id(new PHUIButtonView())
       ->setText(pht('Terminate All Tokens'))
       ->setHref('/conduit/token/terminate/?objectPHID='.$user->getPHID())
       ->setTag('a')
       ->setWorkflow(true)
-      ->setIcon($terminate_icon);
+      ->setIcon('fa-exclamation-triangle');
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Active API Tokens'))
@@ -112,7 +108,7 @@ final class PhabricatorConduitTokensSettingsPanel
 
     $panel = id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setTable($table);
 
     return $panel;
   }

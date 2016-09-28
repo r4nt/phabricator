@@ -3,19 +3,13 @@
 final class ReleephRequestViewController
   extends ReleephBranchController {
 
-  private $requestID;
-
-  public function willProcessRequest(array $data) {
-    $this->requestID = $data['requestID'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $id = $request->getURIData('requestID');
+    $viewer = $request->getViewer();
 
     $pull = id(new ReleephRequestQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->requestID))
+      ->withIDs(array($id))
       ->executeOne();
     if (!$pull) {
       return new Aphront404Response();
@@ -82,18 +76,25 @@ final class ReleephRequestViewController
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($pull->getMonogram(), '/'.$pull->getMonogram());
+    $crumbs->setBorder(true);
 
-    return $this->buildStandardPageResponse(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-flag-checkered');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $pull_box,
         $timeline,
         $add_comment_form,
-      ),
-      array(
-        'title' => $title,
-        'device' => true,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
 

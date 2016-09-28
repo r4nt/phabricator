@@ -2,7 +2,10 @@
 
 final class PhabricatorAuthSSHKey
   extends PhabricatorAuthDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface,
+    PhabricatorApplicationTransactionInterface {
 
   protected $objectPHID;
   protected $name;
@@ -11,11 +14,31 @@ final class PhabricatorAuthSSHKey
   protected $keyBody;
   protected $keyComment = '';
   protected $isTrusted = 0;
+  protected $isActive;
 
   private $object = self::ATTACHABLE;
 
+  public static function initializeNewSSHKey(
+    PhabricatorUser $viewer,
+    PhabricatorSSHPublicKeyInterface $object) {
+
+    // You must be able to edit an object to create a new key on it.
+    PhabricatorPolicyFilter::requireCapability(
+      $viewer,
+      $object,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $object_phid = $object->getPHID();
+
+    return id(new self())
+      ->setIsActive(1)
+      ->setObjectPHID($object_phid)
+      ->attachObject($object);
+  }
+
   protected function getConfiguration() {
     return array(
+      self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
         'name' => 'text255',
         'keyType' => 'text255',
@@ -23,13 +46,19 @@ final class PhabricatorAuthSSHKey
         'keyBody' => 'text',
         'keyComment' => 'text255',
         'isTrusted' => 'bool',
+        'isActive' => 'bool?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_object' => array(
           'columns' => array('objectPHID'),
         ),
-        'key_unique' => array(
-          'columns' => array('keyIndex'),
+        'key_active' => array(
+          'columns' => array('isActive', 'objectPHID'),
+        ),
+        // NOTE: This unique key includes a nullable column, effectively
+        // constraining uniqueness on active keys only.
+        'key_activeunique' => array(
+          'columns' => array('keyIndex', 'isActive'),
           'unique' => true,
         ),
       ),
@@ -39,6 +68,12 @@ final class PhabricatorAuthSSHKey
   public function save() {
     $this->setKeyIndex($this->toPublicKey()->getHash());
     return parent::save();
+  }
+
+  public function getMailKey() {
+    // NOTE: We don't actually receive mail for these objects. It's OK for
+    // the mail key to be predictable until we do.
+    return PhabricatorHash::digestForIndex($this->getPHID());
   }
 
   public function toPublicKey() {
@@ -63,8 +98,15 @@ final class PhabricatorAuthSSHKey
     return $this;
   }
 
+  public function generatePHID() {
+    return PhabricatorPHID::generateNewPHID(
+      PhabricatorAuthSSHKeyPHIDType::TYPECONST);
+  }
 
-
+  public function getURI() {
+    $id = $this->getID();
+    return "/auth/sshkey/view/{$id}/";
+  }
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -77,16 +119,64 @@ final class PhabricatorAuthSSHKey
   }
 
   public function getPolicy($capability) {
+    if (!$this->getIsActive()) {
+      if ($capability == PhabricatorPolicyCapability::CAN_EDIT) {
+        return PhabricatorPolicies::POLICY_NOONE;
+      }
+    }
+
     return $this->getObject()->getPolicy($capability);
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
+    if (!$this->getIsActive()) {
+      return false;
+    }
+
     return $this->getObject()->hasAutomaticCapability($capability, $viewer);
   }
 
   public function describeAutomaticCapability($capability) {
+    if (!$this->getIsACtive()) {
+      return pht(
+        'Deactivated SSH keys can not be edited or reactivated.');
+    }
+
     return pht(
       'SSH keys inherit the policies of the user or object they authenticate.');
+  }
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+    $this->delete();
+    $this->saveTransaction();
+  }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PhabricatorAuthSSHKeyEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PhabricatorAuthSSHKeyTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+    return $timeline;
   }
 
 }

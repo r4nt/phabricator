@@ -8,7 +8,8 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
     PhabricatorFlaggableInterface,
     PhabricatorTokenReceiverInterface,
     PhabricatorProjectInterface,
-    PhabricatorDestructibleInterface {
+    PhabricatorDestructibleInterface,
+    PhabricatorSpacesInterface {
 
   const RESPONSES_VISIBLE = 0;
   const RESPONSES_VOTERS  = 1;
@@ -23,8 +24,10 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
   protected $responseVisibility;
   protected $shuffle;
   protected $method;
+  protected $mailKey;
   protected $viewPolicy;
   protected $isClosed = 0;
+  protected $spacePHID;
 
   private $options = self::ATTACHABLE;
   private $choices = self::ATTACHABLE;
@@ -41,7 +44,8 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
 
     return id(new PhabricatorSlowvotePoll())
       ->setAuthorPHID($actor->getPHID())
-      ->setViewPolicy($view_policy);
+      ->setViewPolicy($view_policy)
+      ->setSpacePHID($actor->getDefaultSpacePHID());
   }
 
   protected function getConfiguration() {
@@ -54,6 +58,7 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
         'method' => 'uint32',
         'description' => 'text',
         'isClosed' => 'bool',
+        'mailKey' => 'bytes20',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_phid' => null,
@@ -101,6 +106,17 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
     assert_instances_of($choices, 'PhabricatorSlowvoteChoice');
     $this->viewerChoices[$viewer->getPHID()] = $choices;
     return $this;
+  }
+
+  public function getMonogram() {
+    return 'V'.$this->getID();
+  }
+
+  public function save() {
+    if (!$this->getMailKey()) {
+      $this->setMailKey(Filesystem::readRandomCharacters(20));
+    }
+    return parent::save();
   }
 
 
@@ -163,14 +179,6 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
     return ($phid == $this->getAuthorPHID());
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
-  }
-
 
 /* -(  PhabricatorTokenReceiverInterface  )---------------------------------- */
 
@@ -199,6 +207,12 @@ final class PhabricatorSlowvotePoll extends PhabricatorSlowvoteDAO
       }
       $this->delete();
     $this->saveTransaction();
+  }
+
+  /* -(  PhabricatorSpacesInterface  )--------------------------------------- */
+
+  public function getSpacePHID() {
+    return $this->spacePHID;
   }
 
 }

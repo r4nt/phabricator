@@ -2,20 +2,12 @@
 
 final class DifferentialRevisionLandController extends DifferentialController {
 
-  private $revisionID;
-  private $strategyClass;
   private $pushStrategy;
 
-  public function willProcessRequest(array $data) {
-    $this->revisionID = $data['id'];
-    $this->strategyClass = $data['strategy'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    $revision_id = $this->revisionID;
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $revision_id = $request->getURIData('id');
+    $strategy_class = $request->getURIData('strategy');
 
     $revision = id(new DifferentialRevisionQuery())
       ->withIDs(array($revision_id))
@@ -25,15 +17,15 @@ final class DifferentialRevisionLandController extends DifferentialController {
       return new Aphront404Response();
     }
 
-    if (is_subclass_of($this->strategyClass, 'DifferentialLandingStrategy')) {
-      $this->pushStrategy = newv($this->strategyClass, array());
+    if (is_subclass_of($strategy_class, 'DifferentialLandingStrategy')) {
+      $this->pushStrategy = newv($strategy_class, array());
     } else {
       throw new Exception(
         pht(
           "Strategy type must be a valid class name and must subclass ".
           "%s. '%s' is not a subclass of %s",
           'DifferentialLandingStrategy',
-          $this->strategyClass,
+          $strategy_class,
           'DifferentialLandingStrategy'));
     }
 
@@ -147,7 +139,7 @@ final class DifferentialRevisionLandController extends DifferentialController {
     $looksoon = new ConduitCall(
       'diffusion.looksoon',
       array(
-        'callsigns' => array($repository->getCallsign()),
+        'repositories' => array($repository->getPHID()),
       ));
     $looksoon->setUser($request->getUser());
     $looksoon->execute();
@@ -156,7 +148,7 @@ final class DifferentialRevisionLandController extends DifferentialController {
   }
 
   private function lockRepository($repository) {
-    $lock_name = __CLASS__.':'.($repository->getCallsign());
+    $lock_name = __CLASS__.':'.($repository->getPHID());
     $lock = PhabricatorGlobalLock::newLock($lock_name);
     $lock->lock();
     return $lock;

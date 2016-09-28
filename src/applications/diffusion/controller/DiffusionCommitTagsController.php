@@ -6,25 +6,24 @@ final class DiffusionCommitTagsController extends DiffusionController {
     return true;
   }
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContext();
+    if ($response) {
+      return $response;
+    }
+
     $drequest = $this->getDiffusionRequest();
     $repository = $drequest->getRepository();
 
     $tag_limit = 10;
-    switch ($repository->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-        $tags = array();
-        break;
-      default:
-        $tags = DiffusionRepositoryTag::newFromConduit(
-          $this->callConduitWithDiffusionRequest(
-            'diffusion.tagsquery',
-            array(
-              'commit' => $drequest->getCommit(),
-              'limit' => $tag_limit + 1,
-            )));
-        break;
-    }
+    $tags = DiffusionRepositoryTag::newFromConduit(
+      $this->callConduitWithDiffusionRequest(
+        'diffusion.tagsquery',
+        array(
+          'commit' => $drequest->getCommit(),
+          'limit' => $tag_limit + 1,
+        )));
+
     $has_more_tags = (count($tags) > $tag_limit);
     $tags = array_slice($tags, 0, $tag_limit);
 

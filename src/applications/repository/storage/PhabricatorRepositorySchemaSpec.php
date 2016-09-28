@@ -8,20 +8,6 @@ final class PhabricatorRepositorySchemaSpec
 
     $this->buildRawSchema(
       id(new PhabricatorRepository())->getApplicationName(),
-      PhabricatorRepository::TABLE_BADCOMMIT,
-      array(
-        'fullCommitName' => 'text64',
-        'description' => 'text',
-      ),
-      array(
-        'PRIMARY' => array(
-          'columns' => array('fullCommitName'),
-          'unique' => true,
-        ),
-      ));
-
-    $this->buildRawSchema(
-      id(new PhabricatorRepository())->getApplicationName(),
       PhabricatorRepository::TABLE_COVERAGE,
       array(
         'id' => 'auto',
@@ -37,6 +23,7 @@ final class PhabricatorRepositorySchemaSpec
         ),
         'key_path' => array(
           'columns' => array('branchID', 'pathID', 'commitID'),
+          'unique' => true,
         ),
       ));
 

@@ -12,6 +12,8 @@ abstract class PhabricatorInlineCommentController
     PhabricatorInlineCommentInterface $inline);
   abstract protected function deleteComment(
     PhabricatorInlineCommentInterface $inline);
+  abstract protected function undeleteComment(
+    PhabricatorInlineCommentInterface $inline);
   abstract protected function saveComment(
     PhabricatorInlineCommentInterface $inline);
 
@@ -92,6 +94,19 @@ abstract class PhabricatorInlineCommentController
 
     $op = $this->getOperation();
     switch ($op) {
+      case 'busy':
+        if ($request->isFormPost()) {
+          return new AphrontAjaxResponse();
+        }
+
+        return $this->newDialog()
+          ->setTitle(pht('Already Editing'))
+          ->appendParagraph(
+            pht(
+              'You are already editing an inline comment. Finish editing '.
+              'your current comment before adding new comments.'))
+          ->addCancelButton('/')
+          ->addSubmitButton(pht('Jump to Inline'));
       case 'hide':
       case 'show':
         if (!$request->validateCSRF()) {
@@ -167,7 +182,12 @@ abstract class PhabricatorInlineCommentController
         $is_delete = ($op == 'delete' || $op == 'refdelete');
 
         $inline = $this->loadCommentForEdit($this->getCommentID());
-        $inline->setIsDeleted((int)$is_delete)->save();
+
+        if ($is_delete) {
+          $this->deleteComment($inline);
+        } else {
+          $this->undeleteComment($inline);
+        }
 
         return $this->buildEmptyResponse();
       case 'edit':
@@ -285,13 +305,18 @@ abstract class PhabricatorInlineCommentController
           pht('Failed to load comment "%s".', $reply_phid));
       }
 
-      // NOTE: It's fine to reply to a comment from a different changeset, so
-      // the reply comment may not appear on the same changeset that the new
-      // comment appears on. This is expected in the case of ghost comments.
-      // We currently put the new comment on the visible changeset, not the
-      // original comment's changeset.
+      // When replying, force the new comment into the same location as the
+      // old comment. If we don't do this, replying to a ghost comment from
+      // diff A while viewing diff B can end up placing the two comments in
+      // different places while viewing diff C, because the porting algorithm
+      // makes a different decision. Forcing the comments to bind to the same
+      // place makes sure they stick together no matter which diff is being
+      // viewed. See T10562 for discussion.
 
+      $this->changesetID = $reply_comment->getChangesetID();
       $this->isNewFile = $reply_comment->getIsNewFile();
+      $this->lineNumber = $reply_comment->getLineNumber();
+      $this->lineLength = $reply_comment->getLineLength();
     }
   }
 

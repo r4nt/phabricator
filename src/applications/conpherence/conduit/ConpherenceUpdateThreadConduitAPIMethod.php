@@ -29,14 +29,13 @@ final class ConpherenceUpdateThreadConduitAPIMethod
   protected function defineErrorTypes() {
     return array(
       'ERR_USAGE_NO_ROOM_ID' => pht(
-        'You must specify a room id or room phid to query transactions '.
-        'from.'),
+        'You must specify a room ID or room PHID to query transactions from.'),
       'ERR_USAGE_ROOM_NOT_FOUND' => pht(
-        'room does not exist or logged in user can not see it.'),
+        'Room does not exist or logged in user can not see it.'),
       'ERR_USAGE_ONLY_SELF_REMOVE' => pht(
         'Only a user can remove themselves from a room.'),
       'ERR_USAGE_NO_UPDATES' => pht(
-        'You must specify data that actually updates the conpherence.'),
+        'You must specify data that actually updates the Conpherence.'),
     );
   }
 
@@ -45,8 +44,7 @@ final class ConpherenceUpdateThreadConduitAPIMethod
     $id = $request->getValue('id');
     $phid = $request->getValue('phid');
     $query = id(new ConpherenceThreadQuery())
-      ->setViewer($user)
-      ->needFilePHIDs(true);
+      ->setViewer($user);
     if ($id) {
       $query->withIDs(array($id));
     } else if ($phid) {
@@ -59,7 +57,7 @@ final class ConpherenceUpdateThreadConduitAPIMethod
       throw new ConduitException('ERR_USAGE_ROOM_NOT_FOUND');
     }
 
-    $source = PhabricatorContentSource::newFromConduitRequest($request);
+    $source = $request->newContentSource();
     $editor = id(new ConpherenceEditor())
       ->setContentSource($source)
       ->setActor($user);

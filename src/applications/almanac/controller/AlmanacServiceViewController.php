@@ -15,6 +15,7 @@ final class AlmanacServiceViewController
     $service = id(new AlmanacServiceQuery())
       ->setViewer($viewer)
       ->withNames(array($name))
+      ->needProperties(true)
       ->executeOne();
     if (!$service) {
       return new Aphront404Response();
@@ -22,88 +23,91 @@ final class AlmanacServiceViewController
 
     $title = pht('Service %s', $service->getName());
 
-    $property_list = $this->buildPropertyList($service);
-    $action_list = $this->buildActionList($service);
-    $property_list->setActionList($action_list);
+    $curtain = $this->buildCurtain($service);
+    $details = $this->buildPropertySection($service);
 
     $header = id(new PHUIHeaderView())
       ->setUser($viewer)
       ->setHeader($service->getName())
-      ->setPolicyObject($service);
+      ->setPolicyObject($service)
+      ->setHeaderIcon('fa-plug');
 
-    $box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->addPropertyList($property_list);
-
-    $messages = $service->getServiceType()->getStatusMessages($service);
-    if ($messages) {
-      $box->setFormErrors($messages);
-    }
-
-    if ($service->getIsLocked()) {
-      $this->addLockMessage(
-        $box,
-        pht('This service is locked, and can not be edited.'));
+    $issue = null;
+    if ($service->isClusterService()) {
+      $issue = $this->addClusterMessage(
+        pht('This is a cluster service.'),
+        pht(
+          'This service is a cluster service. You do not have permission to '.
+          'edit cluster services, so you can not edit this service.'));
     }
 
     $bindings = $this->buildBindingList($service);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($service->getName());
+    $crumbs->setBorder(true);
 
     $timeline = $this->buildTransactionTimeline(
       $service,
       new AlmanacServiceTransactionQuery());
     $timeline->setShouldTerminate(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
-        $bindings,
-        $this->buildAlmanacPropertiesTable($service),
-        $timeline,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+          $issue,
+          $details,
+          $bindings,
+          $this->buildAlmanacPropertiesTable($service),
+          $timeline,
+        ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
-  private function buildPropertyList(AlmanacService $service) {
+  private function buildPropertySection(
+    AlmanacService $service) {
     $viewer = $this->getViewer();
 
     $properties = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setObject($service);
+      ->setUser($viewer);
 
     $properties->addProperty(
       pht('Service Type'),
-      $service->getServiceType()->getServiceTypeShortName());
+      $service->getServiceImplementation()->getServiceTypeShortName());
 
-    return $properties;
+    return id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Details'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->appendChild($properties);
   }
 
-  private function buildActionList(AlmanacService $service) {
+  private function buildCurtain(AlmanacService $service) {
     $viewer = $this->getViewer();
-    $id = $service->getID();
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
       $service,
       PhabricatorPolicyCapability::CAN_EDIT);
 
-    $actions = id(new PhabricatorActionListView())
-      ->setUser($viewer);
+    $id = $service->getID();
+    $edit_uri = $this->getApplicationURI("service/edit/{$id}/");
 
-    $actions->addAction(
+    $curtain = $this->newCurtainView($service);
+
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setIcon('fa-pencil')
         ->setName(pht('Edit Service'))
-        ->setHref($this->getApplicationURI("service/edit/{$id}/"))
+        ->setHref($edit_uri)
         ->setWorkflow(!$can_edit)
         ->setDisabled(!$can_edit));
 
-    return $actions;
+    return $curtain;
   }
 
   private function buildBindingList(AlmanacService $service) {
@@ -124,7 +128,8 @@ final class AlmanacServiceViewController
       ->setNoDataString(
         pht('This service has not been bound to any device interfaces yet.'))
       ->setUser($viewer)
-      ->setBindings($bindings);
+      ->setBindings($bindings)
+      ->setHideServiceColumn(true);
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Service Bindings'))
@@ -135,13 +140,12 @@ final class AlmanacServiceViewController
           ->setWorkflow(!$can_edit)
           ->setDisabled(!$can_edit)
           ->setText(pht('Add Binding'))
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-plus')));
+          ->setIcon('fa-plus'));
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($table);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($table);
   }
 
 }

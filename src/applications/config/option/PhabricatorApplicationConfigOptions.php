@@ -7,7 +7,7 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
   abstract public function getGroup();
   abstract public function getOptions();
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-sliders';
   }
 
@@ -21,7 +21,14 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
     }
 
     if ($option->isCustomType()) {
-      return $option->getCustomObject()->validateOption($option, $value);
+      try {
+        return $option->getCustomObject()->validateOption($option, $value);
+      } catch (Exception $ex) {
+        // If custom validators threw exceptions, convert them to configuation
+        // validation exceptions so we repair the configuration and raise
+        // an error.
+        throw new PhabricatorConfigValidationException($ex->getMessage());
+      }
     }
 
     switch ($option->getType()) {
@@ -227,7 +234,7 @@ abstract class PhabricatorApplicationConfigOptions extends Phobject {
         if (isset($options[$key])) {
           throw new Exception(
             pht(
-              "Mulitple %s subclasses contain an option named '%s'!",
+              "Multiple %s subclasses contain an option named '%s'!",
               __CLASS__,
               $key));
         }

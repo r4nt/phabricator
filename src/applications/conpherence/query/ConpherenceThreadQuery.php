@@ -9,21 +9,14 @@ final class ConpherenceThreadQuery
   private $ids;
   private $participantPHIDs;
   private $needParticipants;
-  private $needWidgetData;
   private $needCropPics;
   private $needOrigPics;
   private $needTransactions;
   private $needParticipantCache;
-  private $needFilePHIDs;
   private $afterTransactionID;
   private $beforeTransactionID;
   private $transactionLimit;
   private $fulltext;
-
-  public function needFilePHIDs($need_file_phids) {
-    $this->needFilePHIDs = $need_file_phids;
-    return $this;
-  }
 
   public function needParticipantCache($participant_cache) {
     $this->needParticipantCache = $participant_cache;
@@ -32,11 +25,6 @@ final class ConpherenceThreadQuery
 
   public function needParticipants($need) {
     $this->needParticipants = $need;
-    return $this;
-  }
-
-  public function needWidgetData($need_widget_data) {
-    $this->needWidgetData = $need_widget_data;
     return $this;
   }
 
@@ -100,7 +88,7 @@ final class ConpherenceThreadQuery
 
     $data = queryfx_all(
       $conn_r,
-      'SELECT conpherence_thread.* FROM %T conpherence_thread %Q %Q %Q %Q %Q',
+      'SELECT thread.* FROM %T thread %Q %Q %Q %Q %Q',
       $table->getTableName(),
       $this->buildJoinClause($conn_r),
       $this->buildWhereClause($conn_r),
@@ -116,17 +104,11 @@ final class ConpherenceThreadQuery
       if ($this->needParticipantCache) {
         $this->loadCoreHandles($conpherences, 'getRecentParticipantPHIDs');
       }
-      if ($this->needWidgetData || $this->needParticipants) {
+      if ($this->needParticipants) {
         $this->loadCoreHandles($conpherences, 'getParticipantPHIDs');
       }
       if ($this->needTransactions) {
         $this->loadTransactionsAndHandles($conpherences);
-      }
-      if ($this->needFilePHIDs || $this->needWidgetData) {
-        $this->loadFilePHIDs($conpherences);
-      }
-      if ($this->needWidgetData) {
-        $this->loadWidgetData($conpherences);
       }
       if ($this->needOrigPics || $this->needCropPics) {
         $this->initImages($conpherences);
@@ -144,7 +126,7 @@ final class ConpherenceThreadQuery
 
   protected function buildGroupClause(AphrontDatabaseConnection $conn_r) {
     if ($this->participantPHIDs !== null || strlen($this->fulltext)) {
-      return 'GROUP BY conpherence_thread.id';
+      return 'GROUP BY thread.id';
     } else {
       return $this->buildApplicationSearchGroupClause($conn_r);
     }
@@ -156,14 +138,14 @@ final class ConpherenceThreadQuery
     if ($this->participantPHIDs !== null) {
       $joins[] = qsprintf(
         $conn_r,
-        'JOIN %T p ON p.conpherencePHID = conpherence_thread.phid',
+        'JOIN %T p ON p.conpherencePHID = thread.phid',
         id(new ConpherenceParticipant())->getTableName());
     }
 
     if (strlen($this->fulltext)) {
       $joins[] = qsprintf(
         $conn_r,
-        'JOIN %T idx ON idx.threadPHID = conpherence_thread.phid',
+        'JOIN %T idx ON idx.threadPHID = thread.phid',
         id(new ConpherenceIndex())->getTableName());
     }
 
@@ -179,14 +161,14 @@ final class ConpherenceThreadQuery
     if ($this->ids !== null) {
       $where[] = qsprintf(
         $conn_r,
-        'conpherence_thread.id IN (%Ld)',
+        'thread.id IN (%Ld)',
         $this->ids);
     }
 
     if ($this->phids !== null) {
       $where[] = qsprintf(
         $conn_r,
-        'conpherence_thread.phid IN (%Ls)',
+        'thread.phid IN (%Ls)',
         $this->phids);
     }
 
@@ -284,112 +266,6 @@ final class ConpherenceThreadQuery
     return $this;
   }
 
-  private function loadFilePHIDs(array $conpherences) {
-    $edge_type = PhabricatorObjectHasFileEdgeType::EDGECONST;
-    $file_edges = id(new PhabricatorEdgeQuery())
-      ->withSourcePHIDs(array_keys($conpherences))
-      ->withEdgeTypes(array($edge_type))
-      ->execute();
-    foreach ($file_edges as $conpherence_phid => $data) {
-      $conpherence = $conpherences[$conpherence_phid];
-      $conpherence->attachFilePHIDs(array_keys($data[$edge_type]));
-    }
-    return $this;
-  }
-
-  private function loadWidgetData(array $conpherences) {
-    $participant_phids = array();
-    $file_phids = array();
-    foreach ($conpherences as $conpherence) {
-      $participant_phids[] = array_keys($conpherence->getParticipants());
-      $file_phids[] = $conpherence->getFilePHIDs();
-    }
-    $participant_phids = array_mergev($participant_phids);
-    $file_phids = array_mergev($file_phids);
-
-    $epochs = CalendarTimeUtil::getCalendarEventEpochs(
-      $this->getViewer());
-    $start_epoch = $epochs['start_epoch'];
-    $end_epoch = $epochs['end_epoch'];
-
-    $events = array();
-    if ($participant_phids) {
-      $events = id(new PhabricatorCalendarEventQuery())
-        ->setViewer($this->getViewer())
-        ->withInvitedPHIDs($participant_phids)
-        ->withIsCancelled(false)
-        ->withDateRange($start_epoch, $end_epoch)
-        ->execute();
-      $events = mpull($events, null, 'getPHID');
-    }
-
-    $invitees = array();
-    foreach ($events as $event_phid => $event) {
-      foreach ($event->getInvitees() as $invitee) {
-        $invitees[$invitee->getInviteePHID()][$event_phid] = true;
-      }
-    }
-
-    // attached files
-    $files = array();
-    $file_author_phids = array();
-    $authors = array();
-    if ($file_phids) {
-      $files = id(new PhabricatorFileQuery())
-        ->setViewer($this->getViewer())
-        ->withPHIDs($file_phids)
-        ->execute();
-      $files = mpull($files, null, 'getPHID');
-      $file_author_phids = mpull($files, 'getAuthorPHID', 'getPHID');
-      $authors = id(new PhabricatorHandleQuery())
-        ->setViewer($this->getViewer())
-        ->withPHIDs($file_author_phids)
-        ->execute();
-      $authors = mpull($authors, null, 'getPHID');
-    }
-
-    foreach ($conpherences as $phid => $conpherence) {
-      $participant_phids = array_keys($conpherence->getParticipants());
-      $widget_data = array();
-
-      $event_phids = array();
-      $participant_invites = array_select_keys($invitees, $participant_phids);
-      foreach ($participant_invites as $invite_set) {
-        $event_phids += $invite_set;
-      }
-      $thread_events = array_select_keys($events, array_keys($event_phids));
-      $thread_events = msort($thread_events, 'getDateFrom');
-      $widget_data['events'] = $thread_events;
-
-      $conpherence_files = array();
-      $files_authors = array();
-      foreach ($conpherence->getFilePHIDs() as $curr_phid) {
-        $curr_file = idx($files, $curr_phid);
-        if (!$curr_file) {
-          // this file was deleted or user doesn't have permission to see it
-          // this is generally weird
-          continue;
-        }
-        $conpherence_files[$curr_phid] = $curr_file;
-        // some files don't have authors so be careful
-        $current_author = null;
-        $current_author_phid = idx($file_author_phids, $curr_phid);
-        if ($current_author_phid) {
-          $current_author = $authors[$current_author_phid];
-        }
-        $files_authors[$curr_phid] = $current_author;
-      }
-      $widget_data += array(
-        'files' => $conpherence_files,
-        'files_authors' => $files_authors,
-      );
-
-      $conpherence->attachWidgetData($widget_data);
-    }
-
-    return $this;
-  }
-
   private function loadOrigPics(array $conpherences) {
     return $this->loadPics(
       $conpherences,
@@ -436,6 +312,10 @@ final class ConpherenceThreadQuery
 
   public function getQueryApplicationClass() {
     return 'PhabricatorConpherenceApplication';
+  }
+
+  protected function getPrimaryTableAlias() {
+    return 'thread';
   }
 
 }

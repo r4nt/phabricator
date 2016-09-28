@@ -8,12 +8,12 @@ final class PhabricatorCalendarEventPHIDType extends PhabricatorPHIDType {
     return pht('Event');
   }
 
-  public function getPHIDTypeApplicationClass() {
-    return 'PhabricatorCalendarApplication';
-  }
-
   public function newObject() {
     return new PhabricatorCalendarEvent();
+  }
+
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorCalendarApplication';
   }
 
   protected function buildQueryForObjects(
@@ -32,16 +32,16 @@ final class PhabricatorCalendarEventPHIDType extends PhabricatorPHIDType {
     foreach ($handles as $phid => $handle) {
       $event = $objects[$phid];
 
-      $id = $event->getID();
+      $monogram = $event->getMonogram();
       $name = $event->getName();
-      $is_cancelled = $event->getIsCancelled();
+      $uri = $event->getURI();
 
       $handle
         ->setName($name)
-        ->setFullName(pht('E%d: %s', $id, $name))
-        ->setURI('/E'.$id);
+        ->setFullName(pht('%s: %s', $monogram, $name))
+        ->setURI($uri);
 
-      if ($is_cancelled) {
+      if ($event->isCancelledEvent()) {
         $handle->setStatus(PhabricatorObjectHandle::STATUS_CLOSED);
       }
     }

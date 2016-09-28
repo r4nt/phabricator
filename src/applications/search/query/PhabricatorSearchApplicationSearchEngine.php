@@ -163,7 +163,7 @@ final class PhabricatorSearchApplicationSearchEngine
       ->appendControl(
         id(new AphrontFormTokenizerControl())
           ->setName('projectPHIDs')
-          ->setLabel(pht('In Any Project'))
+          ->setLabel(pht('Tags'))
           ->setDatasource(new PhabricatorProjectDatasource())
           ->setValue($project_phids));
   }
@@ -204,9 +204,15 @@ final class PhabricatorSearchApplicationSearchEngine
     // TODO: This is inelegant and not very efficient, but gets us reasonable
     // results. It would be nice to do this more elegantly.
 
-    $indexers = id(new PhutilSymbolLoader())
-      ->setAncestorClass('PhabricatorSearchDocumentIndexer')
-      ->loadObjects();
+    $objects = id(new PhutilClassMapQuery())
+      ->setAncestorClass('PhabricatorFulltextInterface')
+      ->execute();
+
+    $type_map = array();
+    foreach ($objects as $object) {
+      $phid_type = phid_get_type($object->generatePHID());
+      $type_map[$phid_type] = $object;
+    }
 
     if ($viewer) {
       $types = PhabricatorPHIDType::getAllInstalledTypes($viewer);
@@ -217,11 +223,9 @@ final class PhabricatorSearchApplicationSearchEngine
     $results = array();
     foreach ($types as $type) {
       $typeconst = $type->getTypeConstant();
-      foreach ($indexers as $indexer) {
-        $fake_phid = 'PHID-'.$typeconst.'-fake';
-        if ($indexer->shouldIndexDocumentByPHID($fake_phid)) {
-          $results[$typeconst] = $type->getTypeName();
-        }
+      $object = idx($type_map, $typeconst);
+      if ($object) {
+        $results[$typeconst] = $type->getTypeName();
       }
     }
 
@@ -240,6 +244,8 @@ final class PhabricatorSearchApplicationSearchEngine
     array $handles) {
 
     $viewer = $this->requireViewer();
+    $list = new PHUIObjectItemListView();
+    $list->setNoDataString(pht('No results found.'));
 
     if ($results) {
       $objects = id(new PhabricatorObjectQuery())
@@ -247,7 +253,6 @@ final class PhabricatorSearchApplicationSearchEngine
         ->withPHIDs(mpull($results, 'getPHID'))
         ->execute();
 
-      $list = new PHUIObjectItemListView();
       foreach ($results as $phid => $handle) {
         $view = id(new PhabricatorSearchResultView())
           ->setHandle($handle)
@@ -256,15 +261,12 @@ final class PhabricatorSearchApplicationSearchEngine
           ->render();
         $list->addItem($view);
       }
-
-      $results = $list;
-    } else {
-      $results = id(new PHUIInfoView())
-        ->appendChild(pht('No results returned for that query.'))
-        ->setSeverity(PHUIInfoView::SEVERITY_NODATA);
     }
 
-    return $results;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+
+    return $result;
   }
 
   private function readOwnerPHIDs(PhabricatorSavedQuery $saved) {

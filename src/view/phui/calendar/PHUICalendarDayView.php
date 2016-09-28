@@ -61,7 +61,7 @@ final class PHUICalendarDayView extends AphrontView {
     foreach ($hours as $hour) {
       $js_hours[] = array(
         'hour' => $hour->format('G'),
-        'hour_meridian' => $hour->format('g A'),
+        'displayTime' => phabricator_time($hour->format('U'), $viewer),
       );
     }
 
@@ -85,6 +85,8 @@ final class PHUICalendarDayView extends AphrontView {
           'id' => $all_day_event->getEventID(),
           'viewerIsInvited' => $all_day_event->getViewerIsInvited(),
           'uri' => $all_day_event->getURI(),
+          'displayIcon' => $all_day_event->getIcon(),
+          'displayIconColor' => $all_day_event->getIconColor(),
         );
       }
     }
@@ -140,12 +142,18 @@ final class PHUICalendarDayView extends AphrontView {
           'top' => $top.'px',
           'height' => $height.'px',
           'canEdit' => $event->getCanEdit(),
+          'displayIcon' => $event->getIcon(),
+          'displayIconColor' => $event->getIconColor(),
         );
       }
     }
 
     $header = $this->renderDayViewHeader();
-    $sidebar = $this->renderSidebar();
+    $sidebar = id(new PHUICalendarWeekView())
+      ->setViewer($this->getViewer())
+      ->setEvents($this->events)
+      ->setDateTime($this->getDateTime())
+      ->render();
     $warnings = $this->getQueryRangeWarning();
 
     $table_id = celerity_generate_unique_node_id();
@@ -179,17 +187,15 @@ final class PHUICalendarDayView extends AphrontView {
       ->setFlush(true);
 
     $layout = id(new AphrontMultiColumnView())
-      ->addColumn($sidebar, 'third')
+      ->addColumn($sidebar, 'third phui-day-view-upcoming')
       ->addColumn($table_box, 'thirds phui-day-view-column')
-      ->setFluidLayout(true)
-      ->setGutter(AphrontMultiColumnView::GUTTER_MEDIUM);
+      ->setFluidLayout(true);
 
-    return phutil_tag(
-      'div',
-        array(
-          'class' => 'ml',
-        ),
-        $layout);
+    $layout = id(new PHUIBoxView())
+      ->appendChild($layout)
+      ->addClass('phui-calendar-box');
+
+    return $layout;
   }
 
   private function getAllDayEvents() {
@@ -242,91 +248,6 @@ final class PHUICalendarDayView extends AphrontView {
     return $errors;
   }
 
-  private function renderSidebar() {
-    $this->events = msort($this->events, 'getEpochStart');
-    $week_of_boxes = $this->getWeekOfBoxes();
-    $filled_boxes = array();
-
-    foreach ($week_of_boxes as $day_box) {
-      $box_start = $day_box['start'];
-      $box_end = id(clone $box_start)->modify('+1 day');
-
-      $box_start = $box_start->format('U');
-      $box_end = $box_end->format('U');
-
-      $box_events = array();
-
-      foreach ($this->events as $event) {
-        $event_start = $event->getEpochStart();
-        $event_end = $event->getEpochEnd();
-
-        if ($event_start < $box_end && $event_end > $box_start) {
-          $box_events[] = $event;
-        }
-      }
-
-      $filled_boxes[] = $this->renderSidebarBox(
-        $box_events,
-        $day_box['title']);
-    }
-
-    return $filled_boxes;
-  }
-
-  private function renderSidebarBox($events, $title) {
-    $widget = id(new PHUICalendarWidgetView())
-      ->addClass('calendar-day-view-sidebar');
-
-    $list = id(new PHUICalendarListView())
-      ->setUser($this->user)
-      ->setView('day');
-
-    if (count($events) == 0) {
-      $list->showBlankState(true);
-    } else {
-      $sorted_events = msort($events, 'getEpochStart');
-      foreach ($sorted_events as $event) {
-        $list->addEvent($event);
-      }
-    }
-
-    $widget
-      ->setCalendarList($list)
-      ->setHeader($title);
-    return $widget;
-  }
-
-  private function getWeekOfBoxes() {
-    $sidebar_day_boxes = array();
-
-    $display_start_day = $this->getDateTime();
-    $display_end_day = id(clone $display_start_day)->modify('+6 day');
-
-    $box_start_time = clone $display_start_day;
-
-    $today_time = PhabricatorTime::getTodayMidnightDateTime($this->user);
-    $tomorrow_time = clone $today_time;
-    $tomorrow_time->modify('+1 day');
-
-    while ($box_start_time <= $display_end_day) {
-      if ($box_start_time == $today_time) {
-        $title = pht('Today');
-      } else if ($box_start_time == $tomorrow_time) {
-        $title = pht('Tomorrow');
-      } else {
-        $title = $box_start_time->format('l');
-      }
-
-      $sidebar_day_boxes[] = array(
-        'title' => $title,
-        'start' => clone $box_start_time,
-        );
-
-      $box_start_time->modify('+1 day');
-    }
-    return $sidebar_day_boxes;
-  }
-
   private function renderDayViewHeader() {
     $button_bar = null;
     $uri = $this->getBrowseURI();
@@ -340,7 +261,7 @@ final class PHUICalendarDayView extends AphrontView {
       $button_bar = new PHUIButtonBarView();
 
       $left_icon = id(new PHUIIconView())
-          ->setIconFont('fa-chevron-left bluegrey');
+          ->setIcon('fa-chevron-left bluegrey');
       $left = id(new PHUIButtonView())
         ->setTag('a')
         ->setColor(PHUIButtonView::GREY)
@@ -349,7 +270,7 @@ final class PHUICalendarDayView extends AphrontView {
         ->setIcon($left_icon);
 
       $right_icon = id(new PHUIIconView())
-          ->setIconFont('fa-chevron-right bluegrey');
+          ->setIcon('fa-chevron-right bluegrey');
       $right = id(new PHUIButtonView())
         ->setTag('a')
         ->setColor(PHUIButtonView::GREY)
@@ -437,7 +358,7 @@ final class PHUICalendarDayView extends AphrontView {
   }
 
   private function getDateTime() {
-    $user = $this->user;
+    $user = $this->getViewer();
     $timezone = new DateTimeZone($user->getTimezoneIdentifier());
 
     $day = $this->day;

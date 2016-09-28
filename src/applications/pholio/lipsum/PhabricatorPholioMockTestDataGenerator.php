@@ -3,15 +3,18 @@
 final class PhabricatorPholioMockTestDataGenerator
   extends PhabricatorTestDataGenerator {
 
-  public function generate() {
+  public function getGeneratorName() {
+    return pht('Pholio Mocks');
+  }
+
+  public function generateObject() {
     $author_phid = $this->loadPhabrictorUserPHID();
     $author = id(new PhabricatorUser())
           ->loadOneWhere('phid = %s', $author_phid);
     $mock = PholioMock::initializeNewMock($author);
 
-    $content_source = PhabricatorContentSource::newForSource(
-      PhabricatorContentSource::SOURCE_UNKNOWN,
-      array());
+    $content_source = $this->getLipsumContentSource();
+
     $template = id(new PholioTransaction())
       ->setContentSource($content_source);
 
@@ -92,7 +95,11 @@ final class PhabricatorPholioMockTestDataGenerator
     $quantity = min($quantity, count($images));
 
     if ($quantity) {
-      foreach (array_rand($images, $quantity) as $random) {
+      $random_images = $quantity === 1 ?
+        array(array_rand($images, $quantity)) :
+        array_rand($images, $quantity);
+
+      foreach ($random_images as $random) {
         $rand_images[] = $images[$random]->getPHID();
       }
     }

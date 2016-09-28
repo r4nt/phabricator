@@ -31,7 +31,7 @@ bug, not a configuration problem.
 However, some pages are slow because Phabricator legitimately needs to do a lot
 of work to generate them. For example, if you write a 100MB wiki document,
 Phabricator will need substantial time to process it, it will take a long time
-to download over the network, and your browser will proably not be able to
+to download over the network, and your browser will probably not be able to
 render it especially quickly.
 
 We may be able to improve perfomance in some cases, but Phabricator is not
@@ -52,7 +52,7 @@ inherent complexity, like these:
 
   - {icon times, color=red} A 100MB wiki page takes a long time to render.
   - {icon times, color=red} A turing-complete simulation of Conway's Game of
-    Life implented in 958,000 Herald rules executes slowly.
+    Life implemented in 958,000 Herald rules executes slowly.
   - {icon times, color=red} Uploading an 8GB file takes several minutes.
 
 Generally, the path forward will be:

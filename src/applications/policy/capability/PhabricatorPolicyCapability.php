@@ -15,29 +15,7 @@ abstract class PhabricatorPolicyCapability extends Phobject {
    * @return string Globally unique capability key.
    */
   final public function getCapabilityKey() {
-    $class = new ReflectionClass($this);
-
-    $const = $class->getConstant('CAPABILITY');
-    if ($const === false) {
-      throw new Exception(
-        pht(
-          '%s class "%s" must define a %s property.',
-          __CLASS__,
-          get_class($this),
-          'CAPABILITY'));
-    }
-
-    if (!is_string($const)) {
-      throw new Exception(
-        pht(
-          '%s class "%s" has an invalid %s property. '.
-          'Capability constants must be a string.',
-          __CLASS__,
-          get_class($this),
-          'CAPABILITY'));
-    }
-
-    return $const;
+    return $this->getPhobjectClassConstant('CAPABILITY');
   }
 
 
@@ -79,16 +57,10 @@ abstract class PhabricatorPolicyCapability extends Phobject {
   }
 
   final public static function getCapabilityMap() {
-    static $map;
-    if ($map === null) {
-      $capabilities = id(new PhutilSymbolLoader())
-        ->setAncestorClass(__CLASS__)
-        ->loadObjects();
-
-      $map = mpull($capabilities, null, 'getCapabilityKey');
-    }
-
-    return $map;
+    return id(new PhutilClassMapQuery())
+      ->setAncestorClass(__CLASS__)
+      ->setUniqueMethod('getCapabilityKey')
+      ->execute();
   }
 
 }

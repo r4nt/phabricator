@@ -107,6 +107,7 @@ final class PholioMockThumbGridView extends AphrontView {
 
     return id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Mock History'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($grid);
   }
 
@@ -116,6 +117,7 @@ final class PholioMockThumbGridView extends AphrontView {
 
     $preview_key = PhabricatorFileThumbnailTransform::TRANSFORM_THUMBGRID;
     $xform = PhabricatorFileTransform::getTransformByKey($preview_key);
+    Javelin::initBehavior('phabricator-tooltips');
 
     $attributes = array(
       'class' => 'pholio-mock-thumb-grid-image',
@@ -155,17 +157,19 @@ final class PholioMockThumbGridView extends AphrontView {
         array(
           'class' => 'pholio-mock-thumb-grid-comment-count',
         ),
-        pht('%s', new PhutilNumber(count($image->getInlineComments()))));
+        pht('%s', phutil_count($image->getInlineComments())));
     }
 
     return javelin_tag(
       'a',
       array(
-        'sigil' => 'mock-thumbnail',
+        'sigil' => 'mock-thumbnail has-tooltip',
         'class' => implode(' ', $classes),
         'href' => '#',
         'meta' => array(
           'imageID' => $image->getID(),
+          'tip' => $image->getName(),
+          'align' => 'N',
         ),
       ),
       array(

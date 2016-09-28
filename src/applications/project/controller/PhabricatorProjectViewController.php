@@ -9,42 +9,22 @@ final class PhabricatorProjectViewController
 
   public function handleRequest(AphrontRequest $request) {
     $request = $this->getRequest();
-    $user = $request->getUser();
+    $viewer = $request->getViewer();
 
-    $query = id(new PhabricatorProjectQuery())
-      ->setViewer($user)
-      ->needMembers(true)
-      ->needWatchers(true)
-      ->needImages(true)
-      ->needSlugs(true);
-    $id = $request->getURIData('id');
-    $slug = $request->getURIData('slug');
-    if ($slug) {
-      $query->withSlugs(array($slug));
-    } else {
-      $query->withIDs(array($id));
+    $response = $this->loadProject();
+    if ($response) {
+      return $response;
     }
-    $project = $query->executeOne();
-    if (!$project) {
-      return new Aphront404Response();
-    }
+    $project = $this->getProject();
 
+    $engine = $this->getProfilePanelEngine();
+    $default = $engine->getDefaultPanel();
 
-    $columns = id(new PhabricatorProjectColumnQuery())
-      ->setViewer($user)
-      ->withProjectPHIDs(array($project->getPHID()))
-      ->execute();
-    if ($columns) {
-      $controller = 'board';
-    } else {
-      $controller = 'profile';
-    }
-
-    switch ($controller) {
-      case 'board':
+    switch ($default->getBuiltinKey()) {
+      case PhabricatorProject::PANEL_WORKBOARD:
         $controller_object = new PhabricatorProjectBoardViewController();
         break;
-      case 'profile':
+      case PhabricatorProject::PANEL_PROFILE:
       default:
         $controller_object = new PhabricatorProjectProfileController();
         break;

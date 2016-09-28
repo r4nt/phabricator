@@ -9,6 +9,7 @@ final class PhabricatorDashboardPanel
     PhabricatorApplicationTransactionInterface,
     PhabricatorPolicyInterface,
     PhabricatorCustomFieldInterface,
+    PhabricatorFlaggableInterface,
     PhabricatorDestructibleInterface {
 
   protected $name;
@@ -68,6 +69,28 @@ final class PhabricatorDashboardPanel
 
   public function getMonogram() {
     return 'W'.$this->getID();
+  }
+
+  public function getURI() {
+    return '/'.$this->getMonogram();
+  }
+
+  public function getPanelTypes() {
+    $panel_types = PhabricatorDashboardPanelType::getAllPanelTypes();
+    $panel_types = mpull($panel_types, 'getPanelTypeName', 'getPanelTypeKey');
+    asort($panel_types);
+    $panel_types = (array('' => pht('(All Types)')) + $panel_types);
+    return $panel_types;
+  }
+
+  public function getStatuses() {
+    $statuses =
+      array(
+        '' => pht('(All Panels)'),
+        'active' => pht('Active Panels'),
+        'archived' => pht('Archived Panels'),
+      );
+    return $statuses;
   }
 
   public function getImplementation() {

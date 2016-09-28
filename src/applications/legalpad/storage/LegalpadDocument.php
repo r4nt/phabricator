@@ -163,14 +163,6 @@ final class LegalpadDocument extends LegalpadDAO
     return ($this->creatorPHID == $phid);
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
-  }
-
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 

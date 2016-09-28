@@ -249,7 +249,7 @@ final class ReleephRequestTransactionalEditor
     if ($has_pick_failure) {
       $instructions = $releeph_project->getDetail('pick_failure_instructions');
       if ($instructions) {
-        $body->addTextSection(
+        $body->addRemarkupSection(
           pht('PICK FAILURE INSTRUCTIONS'),
           $instructions);
       }
@@ -302,6 +302,8 @@ final class ReleephRequestTransactionalEditor
             'RQ'.$id));
         break;
     }
+
+    return $this;
   }
 
 }

@@ -16,6 +16,10 @@ final class PhabricatorTriggerDaemon
   private $garbageCollectors;
   private $nextCollection;
 
+  private $anyNuanceData;
+  private $nuanceSources;
+  private $nuanceCursors;
+
   protected function run() {
 
     // The trigger daemon is a low-level infrastructure daemon which schedules
@@ -99,6 +103,7 @@ final class PhabricatorTriggerDaemon
       $lock->unlock();
 
       $sleep_duration = $this->getSleepDuration();
+      $sleep_duration = $this->runNuanceImportCursors($sleep_duration);
       $sleep_duration = $this->runGarbageCollection($sleep_duration);
       $this->sleep($sleep_duration);
     } while (!$this->shouldExit());
@@ -256,7 +261,7 @@ final class PhabricatorTriggerDaemon
    * Get the number of seconds to sleep for before starting the next scheduling
    * phase.
    *
-   * If no events are scheduled soon, we'll sleep for 60 seconds. Otherwise,
+   * If no events are scheduled soon, we'll sleep briefly. Otherwise,
    * we'll sleep until the next scheduled event.
    *
    * @return int Number of seconds to sleep for.
@@ -267,6 +272,7 @@ final class PhabricatorTriggerDaemon
     $next_triggers = id(new PhabricatorWorkerTriggerQuery())
       ->setViewer($this->getViewer())
       ->setOrder(PhabricatorWorkerTriggerQuery::ORDER_EXECUTION)
+      ->withNextEventBetween(0, null)
       ->setLimit(1)
       ->needEvents(true)
       ->execute();
@@ -348,13 +354,15 @@ final class PhabricatorTriggerDaemon
     $next = $this->nextCollection;
     if ($next && (PhabricatorTime::getNow() >= $next)) {
       $this->nextCollection = null;
-      $this->garbageCollectors = $this->loadGarbageCollectors();
+
+      $all_collectors = PhabricatorGarbageCollector::getAllCollectors();
+      $this->garbageCollectors = $all_collectors;
     }
 
     // If we're in a collection cycle, continue collection.
     if ($this->garbageCollectors) {
       foreach ($this->garbageCollectors as $key => $collector) {
-        $more_garbage = $collector->collectGarbage();
+        $more_garbage = $collector->runCollector();
         if (!$more_garbage) {
           unset($this->garbageCollectors[$key]);
         }
@@ -378,17 +386,74 @@ final class PhabricatorTriggerDaemon
   }
 
 
-  /**
-   * Load all of the available garbage collectors.
-   *
-   * @return list<PhabricatorGarbageCollector> Garbage collectors.
-   * @task garbage
-   */
-  private function loadGarbageCollectors() {
-    return id(new PhutilSymbolLoader())
-      ->setAncestorClass('PhabricatorGarbageCollector')
-      ->loadObjects();
+/* -(  Nuance Importers  )--------------------------------------------------- */
+
+
+  private function runNuanceImportCursors($duration) {
+    $run_until = (PhabricatorTime::getNow() + $duration);
+
+    do {
+      $more_data = $this->updateNuanceImportCursors();
+      if (!$more_data) {
+        break;
+      }
+    } while (PhabricatorTime::getNow() <= $run_until);
+
+    $remaining = max(0, $run_until - PhabricatorTime::getNow());
+
+    return $remaining;
   }
 
+
+  private function updateNuanceImportCursors() {
+    $nuance_app = 'PhabricatorNuanceApplication';
+    if (!PhabricatorApplication::isClassInstalled($nuance_app)) {
+      return false;
+    }
+
+    // If we haven't loaded sources yet, load them first.
+    if (!$this->nuanceSources && !$this->nuanceCursors) {
+      $this->anyNuanceData = false;
+
+      $sources = id(new NuanceSourceQuery())
+        ->setViewer($this->getViewer())
+        ->withIsDisabled(false)
+        ->withHasImportCursors(true)
+        ->execute();
+      if (!$sources) {
+        return false;
+      }
+
+      $this->nuanceSources = array_reverse($sources);
+    }
+
+    // If we don't have any cursors, move to the next source and generate its
+    // cursors.
+    if (!$this->nuanceCursors) {
+      $source = array_pop($this->nuanceSources);
+
+      $definition = $source->getDefinition()
+        ->setViewer($this->getViewer())
+        ->setSource($source);
+
+      $cursors = $definition->getImportCursors();
+      $this->nuanceCursors = array_reverse($cursors);
+    }
+
+    // Update the next cursor.
+    $cursor = array_pop($this->nuanceCursors);
+    if ($cursor) {
+      $more_data = $cursor->importFromSource();
+      if ($more_data) {
+        $this->anyNuanceData = true;
+      }
+    }
+
+    if (!$this->nuanceSources && !$this->nuanceCursors) {
+      return $this->anyNuanceData;
+    }
+
+    return true;
+  }
 
 }

@@ -6,8 +6,7 @@ abstract class PhabricatorDaemonManagementWorkflow
   private $runDaemonsAsUser = null;
 
   final protected function loadAvailableDaemonClasses() {
-    $loader = new PhutilSymbolLoader();
-    return $loader
+    return id(new PhutilSymbolLoader())
       ->setAncestorClass('PhutilDaemon')
       ->setConcreteOnly(true)
       ->selectSymbolsWithoutLoading();
@@ -159,8 +158,10 @@ abstract class PhabricatorDaemonManagementWorkflow
 
     $this->printLaunchingDaemons($daemons, $debug);
 
+    $trace = PhutilArgumentParser::isTraceModeEnabled();
+
     $flags = array();
-    if ($debug || PhabricatorEnv::getEnvConfig('phd.trace')) {
+    if ($trace || PhabricatorEnv::getEnvConfig('phd.trace')) {
       $flags[] = '--trace';
     }
 
@@ -223,15 +224,18 @@ abstract class PhabricatorDaemonManagementWorkflow
           $daemon_script_dir,
           $config,
           $this->runDaemonsAsUser);
-      } catch (Exception $e) {
-        // Retry without sudo
-        $console->writeOut(
-          "%s\n",
-          pht('sudo command failed. Starting daemon as current user.'));
-        $this->executeDaemonLaunchCommand(
-          $command,
-          $daemon_script_dir,
-          $config);
+      } catch (Exception $ex) {
+        throw new PhutilArgumentUsageException(
+          pht(
+            'Daemons are configured to run as user "%s" in configuration '.
+            'option `%s`, but the current user is "%s" and `phd` was unable '.
+            'to switch to the correct user with `sudo`. Command output:'.
+            "\n\n".
+            '%s',
+            $phd_user,
+            'phd.user',
+            $current_user,
+            $ex->getMessage()));
       }
     }
   }
@@ -266,8 +270,9 @@ abstract class PhabricatorDaemonManagementWorkflow
       if (preg_match('/sudo: a password is required/', $stderr)) {
         throw new Exception(
           pht(
-            'sudo exited with a zero exit code, but emitted output '.
-            'consistent with failure under OSX.'));
+            '%s exited with a zero exit code, but emitted output '.
+            'consistent with failure under OSX.',
+            'sudo'));
       }
     }
   }

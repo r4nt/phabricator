@@ -70,14 +70,19 @@ final class PhortuneMerchantSearchEngine
     $list->setUser($viewer);
     foreach ($merchants as $merchant) {
       $item = id(new PHUIObjectItemView())
-        ->setObjectName(pht('Merchant %d', $merchant->getID()))
+        ->setSubhead(pht('Merchant %d', $merchant->getID()))
         ->setHeader($merchant->getName())
         ->setHref('/phortune/merchant/'.$merchant->getID().'/')
-        ->setObject($merchant);
+        ->setObject($merchant)
+        ->setImageIcon('fa-bank');
 
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No merchants found.'));
+
+    return $result;
   }
 }

@@ -114,14 +114,17 @@ final class ReleephProductSearchEngine
         phutil_tag(
           'a',
           array(
-            'href' => '/diffusion/'.$repo->getCallsign().'/',
+            'href' => $repo->getURI(),
           ),
-          'r'.$repo->getCallsign()));
+          $repo->getMonogram()));
 
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+
+    return $result;
   }
 
 }

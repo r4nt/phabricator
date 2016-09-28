@@ -3,7 +3,8 @@
  */
 
 .phabricator-remarkup {
-  line-height: 1.45em;
+  line-height: 1.51em;
+  word-break: break-word;
 }
 
 .phabricator-remarkup p {
@@ -12,12 +13,12 @@
 
 .PhabricatorMonospaced,
 .phabricator-remarkup .remarkup-code-block .remarkup-code {
-  font: 10px "Menlo", "Consolas", "Monaco", monospace;
+  font: 11px/15px "Menlo", "Consolas", "Monaco", monospace;
 }
 
 .platform-windows .PhabricatorMonospaced,
 .platform-windows .phabricator-remarkup .remarkup-code-block .remarkup-code {
-  font: 11px "Menlo", "Consolas", "Monaco", monospace;
+  font: 12px/15px "Menlo", "Consolas", "Monaco", monospace;
 }
 
 .phabricator-remarkup .remarkup-code-block {
@@ -26,43 +27,74 @@
 }
 
 .phabricator-remarkup .remarkup-code-header {
-  padding: 2px 8px;
+  padding: 6px 12px;
   font-size: 13px;
   font-weight: bold;
-  background: {$sh-yellowbackground};
+  background: rgba({$alphablue},0.08);
   display: inline-block;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
 }
 
 .phabricator-remarkup .code-block-counterexample .remarkup-code-header {
   background-color: {$sh-redbackground};
 }
 
+.phabricator-remarkup .remarkup-code-block .remarkup-code-header + pre {
+  border-top-left-radius: 0;
+}
+
 .phabricator-remarkup .remarkup-code-block pre {
-  background: {$sh-yellowbackground};
-  border: 1px solid {$sh-lightyellowborder};
+  background: rgba({$alphablue},0.08);
   display: block;
-  color: #000000;
+  color: #000;
   overflow: auto;
-  padding: 8px;
-  font-family: "Monaco", monospace;
+  padding: 12px;
+  border-radius: 3px;
+  white-space: pre-wrap;
+}
+
+.phabricator-remarkup kbd {
+  display: inline-block;
+  min-width: 1em;
+  padding: 4px 5px 5px;
+  font-weight: normal;
+  font-size: 0.8rem;
+  text-align: center;
+  text-decoration: none;
+  line-height: 0.6rem;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 rgba({$alphablue},0.08);
+  user-select: none;
+  background: #f7f7f7;
+  border: 1px solid {$lightgreyborder};
+}
+
+.phabricator-remarkup .kbd-join {
+  padding: 0 4px;
+  color: {$lightgreytext};
 }
 
 .phabricator-remarkup pre.remarkup-counterexample {
-  border: 1px solid {$sh-lightredborder};
   background-color: {$sh-redbackground};
 }
 
 .phabricator-remarkup tt.remarkup-monospaced {
-  color: #333333;
-  background: #ebebeb;
-  padding: 0 4px;
+  color: #000;
+  background: rgba({$alphablue},0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
   white-space: pre-wrap;
 }
 
 /* NOTE: You can currently produce this with [[link | `name`]]. Restore the
    link color. */
 .phabricator-remarkup a tt.remarkup-monospaced {
-  color: #18559d;
+  color: {$anchor};
+}
+
+.phabricator-remarkup .remarkup-header tt.remarkup-monospaced {
+  font-weight: normal;
 }
 
 .phabricator-remarkup ul.remarkup-list {
@@ -79,27 +111,27 @@
   list-style: upper-alpha;
 }
 
-
 .phabricator-remarkup ol ol ol.remarkup-list {
   list-style: lower-alpha;
 }
-
 
 .phabricator-remarkup ol ol ol ol.remarkup-list {
   list-style: lower-roman;
 }
 
-.phabricator-remarkup ul.remarkup-list-with-checkmarks {
+.phabricator-remarkup .remarkup-list-with-checkmarks .remarkup-checked-item,
+.phabricator-remarkup .remarkup-list-with-checkmarks .remarkup-unchecked-item {
   list-style: none;
-  margin-left: 18px;
+  margin-left: -18px;
 }
 
 .phabricator-remarkup .remarkup-list-with-checkmarks input {
   margin-right: 2px;
+  opacity: 1;
 }
 
 .phabricator-remarkup .remarkup-list-with-checkmarks .remarkup-checked-item {
-  color: {$greytext};
+  text-decoration: line-through;
 }
 
 .phabricator-remarkup ul.remarkup-list ol.remarkup-list,
@@ -107,6 +139,10 @@
 .phabricator-remarkup ol.remarkup-list ol.remarkup-list,
 .phabricator-remarkup ol.remarkup-list ul.remarkup-list {
   margin: 4px 0 4px 24px;
+}
+
+.phabricator-remarkup .remarkup-list-item {
+  line-height: 1.7em;
 }
 
 .phabricator-remarkup li.phantom-item,
@@ -133,30 +169,34 @@
 }
 
 .phabricator-remarkup h4.remarkup-header {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.25em;
   margin: 12px 0 4px;
 }
 
 .phabricator-remarkup h5.remarkup-header {
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.125em;
   margin: 8px 0 4px;
 }
 
 .phabricator-remarkup h6.remarkup-header {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1em;
   margin: 4px 0;
 }
 
 .phabricator-remarkup blockquote {
-  border-left: 3px solid {$lightbluetext};
+  border-left: 3px solid {$sh-blueborder};
   color: {$darkbluetext};
   font-style:  italic;
   margin: 4px 0 12px 0;
   padding: 8px 12px;
-  background-color: #F2F4F9;
+  background-color: {$lightbluebackground};
+}
+
+.phabricator-remarkup blockquote *:last-child {
+  margin-bottom: 0;
 }
 
 .phabricator-remarkup blockquote blockquote {
@@ -164,12 +204,20 @@
 }
 
 .phabricator-remarkup blockquote em {
+  /* In blockquote bodies, default text is italic so emphasized text should
+     be normal. */
   font-style: normal;
 }
 
 .phabricator-remarkup blockquote div.remarkup-reply-head {
   font-style: normal;
   padding-bottom: 4px;
+}
+
+.phabricator-remarkup blockquote div.remarkup-reply-head em {
+  /* In blockquote headers, default text is normal so emphasized text should
+     be italic. See T10686. */
+  font-style: italic;
 }
 
 .phabricator-remarkup blockquote div.remarkup-reply-head
@@ -192,6 +240,16 @@
   width: 50%;
 }
 
+video.phabricator-media {
+  background: {$greybackground};
+}
+
+.phabricator-remarkup video {
+  display: block;
+  margin: 0 auto;
+  max-width: 95%;
+}
+
 .phabricator-remarkup-mention-exists {
   font-weight: bold;
   background: #e6f3ff;
@@ -206,6 +264,18 @@
 .aphront-panel-preview .phabricator-remarkup-mention-unknown {
   font-weight: bold;
   background: #ffaaaa;
+}
+
+.phabricator-remarkup .phriction-link {
+  font-weight: bold;
+}
+
+.phabricator-remarkup .phriction-link-missing {
+  color: {$red};
+}
+
+.phabricator-remarkup .phriction-link-lock {
+  color: {$greytext};
 }
 
 .phabricator-remarkup-mention-nopermission .phui-tag-core {
@@ -255,7 +325,7 @@
 }
 
 .phabricator-remarkup-toc-header {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 13px;
   color: {$darkbluetext};
   font-weight: bold;
@@ -276,7 +346,7 @@
 .phabricator-remarkup-toc ul li {
   padding: 0;
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -312,17 +382,23 @@
 .phabricator-remarkup-embed-image {
   display: inline-block;
   border: 3px solid white;
-  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.20);
+  box-shadow: 1px 1px 2px rgba({$alphablack}, 0.20);
 }
 
-.phabricator-remarkup-embed-image-full {
+.phabricator-remarkup-embed-image-full,
+.phabricator-remarkup-embed-image-wide {
   display: inline-block;
   max-width: 100%;
 }
 
-.phabricator-remarkup-embed-image-full img {
+.phabricator-remarkup-embed-image-full img,
+.phabricator-remarkup-embed-image-wide img {
   height: auto;
   max-width: 100%;
+}
+
+.phabricator-remarkup .remarkup-table-wrap {
+  overflow-x: auto;
 }
 
 .phabricator-remarkup table.remarkup-table {
@@ -330,12 +406,13 @@
   border-spacing: 1px;
   background: {$lightblueborder};
   margin: 12px 0;
+  word-break: normal;
 }
 
 .phabricator-remarkup table.remarkup-table th {
   font-weight: bold;
   padding: 4px 6px;
-  background: #F8F9FC;
+  background: {$lightbluebackground};
 }
 
 .phabricator-remarkup table.remarkup-table td {
@@ -349,35 +426,12 @@ body div.phabricator-remarkup.remarkup-has-toc
   padding-top: 0;
 }
 
-.phabricator-remarkup p:first-child,
-.phabricator-remarkup ul.remarkup-list:first-child,
-.phabricator-remarkup ol.remarkup-list:first-child,
-.phabricator-remarkup .remarkup-code-block:first-child,
-.phabricator-remarkup h1.remarkup-header:first-child,
-.phabricator-remarkup h2.remarkup-header:first-child,
-.phabricator-remarkup h3.remarkup-header:first-child,
-.phabricator-remarkup h4.remarkup-header:first-child,
-.phabricator-remarkup h5.remarkup-header:first-child,
-.phabricator-remarkup h6.remarkup-header:first-child,
-.phabricator-remarkup blockquote:first-child,
-.phabricator-remarkup table.remarkup-table:first-child,
-.phabricator-remarkup .remarkup-note:first-child {
+body .phabricator-standard-page div.phabricator-remarkup *:first-child,
+body .phabricator-standard-page div.phabricator-remarkup .remarkup-header + * {
   margin-top: 0;
 }
 
-.phabricator-remarkup p:last-child,
-.phabricator-remarkup ul.remarkup-list:last-child,
-.phabricator-remarkup ol.remarkup-list:last-child,
-.phabricator-remarkup .remarkup-code-block:last-child,
-.phabricator-remarkup h1.remarkup-header:last-child,
-.phabricator-remarkup h2.remarkup-header:last-child,
-.phabricator-remarkup h3.remarkup-header:last-child,
-.phabricator-remarkup h4.remarkup-header:last-child,
-.phabricator-remarkup h5.remarkup-header:last-child,
-.phabricator-remarkup h6.remarkup-header:last-child,
-.phabricator-remarkup blockquote:last-child,
-.phabricator-remarkup table.remarkup-table:last-child,
-.phabricator-remarkup .remarkup-note:last-child {
+body div.phabricator-remarkup > *:last-child {
   margin-bottom: 0;
 }
 
@@ -429,7 +483,7 @@ var.remarkup-assist-textarea {
 
 .remarkup-assist-button {
   display: block;
-  padding: 5px;
+  padding: 4px 5px;
   float: left;
 }
 
@@ -462,8 +516,8 @@ var.remarkup-assist-textarea {
 
 .remarkup-interpreter-error {
   padding: 8px;
-  border: 1px solid {$red};
-  background-color: {$lightred};
+  border: 1px solid {$sh-redborder};
+  background-color: {$sh-redbackground};
 }
 
 .remarkup-cowsay {
@@ -509,6 +563,7 @@ var.remarkup-assist-textarea {
   height: auto;
   border-width: 1px 0 0 0;
   outline: none;
+  resize: none;
 }
 
 .phabricator-image-macro-hero {
@@ -528,4 +583,101 @@ var.remarkup-assist-textarea {
 .phabricator-remarkup hr {
   background: {$thinblueborder};
   margin: 24px 0;
+  clear: both;
+}
+
+.phabricator-remarkup .remarkup-highlight {
+  background-color: {$lightviolet};
+  padding: 0 4px;
+}
+
+.remarkup-inline-preview {
+  display: block;
+  position: relative;
+  background: #fff;
+  overflow-y: auto;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid {$sky};
+  resize: vertical;
+  padding: 4px 6px;
+}
+
+.remarkup-control-fullscreen-mode .remarkup-inline-preview {
+  resize: none;
+}
+
+.remarkup-inline-preview * {
+  resize: none;
+}
+
+.remarkup-assist-button.preview-active {
+  background: {$sky};
+}
+
+.remarkup-assist-button.preview-active .phui-icon-view {
+  color: #ffffff;
+}
+
+.remarkup-assist-button.preview-active:hover .phui-icon-view {
+  color: {$lightsky};
+}
+
+.device .remarkup-assist-nodevice {
+  display: none;
+}
+
+.phuix-autocomplete {
+  position: absolute;
+  width: 300px;
+  box-shadow: {$dropshadow};
+  background: #ffffff;
+  border: 1px solid {$lightgreyborder};
+  border-radius: 3px;
+}
+
+.phuix-autocomplete-head {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 6px 8px;
+  background: {$lightgreybackground};
+  color: {$darkgreytext};
+  border-radius: 3px;
+}
+
+.phuix-autocomplete-head .phui-icon-view {
+  margin-right: 4px;
+  color: {$lightgreytext};
+}
+
+.phuix-autocomplete-echo {
+  margin-left: 4px;
+  color: {$lightgreytext};
+}
+
+.phuix-autocomplete-list a.jx-result {
+  display: block;
+  padding: 5px 8px;
+  font-size: {$normalfontsize};
+  border-top: 1px solid {$thinblueborder};
+  font-weight: bold;
+  color: {$darkgreytext};
+}
+
+.phuix-autocomplete-list a.jx-result .phui-icon-view {
+  margin-right: 4px;
+  color: {$lightbluetext};
+}
+
+.phuix-autocomplete-list a.jx-result:hover {
+  text-decoration: none;
+  background: {$sh-bluebackground};
+  color: #000;
+}
+
+.phuix-autocomplete-list a.jx-result.focused,
+.phuix-autocomplete-list a.jx-result.focused:hover {
+  background: {$sh-bluebackground};
+  color: #000;
 }

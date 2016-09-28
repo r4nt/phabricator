@@ -143,7 +143,7 @@ final class PhabricatorChunkedFileStorageEngine
    */
   private function getWritableEngine() {
     // NOTE: We can't just load writable engines or we'll loop forever.
-    $engines = PhabricatorFileStorageEngine::loadAllEngines();
+    $engines = parent::loadAllEngines();
 
     foreach ($engines as $engine) {
       if ($engine->isChunkEngine()) {
@@ -174,7 +174,7 @@ final class PhabricatorChunkedFileStorageEngine
     return (4 * 1024 * 1024);
   }
 
-  public function getFileDataIterator(PhabricatorFile $file, $begin, $end) {
+  public function getRawFileDataIterator(PhabricatorFile $file, $begin, $end) {
     $chunks = id(new PhabricatorFileChunkQuery())
       ->setViewer(PhabricatorUser::getOmnipotentUser())
       ->withChunkHandles(array($file->getStorageHandle()))

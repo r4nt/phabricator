@@ -13,8 +13,10 @@ final class CelerityStaticResourceResponse extends Phobject {
   private $packaged;
   private $metadata = array();
   private $metadataBlock = 0;
+  private $metadataLocked;
   private $behaviors = array();
   private $hasRendered = array();
+  private $postprocessorKey;
 
   public function __construct() {
     if (isset($_REQUEST['__metablock__'])) {
@@ -23,6 +25,13 @@ final class CelerityStaticResourceResponse extends Phobject {
   }
 
   public function addMetadata($metadata) {
+    if ($this->metadataLocked) {
+      throw new Exception(
+        pht(
+          'Attempting to add more metadata after metadata has been '.
+          'locked.'));
+    }
+
     $id = count($this->metadata);
     $this->metadata[$id] = $metadata;
     return $this->metadataBlock.'_'.$id;
@@ -30,6 +39,15 @@ final class CelerityStaticResourceResponse extends Phobject {
 
   public function getMetadataBlock() {
     return $this->metadataBlock;
+  }
+
+  public function setPostprocessorKey($postprocessor_key) {
+    $this->postprocessorKey = $postprocessor_key;
+    return $this;
+  }
+
+  public function getPostprocessorKey() {
+    return $this->postprocessorKey;
   }
 
   /**
@@ -179,6 +197,8 @@ final class CelerityStaticResourceResponse extends Phobject {
   }
 
   public function renderHTMLFooter() {
+    $this->metadataLocked = true;
+
     $data = array();
     if ($this->metadata) {
       $json_metadata = AphrontResponse::encodeJSONForHTTPResponse(
@@ -299,6 +319,12 @@ final class CelerityStaticResourceResponse extends Phobject {
     $use_primary_domain = false) {
 
     $uri = $map->getURIForName($name);
+
+    // If we have a postprocessor selected, add it to the URI.
+    $postprocessor_key = $this->getPostprocessorKey();
+    if ($postprocessor_key) {
+      $uri = preg_replace('@^/res/@', '/res/'.$postprocessor_key.'X/', $uri);
+    }
 
     // In developer mode, we dump file modification times into the URI. When a
     // page is reloaded in the browser, any resources brought in by Ajax calls

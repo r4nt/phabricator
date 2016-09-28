@@ -84,16 +84,25 @@ final class AphrontFormView extends AphrontView {
   }
 
   public function appendRemarkupInstructions($remarkup) {
-    return $this->appendInstructions(
-      PhabricatorMarkupEngine::renderOneObject(
-        id(new PhabricatorMarkupOneOff())->setContent($remarkup),
-        'default',
-        $this->getUser()));
+    $view = $this->newInstructionsRemarkupView($remarkup);
+    return $this->appendInstructions($view);
+  }
+
+  public function newInstructionsRemarkupView($remarkup) {
+    $viewer = $this->getViewer();
+    $view = new PHUIRemarkupView($viewer, $remarkup);
+
+    $view->setRemarkupOptions(
+      array(
+        PHUIRemarkupView::OPTION_PRESERVE_LINEBREAKS => false,
+      ));
+
+    return $view;
   }
 
   public function buildLayoutView() {
     foreach ($this->controls as $control) {
-      $control->setUser($this->getUser());
+      $control->setViewer($this->getViewer());
       $control->willRender();
     }
 
@@ -125,7 +134,7 @@ final class AphrontFormView extends AphrontView {
 
     $layout = $this->buildLayoutView();
 
-    if (!$this->user) {
+    if (!$this->hasViewer()) {
       throw new Exception(
         pht(
           'You must pass the user to %s.',
@@ -138,7 +147,7 @@ final class AphrontFormView extends AphrontView {
     }
 
     return phabricator_form(
-      $this->user,
+      $this->getViewer(),
       array(
         'class'   => $this->shaded ? 'phui-form-shaded' : null,
         'action'  => $this->action,

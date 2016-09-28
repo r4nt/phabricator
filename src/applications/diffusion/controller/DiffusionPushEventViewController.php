@@ -7,8 +7,8 @@ final class DiffusionPushEventViewController
     return true;
   }
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
 
     $event = id(new PhabricatorRepositoryPushEventQuery())
       ->setViewer($viewer)
@@ -25,7 +25,8 @@ final class DiffusionPushEventViewController
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(
       $repository->getName(),
-      $this->getApplicationURI($repository->getCallsign().'/'));
+      $repository->getURI());
+
     $crumbs->addTextCrumb(
       pht('Push Logs'),
       $this->getApplicationURI(
@@ -43,29 +44,27 @@ final class DiffusionPushEventViewController
 
     $commits_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Pushed Commits'))
-      ->appendChild($commits_table);
+      ->setTable($commits_table);
 
     $logs = $event->getLogs();
 
     $updates_table = id(new DiffusionPushLogListView())
       ->setUser($viewer)
-      ->setLogs($logs)
-      ->setHandles($this->loadViewerHandles(mpull($logs, 'getPusherPHID')));
+      ->setLogs($logs);
 
     $update_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('All Pushed Updates'))
-      ->appendChild($updates_table);
+      ->setTable($updates_table);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $detail_box,
-        $commits_box,
-        $update_box,
-      ),
-      array(
-        'title' => $title,
-      ));
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild(
+        array(
+          $detail_box,
+          $commits_box,
+          $update_box,
+        ));
   }
 
   private function buildPropertyList(PhabricatorRepositoryPushEvent $event) {

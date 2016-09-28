@@ -159,7 +159,17 @@ final class PhabricatorAuditEditor
         $requests = mpull($requests, null, 'getAuditorPHID');
         foreach ($add as $phid) {
           if (isset($requests[$phid])) {
-            continue;
+            $request = $requests[$phid];
+
+            // Only update an existing request if the current status is not
+            // an interesting status.
+            if ($request->isInteresting()) {
+              continue;
+            }
+          } else {
+            $request = id(new PhabricatorRepositoryAuditRequest())
+              ->setCommitPHID($object->getPHID())
+              ->setAuditorPHID($phid);
           }
 
           if ($this->getIsHeraldEditor()) {
@@ -170,12 +180,13 @@ final class PhabricatorAuditEditor
             $audit_requested = PhabricatorAuditStatusConstants::AUDIT_REQUESTED;
             $audit_reason = $this->getAuditReasons($phid);
           }
-          $requests[] = id (new PhabricatorRepositoryAuditRequest())
-            ->setCommitPHID($object->getPHID())
-            ->setAuditorPHID($phid)
+
+          $request
             ->setAuditStatus($audit_requested)
             ->setAuditReasons($audit_reason)
             ->save();
+
+          $requests[$phid] = $request;
         }
 
         $object->attachAudits($requests);
@@ -531,7 +542,7 @@ final class PhabricatorAuditEditor
   protected function expandCustomRemarkupBlockTransactions(
     PhabricatorLiskDAO $object,
     array $xactions,
-    $blocks,
+    array $changes,
     PhutilMarkupEngine $engine) {
 
     // we are only really trying to find unmentionable phids here...
@@ -552,7 +563,7 @@ final class PhabricatorAuditEditor
       return $result;
     }
 
-    $flat_blocks = array_mergev($blocks);
+    $flat_blocks = mpull($changes, 'getNewValue');
     $huge_block = implode("\n\n", $flat_blocks);
     $phid_map = array();
     $phid_map[] = $this->getUnmentionablePHIDMap();
@@ -631,10 +642,18 @@ final class PhabricatorAuditEditor
 
     $status_resigned = PhabricatorAuditStatusConstants::RESIGNED;
     foreach ($object->getAudits() as $audit) {
+      if (!$audit->isInteresting()) {
+        // Don't send mail to uninteresting auditors, like packages which
+        // own this code but which audits have not triggered for.
+        continue;
+      }
+
       if ($audit->getAuditStatus() != $status_resigned) {
         $phids[] = $audit->getAuditorPHID();
       }
     }
+
+    $phids[] = $this->getActingAsPHID();
 
     return $phids;
   }
@@ -867,44 +886,14 @@ final class PhabricatorAuditEditor
   protected function buildHeraldAdapter(
     PhabricatorLiskDAO $object,
     array $xactions) {
-
     return id(new HeraldCommitAdapter())
-      ->setCommit($object);
+      ->setObject($object);
   }
 
   protected function didApplyHeraldRules(
     PhabricatorLiskDAO $object,
     HeraldAdapter $adapter,
     HeraldTranscript $transcript) {
-
-    $xactions = array();
-
-    $audit_phids = $adapter->getAuditMap();
-    foreach ($audit_phids as $phid => $rule_ids) {
-      foreach ($rule_ids as $rule_id) {
-        $this->addAuditReason(
-          $phid,
-          pht(
-            '%s Triggered Audit',
-            "H{$rule_id}"));
-      }
-    }
-
-    if ($audit_phids) {
-      $xactions[] = id(new PhabricatorAuditTransaction())
-        ->setTransactionType(PhabricatorAuditActionConstants::ADD_AUDITORS)
-        ->setNewValue(array_fuse(array_keys($audit_phids)))
-        ->setMetadataValue(
-          'auditStatus',
-          PhabricatorAuditStatusConstants::AUDIT_REQUIRED)
-        ->setMetadataValue(
-          'auditReasonMap', $this->auditReasonMap);
-    }
-
-    HarbormasterBuildable::applyBuildPlans(
-      $object->getPHID(),
-      $object->getRepository()->getPHID(),
-      $adapter->getBuildPlans());
 
     $limit = self::MAX_FILES_SHOWN_IN_EMAIL;
     $files = $adapter->loadAffectedPaths();
@@ -919,7 +908,7 @@ final class PhabricatorAuditEditor
     }
     $this->affectedFiles = implode("\n", $files);
 
-    return $xactions;
+    return array();
   }
 
   private function isCommitMostlyImported(PhabricatorLiskDAO $object) {
@@ -975,6 +964,12 @@ final class PhabricatorAuditEditor
       'rawPatch' => $this->rawPatch,
       'affectedFiles' => $this->affectedFiles,
       'auditorPHIDs' => $this->auditorPHIDs,
+    );
+  }
+
+  protected function getCustomWorkerStateEncoding() {
+    return array(
+      'rawPatch' => self::STORAGE_ENCODING_BINARY,
     );
   }
 

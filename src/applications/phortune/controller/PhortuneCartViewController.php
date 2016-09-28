@@ -3,21 +3,16 @@
 final class PhortuneCartViewController
   extends PhortuneCartController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     $authority = $this->loadMerchantAuthority();
+    require_celerity_resource('phortune-css');
 
     $query = id(new PhortuneCartQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->needPurchases(true);
 
     if ($authority) {
@@ -114,22 +109,28 @@ final class PhortuneCartViewController
         break;
       case PhortuneCart::STATUS_PURCHASED:
         $error_view = id(new PHUIInfoView())
-          ->setSeverity(PHUIInfoView::SEVERITY_NOTICE)
+          ->setSeverity(PHUIInfoView::SEVERITY_SUCCESS)
           ->appendChild(pht('This purchase has been completed.'));
         break;
     }
 
-    $properties = $this->buildPropertyListView($cart);
-    $actions = $this->buildActionListView(
+    if ($errors) {
+      $error_view = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->appendChild($errors);
+    }
+
+    $details = $this->buildDetailsView($cart);
+    $curtain = $this->buildCurtainView(
       $cart,
       $can_edit,
       $authority,
       $resume_uri);
-    $properties->setActionList($actions);
 
     $header = id(new PHUIHeaderView())
       ->setUser($viewer)
-      ->setHeader(pht('Order Detail'));
+      ->setHeader(pht('Order Detail'))
+      ->setHeaderIcon('fa-shopping-cart');
 
     if ($cart->getStatus() == PhortuneCart::STATUS_PURCHASED) {
       $done_uri = $cart->getDoneURI();
@@ -138,22 +139,15 @@ final class PhortuneCartViewController
           id(new PHUIButtonView())
             ->setTag('a')
             ->setHref($done_uri)
-            ->setIcon(id(new PHUIIconView())
-              ->setIconFont('fa-check-square green'))
+            ->setIcon('fa-check-square green')
             ->setText($cart->getDoneActionName()));
       }
     }
 
     $cart_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->appendChild($properties)
-      ->appendChild($cart_table);
-
-    if ($errors) {
-      $cart_box->setFormErrors($errors);
-    } else if ($error_view) {
-      $cart_box->setInfoView($error_view);
-    }
+      ->setHeaderText(pht('Cart Items'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($cart_table);
 
     $description = $this->renderCartDescription($cart);
 
@@ -180,7 +174,8 @@ final class PhortuneCartViewController
 
     $charges = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Charges'))
-      ->appendChild($charges_table);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setTable($charges_table);
 
     $account = $cart->getAccount();
 
@@ -191,6 +186,7 @@ final class PhortuneCartViewController
       $this->addAccountCrumb($crumbs, $cart->getAccount());
     }
     $crumbs->addTextCrumb(pht('Cart %d', $cart->getID()));
+    $crumbs->setBorder(true);
 
     $timeline = $this->buildTransactionTimeline(
       $cart,
@@ -198,23 +194,29 @@ final class PhortuneCartViewController
     $timeline
      ->setShouldTerminate(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+        $error_view,
+        $details,
         $cart_box,
         $description,
         $charges,
         $timeline,
-      ),
-      array(
-        'title' => pht('Cart'),
       ));
+
+    return $this->newPage()
+      ->setTitle(pht('Cart %d', $cart->getID()))
+      ->setCrumbs($crumbs)
+      ->addClass('phortune-cart-page')
+      ->appendChild($view);
 
   }
 
-  private function buildPropertyListView(PhortuneCart $cart) {
+  private function buildDetailsView(PhortuneCart $cart) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -246,21 +248,21 @@ final class PhortuneCartViewController
       pht('Updated'),
       phabricator_datetime($cart->getDateModified(), $viewer));
 
-    return $view;
+    return id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Details'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->appendChild($view);
   }
 
-  private function buildActionListView(
+  private function buildCurtainView(
     PhortuneCart $cart,
     $can_edit,
     $authority,
     $resume_uri) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
     $id = $cart->getID();
-
-    $view = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObject($cart);
+    $curtain = $this->newCurtainView($cart);
 
     $can_cancel = ($can_edit && $cart->canCancelOrder());
 
@@ -274,8 +276,9 @@ final class PhortuneCartViewController
     $refund_uri = $this->getApplicationURI("{$prefix}cart/{$id}/refund/");
     $update_uri = $this->getApplicationURI("{$prefix}cart/{$id}/update/");
     $accept_uri = $this->getApplicationURI("{$prefix}cart/{$id}/accept/");
+    $print_uri = $this->getApplicationURI("{$prefix}cart/{$id}/?__print__=1");
 
-    $view->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Cancel Order'))
         ->setIcon('fa-times')
@@ -285,7 +288,7 @@ final class PhortuneCartViewController
 
     if ($authority) {
       if ($cart->getStatus() == PhortuneCart::STATUS_REVIEW) {
-        $view->addAction(
+        $curtain->addAction(
           id(new PhabricatorActionView())
             ->setName(pht('Accept Order'))
             ->setIcon('fa-check')
@@ -293,7 +296,7 @@ final class PhortuneCartViewController
             ->setHref($accept_uri));
       }
 
-      $view->addAction(
+      $curtain->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('Refund Order'))
           ->setIcon('fa-reply')
@@ -301,21 +304,28 @@ final class PhortuneCartViewController
           ->setHref($refund_uri));
     }
 
-    $view->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Update Status'))
         ->setIcon('fa-refresh')
         ->setHref($update_uri));
 
     if ($can_edit && $resume_uri) {
-      $view->addAction(
+      $curtain->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('Continue Checkout'))
           ->setIcon('fa-shopping-cart')
           ->setHref($resume_uri));
     }
 
-    return $view;
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Printable Version'))
+        ->setHref($print_uri)
+        ->setOpenInNewWindow(true)
+        ->setIcon('fa-print'));
+
+    return $curtain;
   }
 
 }

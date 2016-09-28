@@ -3,9 +3,8 @@
 final class PhabricatorConfigDatabaseIssueController
   extends PhabricatorConfigDatabaseController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
 
     $query = $this->buildSchemaQuery();
 
@@ -15,6 +14,7 @@ final class PhabricatorConfigDatabaseIssueController
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Database Issues'));
+    $crumbs->setBorder(true);
 
     // Collect all open issues.
     $issues = array();
@@ -112,6 +112,8 @@ final class PhabricatorConfigDatabaseIssueController
     }
 
     $table = id(new AphrontTableView($rows))
+      ->setNoDataString(
+        pht('No databases have any issues.'))
       ->setHeaders(
         array(
           null,
@@ -147,24 +149,23 @@ final class PhabricatorConfigDatabaseIssueController
 
     $title = pht('Database Issues');
 
-    $table_box = id(new PHUIObjectBoxView())
-      ->setHeader($this->buildHeaderWithDocumentationLink($title))
-      ->setFormErrors($errors)
-      ->appendChild($table);
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setProfileHeader(true);
 
     $nav = $this->buildSideNavView();
     $nav->selectFilter('dbissue/');
-    $nav->appendChild(
-      array(
-        $crumbs,
-        $table_box,
-      ));
 
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => $title,
-      ));
+    $content = id(new PhabricatorConfigPageView())
+      ->setHeader($header)
+      ->setContent($table);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->setNavigation($nav)
+      ->appendChild($content)
+      ->addClass('white-background');
   }
 
 }

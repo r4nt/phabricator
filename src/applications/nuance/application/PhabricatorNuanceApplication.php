@@ -6,7 +6,7 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
     return pht('Nuance');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-fax';
   }
 
@@ -38,28 +38,23 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
   public function getRoutes() {
     return array(
       '/nuance/' => array(
+        '' => 'NuanceConsoleController',
         'item/' => array(
+          $this->getQueryRoutePattern() => 'NuanceItemListController',
           'view/(?P<id>[1-9]\d*)/' => 'NuanceItemViewController',
-          'edit/(?P<id>[1-9]\d*)/' => 'NuanceItemEditController',
-          'new/'                   => 'NuanceItemEditController',
+          'manage/(?P<id>[1-9]\d*)/' => 'NuanceItemManageController',
+          'action/(?P<id>[1-9]\d*)/(?P<action>[^/]+)/'
+            => 'NuanceItemActionController',
         ),
         'source/' => array(
-          '(?:query/(?P<queryKey>[^/]+)/)?' => 'NuanceSourceListController',
+          $this->getQueryRoutePattern() => 'NuanceSourceListController',
+          $this->getEditRoutePattern('edit/') => 'NuanceSourceEditController',
           'view/(?P<id>[1-9]\d*)/' => 'NuanceSourceViewController',
-          'edit/(?P<id>[1-9]\d*)/' => 'NuanceSourceEditController',
-          'new/(?P<type>[^/]+)/'   => 'NuanceSourceEditController',
-          'create/' => 'NuanceSourceCreateController',
         ),
         'queue/' => array(
-          '(?:query/(?P<queryKey>[^/]+)/)?' => 'NuanceQueueListController',
+          $this->getQueryRoutePattern() => 'NuanceQueueListController',
+          $this->getEditRoutePattern('edit/') => 'NuanceQueueEditController',
           'view/(?P<id>[1-9]\d*)/' => 'NuanceQueueViewController',
-          'edit/(?P<id>[1-9]\d*)/' => 'NuanceQueueEditController',
-          'new/'                   => 'NuanceQueueEditController',
-        ),
-        'requestor/' => array(
-          'view/(?P<id>[1-9]\d*)/' => 'NuanceRequestorViewController',
-          'edit/(?P<id>[1-9]\d*)/' => 'NuanceRequestorEditController',
-          'new/'                   => 'NuanceRequestorEditController',
         ),
       ),
       '/action/' => array(

@@ -2,60 +2,37 @@
 
 final class PhluxViewController extends PhluxController {
 
-  private $key;
-
-  public function willProcessRequest(array $data) {
-    $this->key = $data['key'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $key = $request->getURIData('key');
 
     $var = id(new PhluxVariableQuery())
-      ->setViewer($user)
-      ->withKeys(array($this->key))
+      ->setViewer($viewer)
+      ->withKeys(array($key))
       ->executeOne();
 
     if (!$var) {
       return new Aphront404Response();
     }
 
-    $crumbs = $this->buildApplicationCrumbs();
-
     $title = $var->getVariableKey();
 
+    $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($title, $request->getRequestURI());
+    $crumbs->setBorder(true);
+
+    $curtain = $this->buildCurtainView($var);
 
     $header = id(new PHUIHeaderView())
       ->setHeader($title)
-      ->setUser($user)
-      ->setPolicyObject($var);
-
-    $actions = id(new PhabricatorActionListView())
-      ->setUser($user)
-      ->setObjectURI($request->getRequestURI())
-      ->setObject($var);
-
-    $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $user,
-      $var,
-      PhabricatorPolicyCapability::CAN_EDIT);
-
-    $actions->addAction(
-      id(new PhabricatorActionView())
-        ->setIcon('fa-pencil')
-        ->setName(pht('Edit Variable'))
-        ->setHref($this->getApplicationURI('/edit/'.$var->getVariableKey().'/'))
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(!$can_edit));
+      ->setUser($viewer)
+      ->setPolicyObject($var)
+      ->setHeaderIcon('fa-copy');
 
     $display_value = json_encode($var->getVariableValue());
 
     $properties = id(new PHUIPropertyListView())
-      ->setUser($user)
-      ->setObject($var)
-      ->setActionList($actions)
+      ->setUser($viewer)
       ->addProperty(pht('Value'), $display_value);
 
     $timeline = $this->buildTransactionTimeline(
@@ -64,18 +41,43 @@ final class PhluxViewController extends PhluxController {
     $timeline->setShouldTerminate(true);
 
     $object_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
+      ->setHeaderText(pht('Details'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($properties);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
         $object_box,
         $timeline,
-      ),
-      array(
-        'title'  => $title,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+  }
+
+  private function buildCurtainView(PhluxVariable $var) {
+    $viewer = $this->getViewer();
+
+    $curtain = $this->newCurtainView($var);
+
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $var,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setIcon('fa-pencil')
+        ->setName(pht('Edit Variable'))
+        ->setHref($this->getApplicationURI('/edit/'.$var->getVariableKey().'/'))
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit));
+
+    return $curtain;
   }
 
 }

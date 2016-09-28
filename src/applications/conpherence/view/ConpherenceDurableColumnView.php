@@ -108,8 +108,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
   }
 
   protected function getTagContent() {
-    $column_key = PhabricatorUserPreferences::PREFERENCE_CONPHERENCE_COLUMN;
-    require_celerity_resource('font-source-sans-pro');
+    $column_key = PhabricatorConpherenceColumnVisibleSetting::SETTINGKEY;
 
     Javelin::initBehavior(
       'durable-column',
@@ -126,8 +125,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
 
     $classes = array();
     $classes[] = 'conpherence-durable-column-header';
-    $classes[] = 'sprite-main-header';
-    $classes[] = 'main-header-'.PhabricatorEnv::getEnvConfig('ui.header-color');
+    $classes[] = 'phabricator-main-menu-background';
 
     $loading_mask = phutil_tag(
       'div',
@@ -142,12 +140,16 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
         'class' => implode(' ', $classes),
       ),
       $this->buildHeader());
-    $icon_bar = phutil_tag(
-      'div',
-      array(
-        'class' => 'conpherence-durable-column-icon-bar',
-      ),
-      $this->buildIconBar());
+
+    $icon_bar = null;
+    if ($this->conpherences) {
+      $icon_bar = phutil_tag(
+        'div',
+        array(
+          'class' => 'conpherence-durable-column-icon-bar',
+        ),
+        $this->buildIconBar());
+    }
 
     $transactions = $this->buildTransactions();
 
@@ -215,7 +217,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
     $icon = $conpherence->getPolicyIconName($policy_objects);
     $icon = id(new PHUIIconView())
       ->addClass('mmr')
-      ->setIconFont($icon);
+      ->setIcon($icon);
     return $icon;
   }
 
@@ -278,74 +280,66 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
         ->setTag('a')
         ->setHref('/conpherence/search/')
         ->setColor(PHUIButtonView::GREY)
-        ->setIcon(
-          id(new PHUIIconView())
-          ->setIconFont('fa-search'))));
+        ->setIcon('fa-search')));
   }
 
   private function buildHeader() {
     $conpherence = $this->getSelectedConpherence();
 
-    if (!$conpherence) {
+    $bubble_id = celerity_generate_unique_node_id();
+    $dropdown_id = celerity_generate_unique_node_id();
 
-      $header = null;
-      $settings_button = null;
-      $settings_menu = null;
+    $settings_list = new PHUIListView();
+    $header_actions = $this->getHeaderActionsConfig($conpherence);
+    foreach ($header_actions as $action) {
+      $settings_list->addMenuItem(
+        id(new PHUIListItemView())
+        ->setHref($action['href'])
+        ->setName($action['name'])
+        ->setIcon($action['icon'])
+        ->setDisabled($action['disabled'])
+        ->addSigil('conpherence-durable-column-header-action')
+        ->setMetadata(array(
+          'action' => $action['key'],
+        )));
+    }
 
-    } else {
+    $settings_menu = phutil_tag(
+      'div',
+      array(
+        'id' => $dropdown_id,
+        'class' => 'phabricator-main-menu-dropdown phui-list-sidenav '.
+        'conpherence-settings-dropdown',
+        'sigil' => 'phabricator-notification-menu',
+        'style' => 'display: none',
+      ),
+      $settings_list);
 
-      $bubble_id = celerity_generate_unique_node_id();
-      $dropdown_id = celerity_generate_unique_node_id();
+    Javelin::initBehavior(
+      'aphlict-dropdown',
+      array(
+        'bubbleID' => $bubble_id,
+        'dropdownID' => $dropdown_id,
+        'local' => true,
+        'containerDivID' => 'conpherence-durable-column',
+      ));
 
-      $settings_list = new PHUIListView();
-      $header_actions = $this->getHeaderActionsConfig($conpherence);
-      foreach ($header_actions as $action) {
-        $settings_list->addMenuItem(
-          id(new PHUIListItemView())
-          ->setHref($action['href'])
-          ->setName($action['name'])
-          ->setIcon($action['icon'])
-          ->setDisabled($action['disabled'])
-          ->addSigil('conpherence-durable-column-header-action')
-          ->setMetadata(array(
-            'action' => $action['key'],
-          )));
-      }
+    $item = id(new PHUIListItemView())
+      ->setName(pht('Room Actions'))
+      ->setIcon('fa-bars')
+      ->addClass('core-menu-item')
+      ->addSigil('conpherence-settings-menu')
+      ->setID($bubble_id)
+      ->setHref('#')
+      ->setAural(pht('Room Actions'))
+      ->setOrder(300);
+    $settings_button = id(new PHUIListView())
+      ->addMenuItem($item)
+      ->addClass('phabricator-dark-menu')
+      ->addClass('phabricator-application-menu');
 
-      $settings_menu = phutil_tag(
-        'div',
-        array(
-          'id' => $dropdown_id,
-          'class' => 'phabricator-main-menu-dropdown phui-list-sidenav '.
-          'conpherence-settings-dropdown',
-          'sigil' => 'phabricator-notification-menu',
-          'style' => 'display: none',
-        ),
-        $settings_list);
-
-      Javelin::initBehavior(
-        'aphlict-dropdown',
-        array(
-          'bubbleID' => $bubble_id,
-          'dropdownID' => $dropdown_id,
-          'local' => true,
-          'containerDivID' => 'conpherence-durable-column',
-        ));
-
-      $item = id(new PHUIListItemView())
-        ->setName(pht('Room Actions'))
-        ->setIcon('fa-bars')
-        ->addClass('core-menu-item')
-        ->addSigil('conpherence-settings-menu')
-        ->setID($bubble_id)
-        ->setHref('#')
-        ->setAural(pht('Room Actions'))
-        ->setOrder(300);
-      $settings_button = id(new PHUIListView())
-        ->addMenuItem($item)
-        ->addClass('phabricator-dark-menu')
-        ->addClass('phabricator-application-menu');
-
+    $header = null;
+    if ($conpherence) {
       $data = $conpherence->getDisplayData($this->getUser());
       $header = phutil_tag(
         'span',
@@ -354,7 +348,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
           $this->getPolicyIcon($conpherence, $this->getPolicyObjects()),
           $data['title'],
         ));
-    }
+      }
 
     return
       phutil_tag(
@@ -375,42 +369,46 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
         ));
   }
 
-  private function getHeaderActionsConfig(ConpherenceThread $conpherence) {
-    $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $this->getUser(),
-      $conpherence,
-      PhabricatorPolicyCapability::CAN_EDIT);
+  private function getHeaderActionsConfig($conpherence) {
 
-    return array(
-      array(
+    $actions = array();
+    if ($conpherence) {
+      $can_edit = PhabricatorPolicyFilter::hasCapability(
+        $this->getUser(),
+        $conpherence,
+        PhabricatorPolicyCapability::CAN_EDIT);
+      $actions[] = array(
         'name' => pht('Add Participants'),
         'disabled' => !$can_edit,
         'href' => '/conpherence/update/'.$conpherence->getID().'/',
         'icon' => 'fa-plus',
         'key' => ConpherenceUpdateActions::ADD_PERSON,
-      ),
-      array(
+      );
+      $actions[] = array(
         'name' => pht('Edit Room'),
         'disabled' => !$can_edit,
         'href' => '/conpherence/update/'.$conpherence->getID().'/?nopic',
         'icon' => 'fa-pencil',
         'key' => ConpherenceUpdateActions::METADATA,
-      ),
-      array(
+      );
+      $actions[] = array(
         'name' => pht('View in Conpherence'),
         'disabled' => false,
         'href' => '/'.$conpherence->getMonogram(),
         'icon' => 'fa-comments',
         'key' => 'go_conpherence',
-      ),
-      array(
-        'name' => pht('Hide Column'),
-        'disabled' => false,
-        'href' => '#',
-        'icon' => 'fa-times',
-        'key' => 'hide_column',
-      ),
+      );
+    }
+
+    $actions[] = array(
+      'name' => pht('Hide Column'),
+      'disabled' => false,
+      'href' => '#',
+      'icon' => 'fa-times',
+      'key' => 'hide_column',
     );
+
+    return $actions;
   }
 
   private function buildTransactions() {

@@ -30,10 +30,22 @@ final class ManiphestTaskStatusDatasource
 
     $status_map = ManiphestTaskStatus::getTaskStatusMap();
     foreach ($status_map as $value => $name) {
-      $results[$value] = id(new PhabricatorTypeaheadResult())
+      $result = id(new PhabricatorTypeaheadResult())
         ->setIcon(ManiphestTaskStatus::getStatusIcon($value))
         ->setPHID($value)
         ->setName($name);
+
+      if (ManiphestTaskStatus::isOpenStatus($value)) {
+        $result->addAttribute(pht('Open Status'));
+      } else {
+        $result->addAttribute(pht('Closed Status'));
+      }
+
+      if (ManiphestTaskStatus::isDisabledStatus($value)) {
+        $result->setClosed(pht('Disabled'));
+      }
+
+      $results[$value] = $result;
     }
 
     return $results;

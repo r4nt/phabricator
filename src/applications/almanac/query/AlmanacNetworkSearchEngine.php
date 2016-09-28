@@ -11,21 +11,28 @@ final class AlmanacNetworkSearchEngine
     return 'PhabricatorAlmanacApplication';
   }
 
-  public function buildSavedQueryFromRequest(AphrontRequest $request) {
-    $saved = new PhabricatorSavedQuery();
-
-    return $saved;
+  public function newQuery() {
+    return new AlmanacNetworkQuery();
   }
 
-  public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
-    $query = id(new AlmanacNetworkQuery());
+  protected function buildCustomSearchFields() {
+    return array(
+      id(new PhabricatorSearchTextField())
+        ->setLabel(pht('Name Contains'))
+        ->setKey('match')
+        ->setDescription(pht('Search for networks by name substring.')),
+    );
+  }
+
+  protected function buildQueryFromParameters(array $map) {
+    $query = $this->newQuery();
+
+    if ($map['match'] !== null) {
+      $query->withNameNgrams($map['match']);
+    }
 
     return $query;
   }
-
-  public function buildSearchForm(
-    AphrontFormView $form,
-    PhabricatorSavedQuery $saved_query) {}
 
   protected function getURI($path) {
     return '/almanac/network/'.$path;
@@ -52,12 +59,6 @@ final class AlmanacNetworkSearchEngine
     return parent::buildSavedQueryFromBuiltin($query_key);
   }
 
-  protected function getRequiredHandlePHIDsForResultList(
-    array $networks,
-    PhabricatorSavedQuery $query) {
-    return array();
-  }
-
   protected function renderResultList(
     array $networks,
     PhabricatorSavedQuery $query,
@@ -80,6 +81,10 @@ final class AlmanacNetworkSearchEngine
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No Almanac Networks found.'));
+
+    return $result;
   }
 }

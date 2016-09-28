@@ -8,6 +8,7 @@ final class HarbormasterBuildQuery
   private $buildStatuses;
   private $buildablePHIDs;
   private $buildPlanPHIDs;
+  private $initiatorPHIDs;
   private $needBuildTargets;
 
   public function withIDs(array $ids) {
@@ -35,24 +36,22 @@ final class HarbormasterBuildQuery
     return $this;
   }
 
+  public function withInitiatorPHIDs(array $initiator_phids) {
+    $this->initiatorPHIDs = $initiator_phids;
+    return $this;
+  }
+
   public function needBuildTargets($need_targets) {
     $this->needBuildTargets = $need_targets;
     return $this;
   }
 
+  public function newResultObject() {
+    return new HarbormasterBuild();
+  }
+
   protected function loadPage() {
-    $table = new HarbormasterBuild();
-    $conn_r = $table->establishConnection('r');
-
-    $data = queryfx_all(
-      $conn_r,
-      'SELECT * FROM %T %Q %Q %Q',
-      $table->getTableName(),
-      $this->buildWhereClause($conn_r),
-      $this->buildOrderClause($conn_r),
-      $this->buildLimitClause($conn_r));
-
-    return $table->loadAllFromArray($data);
+    return $this->loadStandardPage($this->newResultObject());
   }
 
   protected function willFilterPage(array $page) {
@@ -136,47 +135,52 @@ final class HarbormasterBuildQuery
     return $page;
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
-    $where = array();
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
     if ($this->ids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'id IN (%Ld)',
         $this->ids);
     }
 
     if ($this->phids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'phid in (%Ls)',
         $this->phids);
     }
 
     if ($this->buildStatuses !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'buildStatus in (%Ls)',
         $this->buildStatuses);
     }
 
     if ($this->buildablePHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'buildablePHID IN (%Ls)',
         $this->buildablePHIDs);
     }
 
     if ($this->buildPlanPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'buildPlanPHID IN (%Ls)',
         $this->buildPlanPHIDs);
     }
 
-    $where[] = $this->buildPagingClause($conn_r);
+    if ($this->initiatorPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'initiatorPHID IN (%Ls)',
+        $this->initiatorPHIDs);
+    }
 
-    return $this->formatWhereClause($where);
+    return $where;
   }
 
   public function getQueryApplicationClass() {

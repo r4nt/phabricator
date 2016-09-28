@@ -1,12 +1,10 @@
 <?php
 
-final class HarbormasterStepDeleteController extends HarbormasterController {
+final class HarbormasterStepDeleteController
+  extends HarbormasterPlanController {
 
   public function handleRequest(AphrontRequest $request) {
     $viewer = $this->getViewer();
-
-    $this->requireApplicationCapability(
-      HarbormasterManagePlansCapability::CAPABILITY);
 
     $id = $request->getURIData('id');
 

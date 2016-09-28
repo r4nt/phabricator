@@ -11,8 +11,11 @@ final class AphrontTableView extends AphrontView {
   protected $zebraStripes = true;
   protected $noDataString;
   protected $className;
+  protected $notice;
   protected $columnVisibility = array();
   private $deviceVisibility = array();
+
+  private $columnWidths = array();
 
   protected $sortURI;
   protected $sortParam;
@@ -45,6 +48,11 @@ final class AphrontTableView extends AphrontView {
     return $this;
   }
 
+  public function setColumnWidths(array $widths) {
+    $this->columnWidths = $widths;
+    return $this;
+  }
+
   public function setNoDataString($no_data_string) {
     $this->noDataString = $no_data_string;
     return $this;
@@ -52,6 +60,11 @@ final class AphrontTableView extends AphrontView {
 
   public function setClassName($class_name) {
     $this->className = $class_name;
+    return $this;
+  }
+
+  public function setNotice($notice) {
+    $this->notice = $notice;
     return $this;
   }
 
@@ -124,6 +137,8 @@ final class AphrontTableView extends AphrontView {
 
     $visibility = array_values($this->columnVisibility);
     $device_visibility = array_values($this->deviceVisibility);
+
+    $column_widths = $this->columnWidths;
 
     $headers = $this->headers;
     $short_headers = $this->shortHeaders;
@@ -215,7 +230,18 @@ final class AphrontTableView extends AphrontView {
           $header = hsprintf('%s %s', $header_nodevice, $header_device);
         }
 
-        $tr[] = phutil_tag('th', array('class' => $class), $header);
+        $style = null;
+        if (isset($column_widths[$col_num])) {
+          $style = 'width: '.$column_widths[$col_num].';';
+        }
+
+        $tr[] = phutil_tag(
+          'th',
+          array(
+            'class' => $class,
+            'style' => $style,
+          ),
+          $header);
       }
       $table[] = phutil_tag('tr', array(), $tr);
     }
@@ -262,7 +288,13 @@ final class AphrontTableView extends AphrontView {
           if (!empty($this->cellClasses[$row_num][$col_num])) {
             $class = trim($class.' '.$this->cellClasses[$row_num][$col_num]);
           }
-          $tr[] = phutil_tag('td', array('class' => $class), $value);
+
+          $tr[] = phutil_tag(
+            'td',
+            array(
+              'class' => $class,
+            ),
+            $value);
           ++$col_num;
         }
 
@@ -294,8 +326,23 @@ final class AphrontTableView extends AphrontView {
     if ($this->className !== null) {
       $classes[] = $this->className;
     }
+
     if ($this->deviceReadyTable) {
       $classes[] = 'aphront-table-view-device-ready';
+    }
+
+    if ($this->columnWidths) {
+      $classes[] = 'aphront-table-view-fixed';
+    }
+
+    $notice = null;
+    if ($this->notice) {
+      $notice = phutil_tag(
+        'div',
+        array(
+          'class' => 'aphront-table-notice',
+        ),
+        $this->notice);
     }
 
     $html = phutil_tag(
@@ -304,7 +351,13 @@ final class AphrontTableView extends AphrontView {
         'class' => implode(' ', $classes),
       ),
       $table);
-    return phutil_tag_div('aphront-table-wrap', $html);
+
+    return phutil_tag_div(
+      'aphront-table-wrap',
+      array(
+        $notice,
+        $html,
+      ));
   }
 
   public static function renderSingleDisplayLine($line) {

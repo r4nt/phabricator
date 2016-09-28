@@ -3,19 +3,13 @@
 final class PhortunePaymentMethodCreateController
   extends PhortuneController {
 
-  private $accountID;
-
-  public function willProcessRequest(array $data) {
-    $this->accountID = $data['accountID'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $account_id = $request->getURIData('accountID');
 
     $account = id(new PhortuneAccountQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->accountID))
+      ->withIDs(array($account_id))
       ->executeOne();
     if (!$account) {
       return new Aphront404Response();
@@ -164,20 +158,29 @@ final class PhortunePaymentMethodCreateController
           ->addCancelButton($cancel_uri));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText($provider->getPaymentMethodDescription())
+      ->setHeaderText(pht('Method'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Add Payment Method'));
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Add Payment Method'))
+      ->setHeaderIcon('fa-plus-square');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $box,
-      ),
-      array(
-        'title' => $provider->getPaymentMethodDescription(),
       ));
+
+    return $this->newPage()
+      ->setTitle($provider->getPaymentMethodDescription())
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
   private function renderSelectProvider(

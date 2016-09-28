@@ -6,7 +6,11 @@
   width: 540px;
   margin: 32px auto 16px;
   border: 1px solid {$lightblueborder};
-  border-bottom: 1px solid {$blueborder};
+  border-radius: 3px;
+  background-color: #fff;
+}
+
+.jx-client-dialog .aphront-dialog-view {
   box-shadow: {$dropshadow};
 }
 
@@ -16,20 +20,11 @@
 }
 
 .aphront-dialog-view-standalone {
-  margin: auto;
+  margin: 32px auto;
 }
 
-.aphront-dialog-head .phui-action-header {
-  border-bottom: 1px solid {$lightblueborder};
-  padding: 8px 16px;
-  white-space: nowrap;
-}
-
-.aphront-dialog-head .phui-action-header
-  .phui-action-header-title {
-  font-size: 15px;
-  color: {$darkbluetext};
-  text-shadow: 0 1px 2px #fff;
+.aphront-dialog-head {
+  padding: 12px 12px 0 12px;
 }
 
 .aphront-dialog-flush .aphront-dialog-body {
@@ -42,19 +37,44 @@
 
 .aphront-dialog-view-width-full {
   width: 90%;
+  max-width: 1040px;
 }
 
 .aphront-dialog-body {
-  background: #ffffff;
+  background: #fff;
   padding: 16px;
   border: none;
 }
 
+.device-phone .aphront-dialog-body {
+  padding: 8px;
+}
+
 .aphront-dialog-tail {
   border: none;
+  position: relative;
   background: {$lightgreybackground};
   padding: 8px 16px;
   border-top: 1px solid {$thinblueborder};
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+
+.device .aphront-dialog-resize {
+  /* No resizing on devices. */
+  display: none;
+}
+
+.aphront-dialog-resize {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 18px;
+  height: 18px;
+  background-image: url(/rsrc/image/resize.png);
+  background-size: 100%;
+  cursor: nwse-resize;
+  pointer-events: all;
 }
 
 .aphront-dialog-foot {
@@ -69,8 +89,8 @@
 }
 
 .jx-client-dialog {
-  position:   absolute;
-  width:      100%;
+  position: absolute;
+  width: 100%;
 }
 
 .jx-mask {
@@ -108,11 +128,6 @@
   width: 50%;
 }
 
-.aphront-dialog-view ul {
-  margin: 12px 24px;
-  list-style: circle;
-}
-
 .aphront-policy-rejection {
   font-weight: bold;
 }
@@ -139,4 +154,14 @@
  .phui-object-item-frame {
   border: 0;
   border-top: 1px solid {$thinblueborder};
+}
+
+.aphront-dialog-object-list .phui-object-box {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.aphront-dialog-object-list .aphront-dialog-body {
+  padding: 0 12px;
 }

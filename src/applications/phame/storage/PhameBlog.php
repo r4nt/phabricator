@@ -4,22 +4,37 @@ final class PhameBlog extends PhameDAO
   implements
     PhabricatorPolicyInterface,
     PhabricatorMarkupInterface,
-    PhabricatorApplicationTransactionInterface {
+    PhabricatorSubscribableInterface,
+    PhabricatorFlaggableInterface,
+    PhabricatorProjectInterface,
+    PhabricatorDestructibleInterface,
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorConduitResultInterface,
+    PhabricatorFulltextInterface {
 
   const MARKUP_FIELD_DESCRIPTION = 'markup:description';
 
-  const SKIN_DEFAULT = 'oblivious';
-
   protected $name;
+  protected $subtitle;
   protected $description;
   protected $domain;
+  protected $domainFullURI;
+  protected $parentSite;
+  protected $parentDomain;
   protected $configData;
   protected $creatorPHID;
   protected $viewPolicy;
   protected $editPolicy;
-  protected $joinPolicy;
+  protected $status;
+  protected $mailKey;
+  protected $profileImagePHID;
+  protected $headerImagePHID;
 
-  private static $requestBlog;
+  private $profileImageFile = self::ATTACHABLE;
+  private $headerImageFile = self::ATTACHABLE;
+
+  const STATUS_ACTIVE = 'active';
+  const STATUS_ARCHIVED = 'archived';
 
   protected function getConfiguration() {
     return array(
@@ -29,12 +44,19 @@ final class PhameBlog extends PhameDAO
       ),
       self::CONFIG_COLUMN_SCHEMA => array(
         'name' => 'text64',
+        'subtitle' => 'text64',
         'description' => 'text',
         'domain' => 'text128?',
+        'domainFullURI' => 'text128?',
+        'parentSite' => 'text128?',
+        'parentDomain' => 'text128?',
+        'status' => 'text32',
+        'mailKey' => 'bytes20',
+        'profileImagePHID' => 'phid?',
+        'headerImagePHID' => 'phid?',
 
         // T6203/NULLABILITY
         // These policies should always be non-null.
-        'joinPolicy' => 'policy?',
         'editPolicy' => 'policy?',
         'viewPolicy' => 'policy?',
       ),
@@ -52,6 +74,13 @@ final class PhameBlog extends PhameDAO
     ) + parent::getConfiguration();
   }
 
+  public function save() {
+    if (!$this->getMailKey()) {
+      $this->setMailKey(Filesystem::readRandomCharacters(20));
+    }
+    return parent::save();
+  }
+
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
       PhabricatorPhameBlogPHIDType::TYPECONST);
@@ -60,33 +89,21 @@ final class PhameBlog extends PhameDAO
   public static function initializeNewBlog(PhabricatorUser $actor) {
     $blog = id(new PhameBlog())
       ->setCreatorPHID($actor->getPHID())
+      ->setStatus(self::STATUS_ACTIVE)
       ->setViewPolicy(PhabricatorPolicies::getMostOpenPolicy())
-      ->setEditPolicy(PhabricatorPolicies::POLICY_USER)
-      ->setJoinPolicy(PhabricatorPolicies::POLICY_USER);
+      ->setEditPolicy(PhabricatorPolicies::POLICY_USER);
     return $blog;
   }
 
-  public function getSkinRenderer(AphrontRequest $request) {
-    $spec = PhameSkinSpecification::loadOneSkinSpecification(
-      $this->getSkin());
+  public function isArchived() {
+    return ($this->getStatus() == self::STATUS_ARCHIVED);
+  }
 
-    if (!$spec) {
-      $spec = PhameSkinSpecification::loadOneSkinSpecification(
-        self::SKIN_DEFAULT);
-    }
-
-    if (!$spec) {
-      throw new Exception(
-        pht(
-          'This blog has an invalid skin, and the default skin failed to '.
-          'load.'));
-    }
-
-    $skin = newv($spec->getSkinClass(), array());
-    $skin->setRequest($request);
-    $skin->setSpecification($spec);
-
-    return $skin;
+  public static function getStatusNameMap() {
+    return array(
+      self::STATUS_ACTIVE => pht('Active'),
+      self::STATUS_ARCHIVED => pht('Archived'),
+    );
   }
 
   /**
@@ -97,34 +114,29 @@ final class PhameBlog extends PhameDAO
    *
    * @return string
    */
-  public function validateCustomDomain($custom_domain) {
-    $example_domain = 'blog.example.com';
+  public function validateCustomDomain($domain_full_uri) {
+    $example_domain = 'http://blog.example.com/';
     $label = pht('Invalid');
 
     // note this "uri" should be pretty busted given the desired input
     // so just use it to test if there's a protocol specified
-    $uri = new PhutilURI($custom_domain);
-    if ($uri->getProtocol()) {
+    $uri = new PhutilURI($domain_full_uri);
+    $domain = $uri->getDomain();
+    $protocol = $uri->getProtocol();
+    $path = $uri->getPath();
+    $supported_protocols = array('http', 'https');
+
+    if (!in_array($protocol, $supported_protocols)) {
       return array(
         $label,
         pht(
-          'The custom domain should not include a protocol. Just provide '.
-          'the bare domain name (for example, "%s").',
+          'The custom domain should include a valid protocol in the URI '.
+          '(for example, "%s"). Valid protocols are "http" or "https".',
           $example_domain),
-      );
+        );
     }
 
-    if ($uri->getPort()) {
-      return array(
-        $label,
-        pht(
-          'The custom domain should not include a port number. Just provide '.
-          'the bare domain name (for example, "%s").',
-          $example_domain),
-      );
-    }
-
-    if (strpos($custom_domain, '/') !== false) {
+    if (strlen($path) && $path != '/') {
       return array(
         $label,
         pht(
@@ -135,7 +147,7 @@ final class PhameBlog extends PhameDAO
         );
     }
 
-    if (strpos($custom_domain, '.') === false) {
+    if (strpos($domain, '.') === false) {
       return array(
         $label,
         pht(
@@ -167,48 +179,62 @@ final class PhameBlog extends PhameDAO
     return null;
   }
 
-  public function getSkin() {
-    $config = coalesce($this->getConfigData(), array());
-    return idx($config, 'skin', self::SKIN_DEFAULT);
-  }
-
-  public function setSkin($skin) {
-    $config = coalesce($this->getConfigData(), array());
-    $config['skin'] = $skin;
-    return $this->setConfigData($config);
-  }
-
-  public static function getSkinOptionsForSelect() {
-    $classes = id(new PhutilSymbolLoader())
-      ->setAncestorClass('PhameBlogSkin')
-      ->setType('class')
-      ->setConcreteOnly(true)
-      ->selectSymbolsWithoutLoading();
-
-    return ipull($classes, 'name', 'name');
-  }
-
-  public static function setRequestBlog(PhameBlog $blog) {
-    self::$requestBlog = $blog;
-  }
-
-  public static function getRequestBlog() {
-    return self::$requestBlog;
-  }
-
-  public function getLiveURI(PhamePost $post = null) {
-    if ($this->getDomain()) {
-      $base = new PhutilURI('http://'.$this->getDomain().'/');
+  public function getLiveURI() {
+    if (strlen($this->getDomain())) {
+      return $this->getExternalLiveURI();
     } else {
-      $base = '/phame/live/'.$this->getID().'/';
-      $base = PhabricatorEnv::getURI($base);
+      return $this->getInternalLiveURI();
     }
+  }
 
-    if ($post) {
-      $base .= '/post/'.$post->getPhameTitle();
-    }
+  public function getExternalLiveURI() {
+    $uri = new PhutilURI($this->getDomainFullURI());
+    PhabricatorEnv::requireValidRemoteURIForLink($uri);
+    return (string)$uri;
+  }
 
-    return $base;
+  public function getExternalParentURI() {
+    $uri = $this->getParentDomain();
+    PhabricatorEnv::requireValidRemoteURIForLink($uri);
+    return (string)$uri;
+  }
+
+  public function getInternalLiveURI() {
+    return '/phame/live/'.$this->getID().'/';
+  }
+
+  public function getViewURI() {
+    return '/phame/blog/view/'.$this->getID().'/';
+  }
+
+  public function getManageURI() {
+    return '/phame/blog/manage/'.$this->getID().'/';
+  }
+
+  public function getProfileImageURI() {
+    return $this->getProfileImageFile()->getBestURI();
+  }
+
+  public function attachProfileImageFile(PhabricatorFile $file) {
+    $this->profileImageFile = $file;
+    return $this;
+  }
+
+  public function getProfileImageFile() {
+    return $this->assertAttached($this->profileImageFile);
+  }
+
+  public function getHeaderImageURI() {
+    return $this->getHeaderImageFile()->getBestURI();
+  }
+
+  public function attachHeaderImageFile(PhabricatorFile $file) {
+    $this->headerImageFile = $file;
+    return $this;
+  }
+
+  public function getHeaderImageFile() {
+    return $this->assertAttached($this->headerImageFile);
   }
 
 
@@ -219,7 +245,6 @@ final class PhameBlog extends PhameDAO
     return array(
       PhabricatorPolicyCapability::CAN_VIEW,
       PhabricatorPolicyCapability::CAN_EDIT,
-      PhabricatorPolicyCapability::CAN_JOIN,
     );
   }
 
@@ -230,27 +255,15 @@ final class PhameBlog extends PhameDAO
         return $this->getViewPolicy();
       case PhabricatorPolicyCapability::CAN_EDIT:
         return $this->getEditPolicy();
-      case PhabricatorPolicyCapability::CAN_JOIN:
-        return $this->getJoinPolicy();
     }
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $user) {
     $can_edit = PhabricatorPolicyCapability::CAN_EDIT;
-    $can_join = PhabricatorPolicyCapability::CAN_JOIN;
 
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
         // Users who can edit or post to a blog can always view it.
-        if (PhabricatorPolicyFilter::hasCapability($user, $this, $can_edit)) {
-          return true;
-        }
-        if (PhabricatorPolicyFilter::hasCapability($user, $this, $can_join)) {
-          return true;
-        }
-        break;
-      case PhabricatorPolicyCapability::CAN_JOIN:
-        // Users who can edit a blog can always post to it.
         if (PhabricatorPolicyFilter::hasCapability($user, $this, $can_edit)) {
           return true;
         }
@@ -265,10 +278,7 @@ final class PhameBlog extends PhameDAO
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
         return pht(
-          'Users who can edit or post on a blog can always view it.');
-      case PhabricatorPolicyCapability::CAN_JOIN:
-        return pht(
-          'Users who can edit a blog can always post on it.');
+          'Users who can edit a blog can always view it.');
     }
 
     return null;
@@ -305,6 +315,25 @@ final class PhameBlog extends PhameDAO
     return (bool)$this->getPHID();
   }
 
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+
+      $posts = id(new PhamePostQuery())
+        ->setViewer($engine->getViewer())
+        ->withBlogPHIDs(array($this->getPHID()))
+        ->execute();
+      foreach ($posts as $post) {
+        $engine->destroyObject($post);
+      }
+      $this->delete();
+
+    $this->saveTransaction();
+  }
+
 
 /* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
 
@@ -325,6 +354,54 @@ final class PhameBlog extends PhameDAO
     PhabricatorApplicationTransactionView $timeline,
     AphrontRequest $request) {
     return $timeline;
+  }
+
+
+/* -(  PhabricatorSubscribableInterface Implementation  )-------------------- */
+
+
+  public function isAutomaticallySubscribed($phid) {
+    return false;
+  }
+
+
+/* -(  PhabricatorConduitResultInterface  )---------------------------------- */
+
+
+  public function getFieldSpecificationsForConduit() {
+    return array(
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('name')
+        ->setType('string')
+        ->setDescription(pht('The name of the blog.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('description')
+        ->setType('string')
+        ->setDescription(pht('Blog description.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('status')
+        ->setType('string')
+        ->setDescription(pht('Archived or active status.')),
+    );
+  }
+
+  public function getFieldValuesForConduit() {
+    return array(
+      'name' => $this->getName(),
+      'description' => $this->getDescription(),
+      'status' => $this->getStatus(),
+    );
+  }
+
+  public function getConduitSearchAttachments() {
+    return array();
+  }
+
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+  public function newFulltextEngine() {
+    return new PhameBlogFulltextEngine();
   }
 
 }

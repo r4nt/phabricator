@@ -24,12 +24,39 @@ final class PhabricatorRepositoryPullEngine
   public function pullRepository() {
     $repository = $this->getRepository();
 
+    $lock = $this->newRepositoryLock($repository, 'repo.pull', true);
+
+    try {
+      $lock->lock();
+    } catch (PhutilLockException $ex) {
+      throw new DiffusionDaemonLockException(
+        pht(
+          'Another process is currently updating repository "%s", '.
+          'skipping pull.',
+          $repository->getDisplayName()));
+    }
+
+    try {
+      $result = $this->pullRepositoryWithLock();
+    } catch (Exception $ex) {
+      $lock->unlock();
+      throw $ex;
+    }
+
+    $lock->unlock();
+
+    return $result;
+  }
+
+  private function pullRepositoryWithLock() {
+    $repository = $this->getRepository();
+    $viewer = PhabricatorUser::getOmnipotentUser();
+
     $is_hg = false;
     $is_git = false;
     $is_svn = false;
 
     $vcs = $repository->getVersionControlSystem();
-    $callsign = $repository->getCallsign();
 
     switch ($vcs) {
       case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
@@ -37,9 +64,9 @@ final class PhabricatorRepositoryPullEngine
         if (!$repository->isHosted()) {
           $this->skipPull(
             pht(
-              "Repository '%s' is a non-hosted Subversion repository, which ".
-              "does not require a local working copy to be pulled.",
-              $callsign));
+              'Repository "%s" is a non-hosted Subversion repository, which '.
+              'does not require a local working copy to be pulled.',
+              $repository->getDisplayName()));
           return;
         }
         $is_svn = true;
@@ -55,13 +82,12 @@ final class PhabricatorRepositoryPullEngine
         break;
     }
 
-    $callsign = $repository->getCallsign();
     $local_path = $repository->getLocalPath();
     if ($local_path === null) {
       $this->abortPull(
         pht(
-          "No local path is configured for repository '%s'.",
-          $callsign));
+          'No local path is configured for repository "%s".',
+          $repository->getDisplayName()));
     }
 
     try {
@@ -73,8 +99,8 @@ final class PhabricatorRepositoryPullEngine
       if (!Filesystem::pathExists($local_path)) {
         $this->logPull(
           pht(
-            "Creating a new working copy for repository '%s'.",
-            $callsign));
+            'Creating a new working copy for repository "%s".',
+            $repository->getDisplayName()));
         if ($is_git) {
           $this->executeGitCreate();
         } else if ($is_hg) {
@@ -82,18 +108,23 @@ final class PhabricatorRepositoryPullEngine
         } else {
           $this->executeSubversionCreate();
         }
-      } else {
-        if (!$repository->isHosted()) {
-          $this->logPull(
-            pht(
-              "Updating the working copy for repository '%s'.",
-              $callsign));
-          if ($is_git) {
-            $this->verifyGitOrigin($repository);
-            $this->executeGitUpdate();
-          } else if ($is_hg) {
-            $this->executeMercurialUpdate();
-          }
+      }
+
+      id(new DiffusionRepositoryClusterEngine())
+        ->setViewer($viewer)
+        ->setRepository($repository)
+        ->synchronizeWorkingCopyBeforeRead();
+
+      if (!$repository->isHosted()) {
+        $this->logPull(
+          pht(
+            'Updating the working copy for repository "%s".',
+            $repository->getDisplayName()));
+        if ($is_git) {
+          $this->verifyGitOrigin($repository);
+          $this->executeGitUpdate();
+        } else if ($is_hg) {
+          $this->executeMercurialUpdate();
         }
       }
 
@@ -113,7 +144,10 @@ final class PhabricatorRepositoryPullEngine
 
     } catch (Exception $ex) {
       $this->abortPull(
-        pht('Pull of "%s" failed: %s', $callsign, $ex->getMessage()),
+        pht(
+          "Pull of '%s' failed: %s",
+          $repository->getDisplayName(),
+          $ex->getMessage()),
         $ex);
     }
 
@@ -138,8 +172,6 @@ final class PhabricatorRepositoryPullEngine
   }
 
   private function logPull($message) {
-    $code_working = PhabricatorRepositoryStatusMessage::CODE_WORKING;
-    $this->updateRepositoryInitStatus($code_working, $message);
     $this->log('%s', $message);
   }
 
@@ -157,7 +189,7 @@ final class PhabricatorRepositoryPullEngine
       ));
   }
 
-  private function installHook($path) {
+  private function installHook($path, array $hook_argv = array()) {
     $this->log('%s', pht('Installing commit hook to "%s"...', $path));
 
     $repository = $this->getRepository();
@@ -168,10 +200,11 @@ final class PhabricatorRepositoryPullEngine
 
     $full_php_path = Filesystem::resolveBinary('php');
     $cmd = csprintf(
-      'exec %s -f %s -- %s "$@"',
+      'exec %s -f %s -- %s %Ls "$@"',
       $full_php_path,
       $bin,
-      $identifier);
+      $identifier,
+      $hook_argv);
 
     $hook = "#!/bin/sh\nexport TERM=dumb\n{$cmd}\n";
 
@@ -191,7 +224,7 @@ final class PhabricatorRepositoryPullEngine
   }
 
   private function getHookContextIdentifier(PhabricatorRepository $repository) {
-    $identifier = $repository->getCallsign();
+    $identifier = $repository->getPHID();
 
     $instance = PhabricatorEnv::getEnvConfig('cluster.instance');
     if (strlen($instance)) {
@@ -313,7 +346,7 @@ final class PhabricatorRepositoryPullEngine
         // For bare working copies, we need this magic incantation.
         $future = $repository->getRemoteCommandFuture(
           'fetch origin %s --prune',
-          '+refs/heads/*:refs/heads/*');
+          '+refs/*:refs/*');
       } else {
         $future = $repository->getRemoteCommandFuture(
           'fetch --all --prune');
@@ -334,12 +367,12 @@ final class PhabricatorRepositoryPullEngine
             $remote_uri);
         }
       } else if ($err) {
-        throw new Exception(
-          pht(
-            "git fetch failed with error #%d:\nstdout:%s\n\nstderr:%s\n",
-            $err,
-            $stdout,
-            $stderr));
+        throw new CommandException(
+          pht('Failed to fetch changes!'),
+          $future->getCommand(),
+          $err,
+          $stdout,
+          $stderr);
       } else {
         $retry = false;
       }
@@ -430,7 +463,8 @@ final class PhabricatorRepositoryPullEngine
     $path = $repository->getLocalPath();
 
     // This is a local command, but needs credentials.
-    $future = $repository->getRemoteCommandFuture('pull -u');
+    $remote = $repository->getRemoteURIEnvelope();
+    $future = $repository->getRemoteCommandFuture('pull -u -- %P', $remote);
     $future->setCWD($path);
 
     try {
@@ -550,8 +584,16 @@ final class PhabricatorRepositoryPullEngine
     $root = $repository->getLocalPath();
 
     $path = '/hooks/pre-commit';
-
     $this->installHook($root.$path);
+
+    $revprop_path = '/hooks/pre-revprop-change';
+
+    $revprop_argv = array(
+      '--hook-mode',
+      'svn-revprop',
+    );
+
+    $this->installHook($root.$revprop_path, $revprop_argv);
   }
 
 

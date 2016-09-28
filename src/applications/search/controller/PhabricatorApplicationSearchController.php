@@ -58,11 +58,6 @@ final class PhabricatorApplicationSearchController
       throw new PhutilInvalidStateException('setEngine');
     }
 
-    $nav = $this->getNavigation();
-    if (!$nav) {
-      throw new PhutilInvalidStateException('setNavigation');
-    }
-
     $engine->setViewer($this->getRequest()->getUser());
 
     $parent = $this->getDelegatingController();
@@ -85,6 +80,9 @@ final class PhabricatorApplicationSearchController
     $user = $request->getUser();
     $engine = $this->getSearchEngine();
     $nav = $this->getNavigation();
+    if (!$nav) {
+      $nav = $this->buildNavigation();
+    }
 
     if ($request->isFormPost()) {
       $saved_query = $engine->buildSavedQueryFromRequest($request);
@@ -102,18 +100,26 @@ final class PhabricatorApplicationSearchController
     } else if (!strlen($this->queryKey)) {
       $found_query_data = false;
 
-      if ($request->isHTTPGet()) {
+      if ($request->isHTTPGet() || $request->isQuicksand()) {
         // If this is a GET request and it has some query data, don't
         // do anything unless it's only before= or after=. We'll build and
         // execute a query from it below. This allows external tools to build
         // URIs like "/query/?users=a,b".
         $pt_data = $request->getPassthroughRequestData();
 
+        $exempt = array(
+          'before' => true,
+          'after' => true,
+          'nux' => true,
+        );
+
         foreach ($pt_data as $pt_key => $pt_value) {
-          if ($pt_key != 'before' && $pt_key != 'after') {
-            $found_query_data = true;
-            break;
+          if (isset($exempt[$pt_key])) {
+            continue;
           }
+
+          $found_query_data = true;
+          break;
         }
       }
 
@@ -174,90 +180,10 @@ final class PhabricatorApplicationSearchController
     // we sort out T5307.
 
     $form->appendChild($submit);
-    $filter_view = id(new AphrontListFilterView())->appendChild($form);
-
-    if ($run_query && $named_query) {
-      if ($named_query->getIsBuiltin()) {
-        $description = pht(
-          'Showing results for query "%s".',
-          $named_query->getQueryName());
-      } else {
-        $description = pht(
-          'Showing results for saved query "%s".',
-          $named_query->getQueryName());
-      }
-
-      $filter_view->setCollapsed(
-        pht('Edit Query...'),
-        pht('Hide Query'),
-        $description,
-        $this->getApplicationURI('query/advanced/?query='.$query_key));
-    }
+    $body = array();
 
     if ($this->getPreface()) {
-      $nav->appendChild($this->getPreface());
-    }
-
-    $nav->appendChild($filter_view);
-
-    if ($run_query) {
-      $nav->appendChild(
-        $anchor = id(new PhabricatorAnchorView())
-          ->setAnchorName('R'));
-
-      try {
-        $query = $engine->buildQueryFromSavedQuery($saved_query);
-
-        $pager = $engine->newPagerForSavedQuery($saved_query);
-        $pager->readFromRequest($request);
-
-        $objects = $engine->executeQuery($query, $pager);
-
-        // TODO: To support Dashboard panels, rendering is moving into
-        // SearchEngines. Move it all the way in and then get rid of this.
-
-        $interface = 'PhabricatorApplicationSearchResultsControllerInterface';
-        if ($parent instanceof $interface) {
-          $list = $parent->renderResultsList($objects, $saved_query);
-        } else {
-          $engine->setRequest($request);
-
-          $list = $engine->renderResults(
-            $objects,
-            $saved_query);
-        }
-
-        $nav->appendChild($list);
-
-        // TODO: This is a bit hacky.
-        if ($list instanceof PHUIObjectItemListView) {
-          $list->setNoDataString(pht('No results found for this query.'));
-          $list->setPager($pager);
-        } else {
-          if ($pager->willShowPagingControls()) {
-            $pager_box = id(new PHUIBoxView())
-              ->addPadding(PHUI::PADDING_MEDIUM)
-              ->addMargin(PHUI::MARGIN_LARGE)
-              ->setBorder(true)
-              ->appendChild($pager);
-            $nav->appendChild($pager_box);
-          }
-        }
-      } catch (PhabricatorTypeaheadInvalidTokenException $ex) {
-        $errors[] = pht(
-          'This query specifies an invalid parameter. Review the '.
-          'query parameters and correct errors.');
-      }
-    }
-
-    if ($errors) {
-      $errors = id(new PHUIInfoView())
-        ->setTitle(pht('Query Errors'))
-        ->setErrors($errors);
-    }
-
-    if ($errors) {
-      $nav->appendChild($errors);
+      $body[] = $this->getPreface();
     }
 
     if ($named_query) {
@@ -266,18 +192,143 @@ final class PhabricatorApplicationSearchController
       $title = pht('Advanced Search');
     }
 
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setProfileHeader(true);
+
+    $box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->addClass('application-search-results');
+
+    if ($run_query || $named_query) {
+      $box->setShowHide(
+        pht('Edit Query'),
+        pht('Hide Query'),
+        $form,
+        $this->getApplicationURI('query/advanced/?query='.$query_key),
+        (!$named_query ? true : false));
+    } else {
+      $box->setForm($form);
+    }
+
+    $body[] = $box;
+    $more_crumbs = null;
+
+    if ($run_query) {
+      $exec_errors = array();
+
+      $box->setAnchor(
+        id(new PhabricatorAnchorView())
+          ->setAnchorName('R'));
+
+      try {
+        $engine->setRequest($request);
+
+        $query = $engine->buildQueryFromSavedQuery($saved_query);
+
+        $pager = $engine->newPagerForSavedQuery($saved_query);
+        $pager->readFromRequest($request);
+
+        $objects = $engine->executeQuery($query, $pager);
+
+        $force_nux = $request->getBool('nux');
+        if (!$objects || $force_nux) {
+          $nux_view = $this->renderNewUserView($engine, $force_nux);
+        } else {
+          $nux_view = null;
+        }
+
+        if ($nux_view) {
+          $box->appendChild($nux_view);
+        } else {
+          $list = $engine->renderResults($objects, $saved_query);
+
+          if (!($list instanceof PhabricatorApplicationSearchResultView)) {
+            throw new Exception(
+              pht(
+                'SearchEngines must render a "%s" object, but this engine '.
+                '(of class "%s") rendered something else.',
+                'PhabricatorApplicationSearchResultView',
+                get_class($engine)));
+          }
+
+          if ($list->getActions()) {
+            foreach ($list->getActions() as $action) {
+              $header->addActionLink($action);
+            }
+          }
+
+          if ($list->getObjectList()) {
+            $box->setObjectList($list->getObjectList());
+          }
+          if ($list->getTable()) {
+            $box->setTable($list->getTable());
+          }
+          if ($list->getInfoView()) {
+            $box->setInfoView($list->getInfoView());
+          }
+          if ($list->getContent()) {
+            $box->appendChild($list->getContent());
+          }
+
+          $result_header = $list->getHeader();
+          if ($result_header) {
+            $box->setHeader($result_header);
+          }
+
+          $more_crumbs = $list->getCrumbs();
+
+          if ($pager->willShowPagingControls()) {
+            $pager_box = id(new PHUIBoxView())
+              ->setColor(PHUIBoxView::GREY)
+              ->addClass('application-search-pager')
+              ->appendChild($pager);
+            $body[] = $pager_box;
+          }
+        }
+      } catch (PhabricatorTypeaheadInvalidTokenException $ex) {
+        $exec_errors[] = pht(
+          'This query specifies an invalid parameter. Review the '.
+          'query parameters and correct errors.');
+      }
+
+      // The engine may have encountered additional errors during rendering;
+      // merge them in and show everything.
+      foreach ($engine->getErrors() as $error) {
+        $exec_errors[] = $error;
+      }
+
+      $errors = $exec_errors;
+    }
+
+    if ($errors) {
+      $box->setFormErrors($errors, pht('Query Errors'));
+    }
+
     $crumbs = $parent
       ->buildApplicationCrumbs()
-      ->setBorder(true)
-      ->addTextCrumb($title);
+      ->setBorder(true);
 
-    $nav->setCrumbs($crumbs);
+    if ($more_crumbs) {
+      $query_uri = $engine->getQueryResultsPageURI($saved_query->getQueryKey());
+      $crumbs->addTextCrumb($title, $query_uri);
 
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => pht('Query: %s', $title),
-      ));
+      foreach ($more_crumbs as $crumb) {
+        $crumbs->addCrumb($crumb);
+      }
+    } else {
+      $crumbs->addTextCrumb($title);
+    }
+
+    require_celerity_resource('application-search-view-css');
+
+    return $this->newPage()
+      ->setApplicationMenu($this->buildApplicationMenu())
+      ->setTitle(pht('Query: %s', $title))
+      ->setCrumbs($crumbs)
+      ->setNavigation($nav)
+      ->appendChild($body)
+      ->addClass('application-search-view');
   }
 
   private function processEditRequest() {
@@ -285,7 +336,11 @@ final class PhabricatorApplicationSearchController
     $request = $this->getRequest();
     $user = $request->getUser();
     $engine = $this->getSearchEngine();
+
     $nav = $this->getNavigation();
+    if (!$nav) {
+      $nav = $this->buildNavigation();
+    }
 
     $named_queries = $engine->loadAllNamedQueries();
 
@@ -350,21 +405,96 @@ final class PhabricatorApplicationSearchController
 
     $crumbs = $parent
       ->buildApplicationCrumbs()
-      ->addTextCrumb(pht('Saved Queries'), $engine->getQueryManagementURI());
+      ->addTextCrumb(pht('Saved Queries'), $engine->getQueryManagementURI())
+      ->setBorder(true);
 
     $nav->selectFilter('query/edit');
-    $nav->setCrumbs($crumbs);
-    $nav->appendChild($list);
 
-    return $parent->buildApplicationPage(
-      $nav,
-      array(
-        'title' => pht('Saved Queries'),
-      ));
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Saved Queries'))
+      ->setProfileHeader(true);
+
+    $box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->setObjectList($list)
+      ->addClass('application-search-results');
+
+    require_celerity_resource('application-search-view-css');
+
+    return $this->newPage()
+      ->setApplicationMenu($this->buildApplicationMenu())
+      ->setTitle(pht('Saved Queries'))
+      ->setCrumbs($crumbs)
+      ->setNavigation($nav)
+      ->addClass('application-search-view')
+      ->appendChild($box);
   }
 
   public function buildApplicationMenu() {
-    return $this->getDelegatingController()->buildApplicationMenu();
+    $menu = $this->getDelegatingController()
+      ->buildApplicationMenu();
+
+    if ($menu instanceof PHUIApplicationMenuView) {
+      $menu->setSearchEngine($this->getSearchEngine());
+    }
+
+    return $menu;
   }
+
+  private function buildNavigation() {
+    $viewer = $this->getViewer();
+    $engine = $this->getSearchEngine();
+
+    $nav = id(new AphrontSideNavFilterView())
+      ->setUser($viewer)
+      ->setBaseURI(new PhutilURI($this->getApplicationURI()));
+
+    $engine->addNavigationItems($nav->getMenu());
+
+    return $nav;
+  }
+
+  private function renderNewUserView(
+    PhabricatorApplicationSearchEngine $engine,
+    $force_nux) {
+
+    // Don't render NUX if the user has clicked away from the default page.
+    if (strlen($this->getQueryKey())) {
+      return null;
+    }
+
+    // Don't put NUX in panels because it would be weird.
+    if ($engine->isPanelContext()) {
+      return null;
+    }
+
+    // Try to render the view itself first, since this should be very cheap
+    // (just returning some text).
+    $nux_view = $engine->renderNewUserView();
+
+    if (!$nux_view) {
+      return null;
+    }
+
+    $query = $engine->newQuery();
+    if (!$query) {
+      return null;
+    }
+
+    // Try to load any object at all. If we can, the application has seen some
+    // use so we just render the normal view.
+    if (!$force_nux) {
+      $object = $query
+        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->setLimit(1)
+        ->execute();
+      if ($object) {
+        return null;
+      }
+    }
+
+    return $nux_view;
+  }
+
 
 }

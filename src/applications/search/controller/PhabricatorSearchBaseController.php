@@ -2,23 +2,34 @@
 
 abstract class PhabricatorSearchBaseController extends PhabricatorController {
 
-  const ACTION_ATTACH       = 'attach';
-  const ACTION_MERGE        = 'merge';
-  const ACTION_DEPENDENCIES = 'dependencies';
-  const ACTION_BLOCKS       = 'blocks';
-  const ACTION_EDGE         = 'edge';
+  protected function loadRelationshipObject() {
+    $request = $this->getRequest();
+    $viewer = $this->getViewer();
 
-  public function buildStandardPageResponse($view, array $data) {
-    $page = $this->buildStandardPageView();
+    $phid = $request->getURIData('sourcePHID');
 
-    $page->setApplicationName('Search');
-    $page->setBaseURI('/search/');
-    $page->setTitle(idx($data, 'title'));
-    $page->setGlyph("\xC2\xBF");
-    $page->appendChild($view);
+    return id(new PhabricatorObjectQuery())
+      ->setViewer($viewer)
+      ->withPHIDs(array($phid))
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_VIEW,
+          PhabricatorPolicyCapability::CAN_EDIT,
+        ))
+      ->executeOne();
+  }
 
-    $response = new AphrontWebpageResponse();
-    return $response->setContent($page->render());
+  protected function loadRelationship($object) {
+    $request = $this->getRequest();
+    $viewer = $this->getViewer();
+
+    $relationship_key = $request->getURIData('relationshipKey');
+
+    $list = PhabricatorObjectRelationshipList::newForObject(
+      $viewer,
+      $object);
+
+    return $list->getRelationship($relationship_key);
   }
 
 }

@@ -3,20 +3,14 @@
 final class PhortuneMerchantEditController
   extends PhortuneMerchantController {
 
-  private $id;
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    if ($this->id) {
+    if ($id) {
       $merchant = id(new PhortuneMerchantQuery())
         ->setViewer($viewer)
-        ->withIDs(array($this->id))
+        ->withIDs(array($id))
         ->requireCapabilities(
           array(
             PhabricatorPolicyCapability::CAN_VIEW,
@@ -151,29 +145,39 @@ final class PhortuneMerchantEditController
           ->setValue($button_text)
           ->addCancelButton($cancel_uri));
 
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title);
+
     $crumbs = $this->buildApplicationCrumbs();
     if ($is_new) {
       $crumbs->addTextCrumb(pht('Create Merchant'));
+      $header->setHeaderIcon('fa-plus-square');
     } else {
       $crumbs->addTextCrumb(
         pht('Merchant %d', $merchant->getID()),
         $this->getApplicationURI('/merchant/'.$merchant->getID().'/'));
       $crumbs->addTextCrumb(pht('Edit'));
+      $header->setHeaderIcon('fa-pencil');
     }
+    $crumbs->setBorder(true);
 
     $box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Merchant'))
       ->setValidationException($validation_exception)
-      ->setHeaderText($title)
-      ->appendChild($form);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $box,
-      ),
-      array(
-        'title' => $title,
       ));
-  }
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
+    }
 
 }

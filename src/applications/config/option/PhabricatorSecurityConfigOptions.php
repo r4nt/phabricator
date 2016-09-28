@@ -11,7 +11,7 @@ final class PhabricatorSecurityConfigOptions
     return pht('Security options.');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-lock';
   }
 
@@ -20,8 +20,6 @@ final class PhabricatorSecurityConfigOptions
   }
 
   public function getOptions() {
-    $support_href = PhabricatorEnv::getDoclink('Give Feedback! Get Support!');
-
     $doc_href = PhabricatorEnv::getDoclink('Configuring a File Domain');
     $doc_name = pht('Configuration Guide: Configuring a File Domain');
 
@@ -44,6 +42,14 @@ final class PhabricatorSecurityConfigOptions
       '240.0.0.0/4',
       '255.255.255.255/32',
     );
+
+    $keyring_type = 'custom:PhabricatorKeyringConfigOptionType';
+    $keyring_description = $this->deformat(pht(<<<EOTEXT
+The keyring stores master encryption keys. For help with configuring a keyring
+and encryption, see **[[ %s | Configuring Encryption ]]**.
+EOTEXT
+      ,
+      PhabricatorEnv::getDoclink('Configuring Encryption')));
 
     return array(
       $this->newOption('security.alternate-file-domain', 'string', null)
@@ -82,22 +88,25 @@ final class PhabricatorSecurityConfigOptions
           pht(
             "If the web server responds to both HTTP and HTTPS requests but ".
             "you want users to connect with only HTTPS, you can set this ".
-            "to true to make Phabricator redirect HTTP requests to HTTPS.\n\n".
-
+            "to `true` to make Phabricator redirect HTTP requests to HTTPS.".
+            "\n\n".
             "Normally, you should just configure your server not to accept ".
             "HTTP traffic, but this setting may be useful if you originally ".
             "used HTTP and have now switched to HTTPS but don't want to ".
             "break old links, or if your webserver sits behind a load ".
             "balancer which terminates HTTPS connections and you can not ".
-            "reasonably configure more granular behavior there.\n\n".
-
+            "reasonably configure more granular behavior there.".
+            "\n\n".
             "IMPORTANT: Phabricator determines if a request is HTTPS or not ".
             "by examining the PHP `%s` variable. If you run ".
             "Apache/mod_php this will probably be set correctly for you ".
             "automatically, but if you run Phabricator as CGI/FCGI (e.g., ".
             "through nginx or lighttpd), you need to configure your web ".
             "server so that it passes the value correctly based on the ".
-            "connection type.",
+            "connection type.".
+            "\n\n".
+            "If you configure Phabricator in cluster mode, note that this ".
+            "setting is ignored by intracluster requests.",
             "\$_SERVER['HTTPS']"))
         ->setBoolOptions(
           array(
@@ -197,11 +206,8 @@ final class PhabricatorSecurityConfigOptions
         ->setSummary(pht('Whitelists editor protocols for "Open in Editor".'))
         ->setDescription(
           pht(
-            "Users can configure a URI pattern to open files in a text ".
-            "editor. The URI must use a protocol on this whitelist.\n\n".
-            "(If you use an editor which defines a protocol not on this ".
-            "list, [[ %s | let us know ]] and we'll update the defaults.)",
-            $support_href))
+            'Users can configure a URI pattern to open files in a text '.
+            'editor. The URI must use a protocol on this whitelist.'))
         ->setLocked(true),
        $this->newOption(
          'celerity.resource-hash',
@@ -278,6 +284,10 @@ final class PhabricatorSecurityConfigOptions
               'unsecured content over plain HTTP. It is very difficult to '.
               'undo this change once users\' browsers have accepted the '.
               'setting.')),
+        $this->newOption('keyring', $keyring_type, array())
+          ->setHidden(true)
+          ->setSummary(pht('Configure master encryption keys.'))
+          ->setDescription($keyring_description),
     );
   }
 

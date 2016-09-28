@@ -8,6 +8,8 @@ final class DifferentialChangesetListView extends AphrontView {
   private $inlineURI;
   private $renderURI = '/differential/changeset/';
   private $whitespace;
+  private $background;
+  private $header;
 
   private $standaloneURI;
   private $leftRawFileURI;
@@ -112,7 +114,19 @@ final class DifferentialChangesetListView extends AphrontView {
     return $this;
   }
 
+  public function setBackground($background) {
+    $this->background = $background;
+    return $this;
+  }
+
+  public function setHeader($header) {
+    $this->header = $header;
+    return $this;
+  }
+
   public function render() {
+    $viewer = $this->getViewer();
+
     $this->requireResource('differential-changeset-view-css');
 
     $changesets = $this->changesets;
@@ -129,8 +143,8 @@ final class DifferentialChangesetListView extends AphrontView {
       array(
         'pht' => array(
           'Open in Editor' => pht('Open in Editor'),
-          'Show Entire File' => pht('Show Entire File'),
-          'Entire File Shown' => pht('Entire File Shown'),
+          'Show All Context' => pht('Show All Context'),
+          'All Context Shown' => pht('All Context Shown'),
           "Can't Toggle Unloaded File" => pht("Can't Toggle Unloaded File"),
           'Expand File' => pht('Expand File'),
           'Collapse File' => pht('Collapse File'),
@@ -148,7 +162,7 @@ final class DifferentialChangesetListView extends AphrontView {
       ));
 
     $renderer = DifferentialChangesetParser::getDefaultRendererForViewer(
-      $this->getUser());
+      $viewer);
 
     $output = array();
     $ids = array();
@@ -163,7 +177,7 @@ final class DifferentialChangesetListView extends AphrontView {
       $ref = $this->references[$key];
 
       $detail = id(new DifferentialChangesetDetailView())
-        ->setUser($this->getUser());
+        ->setUser($viewer);
 
       $uniq_id = 'diff-'.$changeset->getAnchorName();
       $detail->setID($uniq_id);
@@ -238,8 +252,12 @@ final class DifferentialChangesetListView extends AphrontView {
       ));
     }
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($this->getTitle());
+    if ($this->header) {
+      $header = $this->header;
+    } else {
+      $header = id(new PHUIHeaderView())
+        ->setHeader($this->getTitle());
+    }
 
     $content = phutil_tag(
       'div',
@@ -251,6 +269,8 @@ final class DifferentialChangesetListView extends AphrontView {
 
     $object_box = id(new PHUIObjectBoxView())
       ->setHeader($header)
+      ->setBackground($this->background)
+      ->setCollapsed(true)
       ->appendChild($content);
 
     return $object_box;
@@ -260,6 +280,7 @@ final class DifferentialChangesetListView extends AphrontView {
     DifferentialChangesetDetailView $detail,
     $ref,
     DifferentialChangeset $changeset) {
+    $viewer = $this->getViewer();
 
     $meta = array();
 
@@ -279,7 +300,7 @@ final class DifferentialChangesetListView extends AphrontView {
       try {
         $meta['diffusionURI'] =
           (string)$repository->getDiffusionBrowseURIForPath(
-            $this->user,
+            $viewer,
             $changeset->getAbsoluteRepositoryPath($repository, $this->diff),
             idx($changeset->getMetadata(), 'line:first'),
             $this->getBranch());
@@ -307,14 +328,12 @@ final class DifferentialChangesetListView extends AphrontView {
       }
     }
 
-    $user = $this->user;
-    if ($user && $repository) {
+    if ($viewer && $repository) {
       $path = ltrim(
         $changeset->getAbsoluteRepositoryPath($repository, $this->diff),
         '/');
       $line = idx($changeset->getMetadata(), 'line:first', 1);
-      $callsign = $repository->getCallsign();
-      $editor_link = $user->loadEditorLink($path, $line, $callsign);
+      $editor_link = $viewer->loadEditorLink($path, $line, $repository);
       if ($editor_link) {
         $meta['editor'] = $editor_link;
       } else {
@@ -323,18 +342,16 @@ final class DifferentialChangesetListView extends AphrontView {
     }
 
     $meta['containerID'] = $detail->getID();
-    $caret = phutil_tag('span', array('class' => 'caret'), '');
 
-    return javelin_tag(
-      'a',
-      array(
-        'class'   => 'button grey small dropdown',
-        'meta'    => $meta,
-        'href'    => idx($meta, 'detailURI', '#'),
-        'target'  => '_blank',
-        'sigil'   => 'differential-view-options',
-      ),
-      array(pht('View Options'), $caret));
+    return id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('View Options'))
+      ->setIcon('fa-bars')
+      ->setColor(PHUIButtonView::GREY)
+      ->setHref(idx($meta, 'detailURI', '#'))
+      ->setMetadata($meta)
+      ->addSigil('differential-view-options');
+
   }
 
 }

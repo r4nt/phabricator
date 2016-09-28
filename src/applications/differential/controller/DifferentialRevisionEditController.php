@@ -3,24 +3,18 @@
 final class DifferentialRevisionEditController
   extends DifferentialController {
 
-  private $id;
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $id = $request->getURIData('id');
 
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    if (!$this->id) {
-      $this->id = $request->getInt('revisionID');
+    if (!$id) {
+      $id = $request->getInt('revisionID');
     }
 
-    if ($this->id) {
+    if ($id) {
       $revision = id(new DifferentialRevisionQuery())
         ->setViewer($viewer)
-        ->withIDs(array($this->id))
+        ->withIDs(array($id))
         ->needRelationships(true)
         ->needReviewerStatus(true)
         ->needActiveDiffs(true)
@@ -177,35 +171,44 @@ final class DifferentialRevisionEditController
     $crumbs = $this->buildApplicationCrumbs();
     if ($revision->getID()) {
       if ($diff) {
-        $title = pht('Update Differential Revision');
+        $header_icon = 'fa-upload';
+        $title = pht('Update Revision');
         $crumbs->addTextCrumb(
           'D'.$revision->getID(),
           '/differential/diff/'.$diff->getID().'/');
       } else {
-        $title = pht('Edit Differential Revision');
+        $header_icon = 'fa-pencil';
+        $title = pht('Edit Revision: %s', $revision->getTitle());
         $crumbs->addTextCrumb(
           'D'.$revision->getID(),
           '/D'.$revision->getID());
       }
     } else {
+      $header_icon = 'fa-plus-square';
       $title = pht('Create New Differential Revision');
     }
 
     $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+      ->setHeaderText('Revision')
       ->setValidationException($validation_exception)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
     $crumbs->addTextCrumb($title);
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $form_box,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($form_box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

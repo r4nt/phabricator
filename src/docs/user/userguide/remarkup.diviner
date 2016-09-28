@@ -19,6 +19,7 @@ formatting text in Remarkup.
 These are inline styles, and can be applied to most text:
 
   **bold** //italic// `monospaced` ##monospaced## ~~deleted~~ __underlined__
+  !!highlighted!!
   D123 T123 rX123           # Link to Objects
   {D123} {T123}             # Link to Objects (Full Name)
   {F123}                    # Embed Images
@@ -63,9 +64,11 @@ Format **basic text styles** like this:
   ##monospaced text##
   ~~deleted text~~
   __underlined text__
+  !!highlighted text!!
 
 Those produce **bold text**, //italic text//, `monospaced text`, ##monospaced
-text##, ~~deleted text~~, and __underlined text__, respectively.
+text##, ~~deleted text~~, __underlined text__, and !!highlighted text!!
+respectively.
 
 = Layout =
 
@@ -92,6 +95,9 @@ You can optionally omit the trailing `=` signs -- that is, these are the same:
 This produces headers like the ones in this document. Make sure you have an
 empty line before and after the header.
 
+Lists
+=====
+
 Make **lists** by beginning each item with a `-` or a `*`:
 
   lang=text
@@ -116,6 +122,21 @@ You can make numbered lists with a `#` instead of `-` or `*`:
   # Articuno
   # Zapdos
   # Moltres
+
+Numbered lists can also be started with `1.` or `1)`. If you use a number other
+than `1`, the list will start at that number instead. For example, this:
+
+```
+  200) OK
+  201) Created
+  202) Accepted
+```
+
+...produces this:
+
+  200) OK
+  201) Created
+  202) Accepted
 
 You can also nest lists:
 
@@ -286,6 +307,28 @@ the rendered result. For example, this callout uses `(NOTE)`:
 (NOTE) Dr. Egon Spengler is the best resource for additional proton pack
  questions.
 
+
+Dividers
+========
+
+You can divide sections by putting three or more dashes on a line by
+themselves. This creates a divider or horizontal rule similar to an `<hr />`
+tag, like this one:
+
+---
+
+The dashes need to appear on their own line and be separated from other
+content. For example, like this:
+
+```
+This section will be visually separated.
+
+---
+
+On an entirely different topic, ...
+```
+
+
 = Linking URIs =
 
 URIs are automatically linked: http://phabricator.org/
@@ -389,18 +432,29 @@ You can set file display options like this:
 
   {F123, layout=left, float, size=full, alt="a duckling"}
 
-Valid options are:
+Valid options for all files are:
 
   - **layout** left (default), center, right, inline, link (render a link
     instead of a thumbnail for images)
+  - **name** with `layout=link` or for non-images, use this name for the link
+    text
+  - **alt** Provide alternate text for assistive technologies.
+
+Image files support these options:
+
   - **float** If layout is set to left or right, the image will be floated so
     text wraps around it.
   - **size** thumb (default), full
-  - **name** with `layout=link` or for non-images, use this name for the link
-    text
   - **width** Scale image to a specific width.
   - **height** Scale image to a specific height.
-  - **alt** Provide alternate text for assistive technologies.
+
+Audio and video files support these options:
+
+  - **media**: Specify the media type as `audio` or `video`. This allows you
+    to disambiguate how file format which may contain either audio or video
+    should be rendered.
+  - **loop**: Loop this media.
+  - **autoplay**: Automatically begin playing this media.
 
 == Embedding Countdowns
 
@@ -478,6 +532,12 @@ For a list of available icons and colors, check the UIExamples application.
 [[ http://fortawesome.github.io/Font-Awesome/ | FontAwesome ]], so you can also
 browse the collection there.)
 
+You can add `spin` to make the icon spin:
+
+  {icon cog spin}
+
+This renders: {icon cog spin}
+
 
 = Phriction Documents =
 
@@ -485,10 +545,33 @@ You can link to Phriction documents with a name or path:
 
   Make sure you sign and date your [[legal/Letter of Marque and Reprisal]]!
 
+By default, the link will render with the document title as the link name.
 With a pipe (`|`), you can retitle the link. Use this to mislead your
 opponents:
 
   Check out these [[legal/boring_documents/ | exciting legal documents]]!
+
+Links to pages which do not exist are shown in red. Links to pages which exist
+but which the viewer does not have permission to see are shown with a lock
+icon, and the link will not disclose the page title.
+
+If you begin a link path with `./` or `../`, the remainder of the path will be
+evaluated relative to the current wiki page. For example, if you are writing
+content for the document `fruit/` a link to `[[./guava]]` is the same as a link
+to `[[fruit/guava]]` from elsewhere.
+
+Relative links may use `../` to transverse up the document tree. From the
+`produce/vegetables/` page, you can use `[[../fruit/guava]]` to link to the
+`produce/fruit/guava` page.
+
+Relative links do not work when used outside of wiki pages. For example,
+you can't use a relative link in a comment on a task, because there is no
+reasonable place for the link to start resolving from.
+
+When documents are moved, relative links are not automatically updated: they
+are preserved as currently written. After moving a document, you may need to
+review and adjust any relative links it contains.
+
 
 = Literal Blocks =
 
@@ -505,10 +588,12 @@ escape HTML and preserve line breaks).
 
 Remarkup supports simple table syntax. For example, this:
 
-  | Fruit  | Color  | Price   | Peel?
-  | -----  | -----  | -----   | -----
-  | Apple  | red    | `$0.93` | no
-  | Banana | yellow | `$0.19` | **YES**
+```
+| Fruit  | Color  | Price   | Peel?
+| -----  | -----  | -----   | -----
+| Apple  | red    | `$0.93` | no
+| Banana | yellow | `$0.19` | **YES**
+```
 
 ...produces this:
 
@@ -519,26 +604,28 @@ Remarkup supports simple table syntax. For example, this:
 
 Remarkup also supports a simplified HTML table syntax. For example, this:
 
-  <table>
-    <tr>
-      <th>Fruit</th>
-      <th>Color</th>
-      <th>Price</th>
-      <th>Peel?</th>
-    </tr>
-    <tr>
-      <td>Apple</td>
-      <td>red</td>
-      <td>`$0.93`</td>
-      <td>no</td>
-    </tr>
-    <tr>
-      <td>Banana</td>
-      <td>yellow</td>
-      <td>`$0.19`</td>
-      <td>**YES**</td>
-    </tr>
-  </table>
+```
+<table>
+  <tr>
+    <th>Fruit</th>
+    <th>Color</th>
+    <th>Price</th>
+    <th>Peel?</th>
+  </tr>
+  <tr>
+    <td>Apple</td>
+    <td>red</td>
+    <td>`$0.93`</td>
+    <td>no</td>
+  </tr>
+  <tr>
+    <td>Banana</td>
+    <td>yellow</td>
+    <td>`$0.19`</td>
+    <td>**YES**</td>
+  </tr>
+</table>
+```
 
 ...produces this:
 
@@ -600,6 +687,32 @@ In general:
   - Supported keys are `icon`, `name`, `type` and `href`.
   - The `type` option can be set to `instructions` to indicate that an element
     is asking the user to make a choice or follow specific instructions.
+
+Keystrokes
+==========
+
+You can use `{key ...}` to render a stylized keystroke. For example, this:
+
+```
+Press {key M} to view the starmap.
+```
+
+...renders this:
+
+> Press {key M} to view the starmap.
+
+You can also render sequences with modifier keys. This:
+
+```
+Use {key command option shift 3} to take a screenshot.
+Press {key down down-right right LP} to activate the hadoken technique.
+```
+
+...renders this:
+
+> Use {key command option shift 3} to take a screenshot.
+> Press {key down down-right right LP} to activate the hadoken technique.
+
 
 = Fullscreen Mode =
 

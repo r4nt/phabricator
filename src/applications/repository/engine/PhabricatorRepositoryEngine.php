@@ -51,6 +51,27 @@ abstract class PhabricatorRepositoryEngine extends Phobject {
     return PhabricatorUser::getOmnipotentUser();
   }
 
+  protected function newRepositoryLock(
+    PhabricatorRepository $repository,
+    $lock_key,
+    $lock_device_only) {
+
+    $lock_parts = array();
+    $lock_parts[] = $lock_key;
+    $lock_parts[] = $repository->getID();
+
+    if ($lock_device_only) {
+      $device = AlmanacKeys::getLiveDevice();
+      if ($device) {
+        $lock_parts[] = $device->getID();
+      }
+    }
+
+    $lock_name = implode(':', $lock_parts);
+    return PhabricatorGlobalLock::newLock($lock_name);
+  }
+
+
   /**
    * Verify that the "origin" remote exists, and points at the correct URI.
    *
@@ -62,8 +83,21 @@ abstract class PhabricatorRepositoryEngine extends Phobject {
    * @return  void
    */
   protected function verifyGitOrigin(PhabricatorRepository $repository) {
-    list($remotes) = $repository->execxLocalCommand(
-      'remote show -n origin');
+    try {
+      list($remotes) = $repository->execxLocalCommand(
+        'remote show -n origin');
+    } catch (CommandException $ex) {
+      throw new PhutilProxyException(
+        pht(
+          'Expected to find a Git working copy at path "%s", but the '.
+          'path exists and is not a valid working copy. If you remove '.
+          'this directory, the daemons will automatically recreate it '.
+          'correctly. Phabricator will not destroy the directory for you '.
+          'because it can not be sure that it does not contain important '.
+          'data.',
+          $repository->getLocalPath()),
+        $ex);
+    }
 
     $matches = null;
     if (!preg_match('/^\s*Fetch URL:\s*(.*?)\s*$/m', $remotes, $matches)) {

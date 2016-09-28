@@ -26,6 +26,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
   private $edgeLogicConstraintsAreValid = false;
   private $spacePHIDs;
   private $spaceIsArchived;
+  private $ngrams = array();
 
   protected function getPageCursors(array $page) {
     return array(
@@ -141,11 +142,18 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
   }
 
   final protected function buildLimitClause(AphrontDatabaseConnection $conn_r) {
-    if ($this->getRawResultLimit()) {
-      return qsprintf($conn_r, 'LIMIT %d', $this->getRawResultLimit());
-    } else {
-      return '';
+    if ($this->shouldLimitResults()) {
+      $limit = $this->getRawResultLimit();
+      if ($limit) {
+        return qsprintf($conn_r, 'LIMIT %d', $limit);
+      }
     }
+
+    return '';
+  }
+
+  protected function shouldLimitResults() {
+    return true;
   }
 
   final protected function didLoadResults(array $results) {
@@ -253,6 +261,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     $joins = array();
     $joins[] = $this->buildEdgeLogicJoinClause($conn);
     $joins[] = $this->buildApplicationSearchJoinClause($conn);
+    $joins[] = $this->buildNgramsJoinClause($conn);
     return $joins;
   }
 
@@ -274,6 +283,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     $where[] = $this->buildPagingClause($conn);
     $where[] = $this->buildEdgeLogicWhereClause($conn);
     $where[] = $this->buildSpacesWhereClause($conn);
+    $where[] = $this->buildNgramsWhereClause($conn);
     return $where;
   }
 
@@ -321,6 +331,10 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     }
 
     if ($this->getApplicationSearchMayJoinMultipleRows()) {
+      return true;
+    }
+
+    if ($this->shouldGroupNgramResultRows()) {
       return true;
     }
 
@@ -374,6 +388,12 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       $column = $orderable[$key];
       $column['value'] = $value_map[$key];
 
+      // If the vector component is reversed, we need to reverse whatever the
+      // order of the column is.
+      if ($order->getIsReversed()) {
+        $column['reverse'] = !idx($column, 'reverse', false);
+      }
+
       $columns[] = $column;
     }
 
@@ -410,8 +430,9 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     if (!$object) {
       throw new Exception(
         pht(
-          'Cursor "%s" does not identify a valid object.',
-          $cursor));
+          'Cursor "%s" does not identify a valid object in query "%s".',
+          $cursor,
+          get_class($this)));
     }
 
     return $object;
@@ -715,13 +736,18 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
           continue;
         }
 
-        $key = $field->getFieldKey();
-        $digest = $field->getFieldIndex();
+        $legacy_key = 'custom:'.$field->getFieldKey();
+        $modern_key = $field->getModernFieldKey();
 
-        $full_key = 'custom:'.$key;
-        $orders[$full_key] = array(
-          'vector' => array($full_key, 'id'),
+        $orders[$modern_key] = array(
+          'vector' => array($modern_key, 'id'),
           'name' => $field->getFieldName(),
+          'aliases' => array($legacy_key),
+        );
+
+        $orders['-'.$modern_key] = array(
+          'vector' => array('-'.$modern_key, '-id'),
+          'name' => pht('%s (Reversed)', $field->getFieldName()),
         );
       }
     }
@@ -902,11 +928,11 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
           continue;
         }
 
-        $key = $field->getFieldKey();
         $digest = $field->getFieldIndex();
 
-        $full_key = 'custom:'.$key;
-        $columns[$full_key] = array(
+        $key = $field->getModernFieldKey();
+
+        $columns[$key] = array(
           'table' => 'appsearch_order_'.$digest,
           'column' => 'indexValue',
           'type' => $index->getIndexValueType(),
@@ -1339,6 +1365,138 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
   }
 
 
+/* -(  Ngrams  )------------------------------------------------------------- */
+
+
+  protected function withNgramsConstraint(
+    PhabricatorSearchNgrams $index,
+    $value) {
+
+    if (strlen($value)) {
+      $this->ngrams[] = array(
+        'index' => $index,
+        'value' => $value,
+        'length' => count(phutil_utf8v($value)),
+      );
+    }
+
+    return $this;
+  }
+
+
+  protected function buildNgramsJoinClause(AphrontDatabaseConnection $conn) {
+    $flat = array();
+    foreach ($this->ngrams as $spec) {
+      $index = $spec['index'];
+      $value = $spec['value'];
+      $length = $spec['length'];
+
+      if ($length >= 3) {
+        $ngrams = $index->getNgramsFromString($value, 'query');
+        $prefix = false;
+      } else if ($length == 2) {
+        $ngrams = $index->getNgramsFromString($value, 'prefix');
+        $prefix = false;
+      } else {
+        $ngrams = array(' '.$value);
+        $prefix = true;
+      }
+
+      foreach ($ngrams as $ngram) {
+        $flat[] = array(
+          'table' => $index->getTableName(),
+          'ngram' => $ngram,
+          'prefix' => $prefix,
+        );
+      }
+    }
+
+    // MySQL only allows us to join a maximum of 61 tables per query. Each
+    // ngram is going to cost us a join toward that limit, so if the user
+    // specified a very long query string, just pick 16 of the ngrams
+    // at random.
+    if (count($flat) > 16) {
+      shuffle($flat);
+      $flat = array_slice($flat, 0, 16);
+    }
+
+    $alias = $this->getPrimaryTableAlias();
+    if ($alias) {
+      $id_column = qsprintf($conn, '%T.%T', $alias, 'id');
+    } else {
+      $id_column = qsprintf($conn, '%T', 'id');
+    }
+
+    $idx = 1;
+    $joins = array();
+    foreach ($flat as $spec) {
+      $table = $spec['table'];
+      $ngram = $spec['ngram'];
+      $prefix = $spec['prefix'];
+
+      $alias = 'ngm'.$idx++;
+
+      if ($prefix) {
+        $joins[] = qsprintf(
+          $conn,
+          'JOIN %T %T ON %T.objectID = %Q AND %T.ngram LIKE %>',
+          $table,
+          $alias,
+          $alias,
+          $id_column,
+          $alias,
+          $ngram);
+      } else {
+        $joins[] = qsprintf(
+          $conn,
+          'JOIN %T %T ON %T.objectID = %Q AND %T.ngram = %s',
+          $table,
+          $alias,
+          $alias,
+          $id_column,
+          $alias,
+          $ngram);
+      }
+    }
+
+    return $joins;
+  }
+
+
+  protected function buildNgramsWhereClause(AphrontDatabaseConnection $conn) {
+    $where = array();
+
+    foreach ($this->ngrams as $ngram) {
+      $index = $ngram['index'];
+      $value = $ngram['value'];
+
+      $column = $index->getColumnName();
+      $alias = $this->getPrimaryTableAlias();
+      if ($alias) {
+        $column = qsprintf($conn, '%T.%T', $alias, $column);
+      } else {
+        $column = qsprintf($conn, '%T', $column);
+      }
+
+      $tokens = $index->tokenizeString($value);
+      foreach ($tokens as $token) {
+        $where[] = qsprintf(
+          $conn,
+          '%Q LIKE %~',
+          $column,
+          $token);
+      }
+    }
+
+    return $where;
+  }
+
+
+  protected function shouldGroupNgramResultRows() {
+    return (bool)$this->ngrams;
+  }
+
+
 /* -(  Edge Logic  )--------------------------------------------------------- */
 
 
@@ -1371,8 +1529,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     $constraints = mgroup($constraints, 'getOperator');
     foreach ($constraints as $operator => $list) {
       foreach ($list as $item) {
-        $value = $item->getValue();
-        $this->edgeLogicConstraints[$edge_type][$operator][$value] = $item;
+        $this->edgeLogicConstraints[$edge_type][$operator][] = $item;
       }
     }
 
@@ -1403,6 +1560,47 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
                 $this->buildEdgeLogicTableAliasCount($alias));
             }
             break;
+          case PhabricatorQueryConstraint::OPERATOR_ANCESTOR:
+            // This is tricky. We have a query which specifies multiple
+            // projects, each of which may have an arbitrarily large number
+            // of descendants.
+
+            // Suppose the projects are "Engineering" and "Operations", and
+            // "Engineering" has subprojects X, Y and Z.
+
+            // We first use `FIELD(dst, X, Y, Z)` to produce a 0 if a row
+            // is not part of Engineering at all, or some number other than
+            // 0 if it is.
+
+            // Then we use `IF(..., idx, NULL)` to convert the 0 to a NULL and
+            // any other value to an index (say, 1) for the ancestor.
+
+            // We build these up for every ancestor, then use `COALESCE(...)`
+            // to select the non-null one, giving us an ancestor which this
+            // row is a member of.
+
+            // From there, we use `COUNT(DISTINCT(...))` to make sure that
+            // each result row is a member of all ancestors.
+            if (count($list) > 1) {
+              $idx = 1;
+              $parts = array();
+              foreach ($list as $constraint) {
+                $parts[] = qsprintf(
+                  $conn,
+                  'IF(FIELD(%T.dst, %Ls) != 0, %d, NULL)',
+                  $alias,
+                  (array)$constraint->getValue(),
+                  $idx++);
+              }
+              $parts = implode(', ', $parts);
+
+              $select[] = qsprintf(
+                $conn,
+                'COUNT(DISTINCT(COALESCE(%Q))) %T',
+                $parts,
+                $this->buildEdgeLogicTableAliasAncestor($alias));
+            }
+            break;
           default:
             break;
         }
@@ -1428,6 +1626,16 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
 
       foreach ($constraints as $operator => $list) {
         $alias = $this->getEdgeLogicTableAlias($operator, $type);
+
+        $phids = array();
+        foreach ($list as $constraint) {
+          $value = (array)$constraint->getValue();
+          foreach ($value as $v) {
+            $phids[$v] = $v;
+          }
+        }
+        $phids = array_keys($phids);
+
         switch ($operator) {
           case PhabricatorQueryConstraint::OPERATOR_NOT:
             $joins[] = qsprintf(
@@ -1441,8 +1649,9 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
               $alias,
               $type,
               $alias,
-              mpull($list, 'getValue'));
+              $phids);
             break;
+          case PhabricatorQueryConstraint::OPERATOR_ANCESTOR:
           case PhabricatorQueryConstraint::OPERATOR_AND:
           case PhabricatorQueryConstraint::OPERATOR_OR:
             // If we're including results with no matches, we have to degrade
@@ -1466,7 +1675,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
               $alias,
               $type,
               $alias,
-              mpull($list, 'getValue'));
+              $phids);
             break;
           case PhabricatorQueryConstraint::OPERATOR_NULL:
             $joins[] = qsprintf(
@@ -1566,6 +1775,15 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
                 count($list));
             }
             break;
+          case PhabricatorQueryConstraint::OPERATOR_ANCESTOR:
+            if (count($list) > 1) {
+              $having[] = qsprintf(
+                $conn,
+                '%T = %d',
+                $this->buildEdgeLogicTableAliasAncestor($alias),
+                count($list));
+            }
+            break;
         }
       }
     }
@@ -1584,6 +1802,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
           case PhabricatorQueryConstraint::OPERATOR_NOT:
           case PhabricatorQueryConstraint::OPERATOR_AND:
           case PhabricatorQueryConstraint::OPERATOR_OR:
+          case PhabricatorQueryConstraint::OPERATOR_ANCESTOR:
             if (count($list) > 1) {
               return true;
             }
@@ -1613,6 +1832,13 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     return $alias.'_count';
   }
 
+  /**
+   * @task edgelogic
+   */
+  private function buildEdgeLogicTableAliasAncestor($alias) {
+    return $alias.'_ancestor';
+  }
+
 
   /**
    * Select certain edge logic constraint values.
@@ -1636,7 +1862,10 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       }
       foreach ($constraints as $operator => $list) {
         foreach ($list as $constraint) {
-          $values[] = $constraint->getValue();
+          $value = (array)$constraint->getValue();
+          foreach ($value as $v) {
+            $values[] = $v;
+          }
         }
       }
     }
@@ -1656,6 +1885,16 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       return $this;
     }
 
+    foreach ($this->edgeLogicConstraints as $type => $constraints) {
+      foreach ($constraints as $operator => $list) {
+        switch ($operator) {
+          case PhabricatorQueryConstraint::OPERATOR_EMPTY:
+            throw new PhabricatorEmptyQueryException(
+              pht('This query specifies an empty constraint.'));
+        }
+      }
+    }
+
     // This should probably be more modular, eventually, but we only do
     // project-based edge logic today.
 
@@ -1667,6 +1906,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
         PhabricatorQueryConstraint::OPERATOR_AND,
         PhabricatorQueryConstraint::OPERATOR_OR,
         PhabricatorQueryConstraint::OPERATOR_NOT,
+        PhabricatorQueryConstraint::OPERATOR_ANCESTOR,
       ));
     if ($project_phids) {
       $projects = id(new PhabricatorProjectQuery())
@@ -1762,6 +2002,16 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     }
 
     $viewer = $this->getViewer();
+
+    // If we have an omnipotent viewer and no formal space constraints, don't
+    // emit a clause. This primarily enables older migrations to run cleanly,
+    // without fataling because they try to match a `spacePHID` column which
+    // does not exist yet. See T8743, T8746.
+    if ($viewer->isOmnipotent()) {
+      if ($this->spaceIsArchived === null && $this->spacePHIDs === null) {
+        return null;
+      }
+    }
 
     $space_phids = array();
     $include_null = false;

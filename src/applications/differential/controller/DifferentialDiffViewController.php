@@ -2,23 +2,17 @@
 
 final class DifferentialDiffViewController extends DifferentialController {
 
-  private $id;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $id = $request->getURIData('id');
 
     $diff = id(new DifferentialDiffQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->executeOne();
     if (!$diff) {
       return new Aphront404Response();
@@ -28,6 +22,17 @@ final class DifferentialDiffViewController extends DifferentialController {
       return id(new AphrontRedirectResponse())
         ->setURI('/D'.$diff->getRevisionID().'?id='.$diff->getID());
     }
+
+    $diff_phid = $diff->getPHID();
+    $buildables = id(new HarbormasterBuildableQuery())
+      ->setViewer($viewer)
+      ->withBuildablePHIDs(array($diff_phid))
+      ->withManualBuildables(false)
+      ->needBuilds(true)
+      ->needTargets(true)
+      ->execute();
+    $buildables = mpull($buildables, null, 'getBuildablePHID');
+    $diff->attachBuildable(idx($buildables, $diff_phid));
 
     // TODO: implement optgroup support in AphrontFormSelectControl?
     $select = array();
@@ -105,10 +110,10 @@ final class DifferentialDiffViewController extends DifferentialController {
     $changesets = $diff->loadChangesets();
     $changesets = msort($changesets, 'getSortKey');
 
-    $table_of_contents = id(new DifferentialDiffTableOfContentsView())
-      ->setChangesets($changesets)
-      ->setVisibleChangesets($changesets)
-      ->setUnitTestData(idx($props, 'arc:unit', array()));
+    $table_of_contents = $this->buildTableOfContents(
+      $changesets,
+      $changesets,
+      $diff->loadCoverageMap($viewer));
 
     $refs = array();
     foreach ($changesets as $changeset) {
@@ -121,27 +126,40 @@ final class DifferentialDiffViewController extends DifferentialController {
       ->setRenderingReferences($refs)
       ->setStandaloneURI('/differential/changeset/')
       ->setDiff($diff)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setTitle(pht('Diff %d', $diff->getID()))
       ->setUser($request->getUser());
 
+    $title = pht('Diff %d', $diff->getID());
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(pht('Diff %d', $diff->getID()));
+    $crumbs->addTextCrumb($title);
+    $crumbs->setBorder(true);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title);
 
     $prop_box = id(new PHUIObjectBoxView())
       ->setHeader($property_head)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($property_view)
-      ->appendChild($form);
+      ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setMainColumn(array(
+
+      ))
+      ->setFooter(array(
         $prop_box,
         $table_of_contents,
         $details,
-      ),
-      array(
-        'title' => pht('Diff View'),
       ));
+
+    $page =  $this->newPage()
+      ->setTitle(pht('Diff View'))
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+    return $page;
   }
 
   private function loadSelectableRevisions(

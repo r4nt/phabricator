@@ -11,12 +11,8 @@ final class PhabricatorExternalAccountsSettingsPanel
     return pht('External Accounts');
   }
 
-  public function getPanelGroup() {
-    return pht('Authentication');
-  }
-
-  public function isEnabled() {
-    return true;
+  public function getPanelGroupKey() {
+    return PhabricatorSettingsAuthenticationPanelGroup::PANELGROUPKEY;
   }
 
   public function processRequest(AphrontRequest $request) {
@@ -135,11 +131,11 @@ final class PhabricatorExternalAccountsSettingsPanel
 
     $linked_box = id(new PHUIObjectBoxView())
       ->setHeader($linked_head)
-      ->appendChild($linked);
+      ->setObjectList($linked);
 
     $linkable_box = id(new PHUIObjectBoxView())
       ->setHeader($linkable_head)
-      ->appendChild($linkable);
+      ->setObjectList($linkable);
 
     return array(
       $linked_box,

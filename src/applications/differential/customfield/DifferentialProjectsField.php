@@ -8,7 +8,7 @@ final class DifferentialProjectsField
   }
 
   public function getFieldName() {
-    return pht('Projects');
+    return pht('Tags');
   }
 
   public function getFieldDescription() {
@@ -76,6 +76,7 @@ final class DifferentialProjectsField
 
   public function getCommitMessageLabels() {
     return array(
+      'Tags',
       'Project',
       'Projects',
     );
@@ -90,7 +91,10 @@ final class DifferentialProjectsField
   }
 
   public function shouldAppearInConduitDictionary() {
-    return true;
+    // To improve performance, we exclude this field from Conduit results.
+    // See T11404 for discussion. In modern "differential.revision.search",
+    // this information is available efficiently as an attachment.
+    return false;
   }
 
   public function getApplicationTransactionMetadata() {

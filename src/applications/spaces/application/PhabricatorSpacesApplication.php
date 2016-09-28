@@ -14,7 +14,7 @@ final class PhabricatorSpacesApplication extends PhabricatorApplication {
     return pht('Policy Namespaces');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-th-large';
   }
 
@@ -31,11 +31,7 @@ final class PhabricatorSpacesApplication extends PhabricatorApplication {
   }
 
   public function canUninstall() {
-    return true;
-  }
-
-  public function isPrototype() {
-    return true;
+    return false;
   }
 
   public function getHelpDocumentationArticles(PhabricatorUser $viewer) {

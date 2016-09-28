@@ -2,22 +2,16 @@
 
 final class ReleephRequestEditController extends ReleephBranchController {
 
-  private $requestID;
-  private $branchID;
+  public function handleRequest(AphrontRequest $request) {
+    $action = $request->getURIData('action');
+    $request_id = $request->getURIData('requestID');
+    $branch_id = $request->getURIData('branchID');
+    $viewer = $request->getViewer();
 
-  public function willProcessRequest(array $data) {
-    $this->requestID = idx($data, 'requestID');
-    $this->branchID = idx($data, 'branchID');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    if ($this->requestID) {
+    if ($request_id) {
       $pull = id(new ReleephRequestQuery())
         ->setViewer($viewer)
-        ->withIDs(array($this->requestID))
+        ->withIDs(array($request_id))
         ->requireCapabilities(
           array(
             PhabricatorPolicyCapability::CAN_VIEW,
@@ -34,7 +28,7 @@ final class ReleephRequestEditController extends ReleephBranchController {
     } else {
       $branch = id(new ReleephBranchQuery())
         ->setViewer($viewer)
-        ->withIDs(array($this->branchID))
+        ->withIDs(array($branch_id))
         ->executeOne();
       if (!$branch) {
         return new Aphront404Response();
@@ -77,8 +71,8 @@ final class ReleephRequestEditController extends ReleephBranchController {
     $field_list->readFieldsFromStorage($pull);
 
 
-    if ($this->branchID) {
-      $cancel_uri = $this->getApplicationURI('branch/'.$this->branchID.'/');
+    if ($branch_id) {
+      $cancel_uri = $this->getApplicationURI('branch/'.$branch_id.'/');
     } else {
       $cancel_uri = '/'.$pull->getMonogram();
     }
@@ -281,12 +275,14 @@ final class ReleephRequestEditController extends ReleephBranchController {
     if ($is_edit) {
       $title = pht('Edit Pull Request');
       $submit_name = pht('Save');
+      $header_icon = 'fa-pencil';
 
       $crumbs->addTextCrumb($pull->getMonogram(), '/'.$pull->getMonogram());
       $crumbs->addTextCrumb(pht('Edit'));
     } else {
       $title = pht('Create Pull Request');
       $submit_name = pht('Create Pull Request');
+      $header_icon = 'fa-plus-square';
 
       $crumbs->addTextCrumb(pht('New Pull Request'));
     }
@@ -297,18 +293,28 @@ final class ReleephRequestEditController extends ReleephBranchController {
         ->setValue($submit_name));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+      ->setHeaderText(pht('Request'))
       ->setFormErrors($errors)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $crumbs->setBorder(true);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $notice_view,
         $box,
-      ),
-      array(
-        'title' => $title,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 }

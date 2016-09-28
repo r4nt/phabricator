@@ -22,14 +22,17 @@ final class PhabricatorOwnersPackageDatasource
     $results = array();
 
     $query = id(new PhabricatorOwnersPackageQuery())
-      ->withNamePrefix($raw_query)
+      ->withNameNgrams($raw_query)
       ->setOrder('name');
 
     $packages = $this->executeQuery($query);
     foreach ($packages as $package) {
+      $name = $package->getName();
+      $monogram = $package->getMonogram();
+
       $results[] = id(new PhabricatorTypeaheadResult())
-        ->setName($package->getName())
-        ->setURI('/owners/package/'.$package->getID().'/')
+        ->setName("{$monogram}: {$name}")
+        ->setURI($package->getURI())
         ->setPHID($package->getPHID());
     }
 

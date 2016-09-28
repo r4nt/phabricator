@@ -9,6 +9,9 @@ final class PhabricatorOwnersPackageTransaction
   const TYPE_AUDITING = 'owners.auditing';
   const TYPE_DESCRIPTION = 'owners.description';
   const TYPE_PATHS = 'owners.paths';
+  const TYPE_STATUS = 'owners.status';
+  const TYPE_AUTOREVIEW = 'owners.autoreview';
+  const TYPE_DOMINION = 'owners.dominion';
 
   public function getApplicationName() {
     return 'owners';
@@ -25,15 +28,15 @@ final class PhabricatorOwnersPackageTransaction
     $new = $this->getNewValue();
 
     switch ($this->getTransactionType()) {
-      case self::TYPE_PRIMARY:
-        if ($old) {
-          $phids[] = $old;
-        }
-        if ($new) {
-          $phids[] = $new;
-        }
-        break;
       case self::TYPE_OWNERS:
+        if (!is_array($old)) {
+          $old = array();
+        }
+
+        if (!is_array($new)) {
+          $new = array();
+        }
+
         $add = array_diff($new, $old);
         foreach ($add as $phid) {
           $phids[] = $phid;
@@ -54,8 +57,16 @@ final class PhabricatorOwnersPackageTransaction
 
     switch ($this->getTransactionType()) {
       case self::TYPE_DESCRIPTION:
-        return ($old === null);
+        if ($old === null) {
+          return true;
+        }
+        break;
+      case self::TYPE_PRIMARY:
+        // TODO: Eventually, remove these transactions entirely.
+        return true;
     }
+
+    return parent::shouldHide();
   }
 
   public function getTitle() {
@@ -64,6 +75,10 @@ final class PhabricatorOwnersPackageTransaction
     $author_phid = $this->getAuthorPHID();
 
     switch ($this->getTransactionType()) {
+      case PhabricatorTransactions::TYPE_CREATE:
+        return pht(
+          '%s created this package.',
+          $this->renderHandleLink($author_phid));
       case self::TYPE_NAME:
         if ($old === null) {
           return pht(
@@ -76,12 +91,6 @@ final class PhabricatorOwnersPackageTransaction
             $old,
             $new);
         }
-      case self::TYPE_PRIMARY:
-        return pht(
-          '%s changed the primary owner for this package from %s to %s.',
-          $this->renderHandleLink($author_phid),
-          $this->renderHandleLink($old),
-          $this->renderHandleLink($new));
       case self::TYPE_OWNERS:
         $add = array_diff($new, $old);
         $rem = array_diff($old, $new);
@@ -126,6 +135,40 @@ final class PhabricatorOwnersPackageTransaction
         return pht(
           '%s updated paths for this package.',
           $this->renderHandleLink($author_phid));
+      case self::TYPE_STATUS:
+        if ($new == PhabricatorOwnersPackage::STATUS_ACTIVE) {
+          return pht(
+            '%s activated this package.',
+            $this->renderHandleLink($author_phid));
+        } else if ($new == PhabricatorOwnersPackage::STATUS_ARCHIVED) {
+          return pht(
+            '%s archived this package.',
+            $this->renderHandleLink($author_phid));
+        }
+      case self::TYPE_AUTOREVIEW:
+        $map = PhabricatorOwnersPackage::getAutoreviewOptionsMap();
+        $map = ipull($map, 'name');
+
+        $old = idx($map, $old, $old);
+        $new = idx($map, $new, $new);
+
+        return pht(
+          '%s adjusted autoreview from "%s" to "%s".',
+          $this->renderHandleLink($author_phid),
+          $old,
+          $new);
+      case self::TYPE_DOMINION:
+        $map = PhabricatorOwnersPackage::getDominionOptionsMap();
+        $map = ipull($map, 'short');
+
+        $old = idx($map, $old, $old);
+        $new = idx($map, $new, $new);
+
+        return pht(
+          '%s adjusted package dominion rules from "%s" to "%s".',
+          $this->renderHandleLink($author_phid),
+          $old,
+          $new);
     }
 
     return parent::getTitle();
@@ -206,6 +249,18 @@ final class PhabricatorOwnersPackageTransaction
     }
 
     return parent::renderChangeDetails($viewer);
+  }
+
+  public function getRemarkupBlocks() {
+    $blocks = parent::getRemarkupBlocks();
+
+    switch ($this->getTransactionType()) {
+      case self::TYPE_DESCRIPTION:
+        $blocks[] = $this->getNewValue();
+        break;
+    }
+
+    return $blocks;
   }
 
 }

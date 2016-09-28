@@ -13,7 +13,7 @@ final class PhabricatorPasteSearchEngine
 
   public function newQuery() {
     return id(new PhabricatorPasteQuery())
-      ->needContent(true);
+      ->needSnippets(true);
   }
 
   protected function buildQueryFromParameters(array $map) {
@@ -35,24 +35,45 @@ final class PhabricatorPasteSearchEngine
       $query->withDateCreatedBefore($map['createdEnd']);
     }
 
+    if ($map['statuses']) {
+      $query->withStatuses($map['statuses']);
+    }
+
     return $query;
   }
 
   protected function buildCustomSearchFields() {
     return array(
-      id(new PhabricatorSearchUsersField())
+      id(new PhabricatorUsersSearchField())
         ->setAliases(array('authors'))
         ->setKey('authorPHIDs')
-        ->setLabel(pht('Authors')),
+        ->setConduitKey('authors')
+        ->setLabel(pht('Authors'))
+        ->setDescription(
+          pht('Search for pastes with specific authors.')),
       id(new PhabricatorSearchStringListField())
         ->setKey('languages')
-        ->setLabel(pht('Languages')),
+        ->setLabel(pht('Languages'))
+        ->setDescription(
+          pht('Search for pastes highlighted in specific languages.')),
       id(new PhabricatorSearchDateField())
         ->setKey('createdStart')
-        ->setLabel(pht('Created After')),
+        ->setLabel(pht('Created After'))
+        ->setDescription(
+          pht('Search for pastes created after a given time.')),
       id(new PhabricatorSearchDateField())
         ->setKey('createdEnd')
-        ->setLabel(pht('Created Before')),
+        ->setLabel(pht('Created Before'))
+        ->setDescription(
+          pht('Search for pastes created before a given time.')),
+      id(new PhabricatorSearchCheckboxesField())
+        ->setKey('statuses')
+        ->setLabel(pht('Status'))
+        ->setDescription(
+          pht('Search for archived or active pastes.'))
+        ->setOptions(
+          id(new PhabricatorPaste())
+            ->getStatusNameMap()),
     );
   }
 
@@ -70,6 +91,7 @@ final class PhabricatorPasteSearchEngine
 
   protected function getBuiltinQueryNames() {
     $names = array(
+      'active' => pht('Active Pastes'),
       'all' => pht('All Pastes'),
     );
 
@@ -86,6 +108,12 @@ final class PhabricatorPasteSearchEngine
     $query->setQueryKey($query_key);
 
     switch ($query_key) {
+      case 'active':
+        return $query->setParameter(
+          'statuses',
+          array(
+            PhabricatorPaste::STATUS_ACTIVE,
+          ));
       case 'all':
         return $query;
       case 'authored':
@@ -119,11 +147,15 @@ final class PhabricatorPasteSearchEngine
       $created = phabricator_date($paste->getDateCreated(), $viewer);
       $author = $handles[$paste->getAuthorPHID()]->renderLink();
 
-      $lines = phutil_split_lines($paste->getContent());
+      $snippet_type = $paste->getSnippet()->getType();
+      $lines = phutil_split_lines($paste->getSnippet()->getContent());
 
       $preview = id(new PhabricatorSourceCodeView())
-        ->setLimit(5)
         ->setLines($lines)
+        ->setTruncatedFirstBytes(
+          $snippet_type == PhabricatorPasteSnippet::FIRST_BYTES)
+        ->setTruncatedFirstLines(
+          $snippet_type == PhabricatorPasteSnippet::FIRST_LINES)
         ->setURI(new PhutilURI($paste->getURI()));
 
       $source_code = phutil_tag(
@@ -151,6 +183,10 @@ final class PhabricatorPasteSearchEngine
         ->addIcon('none', $line_count)
         ->appendChild($source_code);
 
+      if ($paste->isArchived()) {
+        $item->setDisabled(true);
+      }
+
       $lang_name = $paste->getLanguage();
       if ($lang_name) {
         $lang_name = idx($lang_map, $lang_name, $lang_name);
@@ -160,6 +196,29 @@ final class PhabricatorPasteSearchEngine
       $list->addItem($item);
     }
 
-    return $list;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setObjectList($list);
+    $result->setNoDataString(pht('No pastes found.'));
+
+    return $result;
+  }
+
+  protected function getNewUserBody() {
+    $create_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Create a Paste'))
+      ->setHref('/paste/create/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Store, share, and embed snippets of code.'))
+      ->addAction($create_button);
+
+      return $view;
   }
 }

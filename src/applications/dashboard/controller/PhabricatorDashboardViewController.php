@@ -9,13 +9,9 @@ final class PhabricatorDashboardViewController
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $this->id = $request->getURIData('id');
 
     $dashboard = id(new PhabricatorDashboardQuery())
       ->setViewer($viewer)
@@ -40,14 +36,10 @@ final class PhabricatorDashboardViewController
       $rendered_dashboard = $this->buildEmptyView();
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $rendered_dashboard,
-      ),
-      array(
-        'title' => $title,
-      ));
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($rendered_dashboard);
   }
 
   protected function buildApplicationCrumbs() {

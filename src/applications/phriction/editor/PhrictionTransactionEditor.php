@@ -80,13 +80,14 @@ final class PhrictionTransactionEditor
   public function getTransactionTypes() {
     $types = parent::getTransactionTypes();
 
-    $types[] = PhabricatorTransactions::TYPE_COMMENT;
     $types[] = PhrictionTransaction::TYPE_TITLE;
     $types[] = PhrictionTransaction::TYPE_CONTENT;
     $types[] = PhrictionTransaction::TYPE_DELETE;
     $types[] = PhrictionTransaction::TYPE_MOVE_TO;
     $types[] = PhrictionTransaction::TYPE_MOVE_AWAY;
 
+    $types[] = PhabricatorTransactions::TYPE_EDGE;
+    $types[] = PhabricatorTransactions::TYPE_COMMENT;
     $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
     $types[] = PhabricatorTransactions::TYPE_EDIT_POLICY;
 
@@ -419,13 +420,20 @@ final class PhrictionTransactionEditor
     $body = parent::buildMailBody($object, $xactions);
 
     if ($this->getIsNewObject()) {
-      $body->addTextSection(
+      $body->addRemarkupSection(
         pht('DOCUMENT CONTENT'),
         $object->getContent()->getContent());
     } else if ($this->contentDiffURI) {
       $body->addLinkSection(
         pht('DOCUMENT DIFF'),
         PhabricatorEnv::getProductionURI($this->contentDiffURI));
+    }
+
+    $description = $object->getContent()->getDescription();
+    if (strlen($description)) {
+      $body->addTextSection(
+        pht('EDIT NOTES'),
+        $description);
     }
 
     $body->addLinkSection(

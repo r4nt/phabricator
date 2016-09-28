@@ -20,6 +20,7 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
 
   public function setViewer($viewer) {
     $this->viewer = $viewer;
+    return $this;
   }
 
 /* -(  Composition  )-------------------------------------------------------- */
@@ -42,16 +43,16 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
     return $this;
   }
 
-  public function addRemarkupSection($text) {
+  public function addRemarkupSection($header, $text) {
     try {
       $engine = PhabricatorMarkupEngine::newMarkupEngine(array());
       $engine->setConfig('viewer', $this->getViewer());
       $engine->setMode(PhutilRemarkupEngine::MODE_TEXT);
       $styled_text = $engine->markupText($text);
-      $this->sections[] = $styled_text;
+      $this->addPlaintextSection($header, $styled_text);
     } catch (Exception $ex) {
       phlog($ex);
-      $this->sections[] = $text;
+      $this->addTextSection($header, $text);
     }
 
     try {
@@ -62,14 +63,10 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
         'uri.base',
         PhabricatorEnv::getProductionURI('/'));
       $html = $mail_engine->markupText($text);
-      $this->htmlSections[] = $html;
+      $this->addHTMLSection($header, $html);
     } catch (Exception $ex) {
       phlog($ex);
-      $this->htmlSections[] = phutil_escape_html_newlines(
-        phutil_tag(
-          'div',
-          array(),
-          $text));
+      $this->addHTMLSection($header, $text);
     }
 
     return $this;
@@ -114,11 +111,14 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
     return $this;
   }
 
-  public function addPlaintextSection($header, $text) {
+  public function addPlaintextSection($header, $text, $indent = true) {
     if (empty($header)) {
       $this->sections[] = $text;
     } else {
-      $this->sections[] = $header."\n".$this->indent($text);
+      if ($indent) {
+        $text = $this->indent($text)
+      }
+      $this->sections[] = $header."\n".$text;
     }
     return $this;
   }
@@ -128,6 +128,10 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
       $this->htmlSections[] = array(
         phutil_tag('div', array(), $html_fragment));
     } else {
+      if ($header !== null) {
+        $header = phutil_tag('strong', array(), $header);
+      }
+
       $this->htmlSections[] = array(
         phutil_tag(
           'div',
@@ -220,5 +224,4 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
   private function indent($text) {
     return rtrim("  ".str_replace("\n", "\n  ", $text));
   }
-
 }

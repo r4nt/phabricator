@@ -29,9 +29,10 @@ final class PhabricatorTypeaheadModularDatasourceController
     // This makes form submission easier in the debug view.
     $class = nonempty($request->getURIData('class'), $request->getStr('class'));
 
-    $sources = id(new PhutilSymbolLoader())
+    $sources = id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorTypeaheadDatasource')
-      ->loadObjects();
+      ->execute();
+
     if (isset($sources[$class])) {
       $source = $sources[$class];
       $source->setParameters($request->getRequestData());
@@ -64,7 +65,8 @@ final class PhabricatorTypeaheadModularDatasourceController
         }
 
         $composite
-          ->setOffset($offset);
+          ->setOffset($offset)
+          ->setIsBrowse(true);
       }
 
       $results = $composite->loadResults();
@@ -106,6 +108,8 @@ final class PhabricatorTypeaheadModularDatasourceController
           if (($offset + (2 * $limit)) < $hard_limit) {
             $next_uri = id(new PhutilURI($request->getRequestURI()))
               ->setQueryParam('offset', $offset + $limit)
+              ->setQueryParam('q', $query)
+              ->setQueryParam('raw', $raw_query)
               ->setQueryParam('format', 'html');
 
             $next_link = javelin_tag(
@@ -139,9 +143,6 @@ final class PhabricatorTypeaheadModularDatasourceController
 
         $items = array();
         foreach ($results as $result) {
-          $token = PhabricatorTypeaheadTokenView::newFromTypeaheadResult(
-            $result);
-
           // Disable already-selected tokens.
           $disabled = isset($exclude[$result->getPHID()]);
 
@@ -158,15 +159,14 @@ final class PhabricatorTypeaheadModularDatasourceController
             ),
             pht('Select'));
 
+          $information = $this->renderBrowseResult($result, $button);
+
           $items[] = phutil_tag(
             'div',
             array(
               'class' => 'typeahead-browse-item grouped',
             ),
-            array(
-              $token,
-              $button,
-            ));
+            $information);
         }
 
         $markup = array(
@@ -236,7 +236,7 @@ final class PhabricatorTypeaheadModularDatasourceController
 
           $function_help = array(
             id(new PHUIIconView())
-              ->setIconFont('fa-book'),
+              ->setIcon('fa-book'),
             ' ',
             $reference_link,
           );
@@ -247,6 +247,8 @@ final class PhabricatorTypeaheadModularDatasourceController
           ->setRenderDialogAsDiv(true)
           ->setTitle($source->getBrowseTitle())
           ->appendChild($browser)
+          ->setResizeX(true)
+          ->setResizeY($frame_id)
           ->addFooter($function_help)
           ->addCancelButton('/', pht('Close'));
       }
@@ -306,6 +308,7 @@ final class PhabricatorTypeaheadModularDatasourceController
 
     $form_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Token Query'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
     $table = new AphrontTableView($content);
@@ -326,16 +329,79 @@ final class PhabricatorTypeaheadModularDatasourceController
 
     $result_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Token Results (%s)', $class))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($table);
 
-    return $this->buildApplicationPage(
-      array(
+    $title = pht('Typeahead Results');
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $form_box,
         $result_box,
+      ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->appendChild($view);
+  }
+
+  private function renderBrowseResult(
+    PhabricatorTypeaheadResult $result,
+    $button) {
+
+    $class = array();
+    $style = array();
+    $separator = " \xC2\xB7 ";
+
+    $class[] = 'phabricator-main-search-typeahead-result';
+
+    $name = phutil_tag(
+      'div',
+      array(
+        'class' => 'result-name',
+      ),
+      $result->getDisplayName());
+
+    $icon = $result->getIcon();
+    $icon = id(new PHUIIconView())->setIcon($icon);
+
+    $attributes = $result->getAttributes();
+    $attributes = phutil_implode_html($separator, $attributes);
+    $attributes = array($icon, ' ', $attributes);
+
+    $closed = $result->getClosed();
+    if ($closed) {
+      $class[] = 'result-closed';
+      $attributes = array($closed, $separator, $attributes);
+    }
+
+    $attributes = phutil_tag(
+      'div',
+      array(
+        'class' => 'result-type',
+      ),
+      $attributes);
+
+    $image = $result->getImageURI();
+    if ($image) {
+      $style[] = 'background-image: url('.$image.');';
+      $class[] = 'has-image';
+    }
+
+    return phutil_tag(
+      'div',
+      array(
+        'class' => implode(' ', $class),
+        'style' => implode(' ', $style),
       ),
       array(
-        'title' => pht('Typeahead Results'),
-        'device' => false,
+        $button,
+        $name,
+        $attributes,
       ));
   }
 

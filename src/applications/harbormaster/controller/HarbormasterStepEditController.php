@@ -1,14 +1,12 @@
 <?php
 
-final class HarbormasterStepEditController extends HarbormasterController {
+final class HarbormasterStepEditController
+  extends HarbormasterPlanController {
 
   public function handleRequest(AphrontRequest $request) {
     $viewer = $this->getViewer();
-
-    $this->requireApplicationCapability(
-      HarbormasterManagePlansCapability::CAPABILITY);
-
     $id = $request->getURIData('id');
+
     if ($id) {
       $step = id(new HarbormasterBuildStepQuery())
         ->setViewer($viewer)
@@ -61,6 +59,12 @@ final class HarbormasterStepEditController extends HarbormasterController {
 
     $plan_uri = $this->getApplicationURI('plan/'.$plan->getID().'/');
 
+    if ($is_new) {
+      $cancel_uri = $plan_uri;
+    } else {
+      $cancel_uri = $this->getApplicationURI('step/view/'.$step->getID().'/');
+    }
+
     $implementation = $step->getStepImplementation();
 
     $field_list = PhabricatorCustomField::getObjectFields(
@@ -72,9 +76,9 @@ final class HarbormasterStepEditController extends HarbormasterController {
 
     $e_name = true;
     $v_name = $step->getName();
-    $e_description = true;
+    $e_description = null;
     $v_description = $step->getDescription();
-    $e_depends_on = true;
+    $e_depends_on = null;
     $v_depends_on = $step->getDetail('dependsOn', array());
 
     $errors = array();
@@ -82,9 +86,7 @@ final class HarbormasterStepEditController extends HarbormasterController {
     if ($request->isFormPost()) {
       $e_name = null;
       $v_name = $request->getStr('name');
-      $e_description = null;
       $v_description = $request->getStr('description');
-      $e_depends_on = null;
       $v_depends_on = $request->getArr('dependsOn');
 
       $xactions = $field_list->buildFieldTransactionsFromRequest(
@@ -124,20 +126,35 @@ final class HarbormasterStepEditController extends HarbormasterController {
 
       try {
         $editor->applyTransactions($step, $xactions);
-        return id(new AphrontRedirectResponse())->setURI($plan_uri);
+
+        $step_uri = $this->getApplicationURI('step/view/'.$step->getID().'/');
+
+        return id(new AphrontRedirectResponse())->setURI($step_uri);
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
         $validation_exception = $ex;
       }
     }
 
     $form = id(new AphrontFormView())
-      ->setUser($viewer)
-      ->appendChild(
-        id(new AphrontFormTextControl())
-          ->setName('name')
-          ->setLabel(pht('Name'))
-          ->setError($e_name)
-          ->setValue($v_name));
+      ->setUser($viewer);
+
+    $instructions = $implementation->getEditInstructions();
+    if (strlen($instructions)) {
+      $form->appendRemarkupInstructions($instructions);
+    }
+
+    $form->appendChild(
+      id(new AphrontFormTextControl())
+        ->setName('name')
+        ->setLabel(pht('Name'))
+        ->setError($e_name)
+        ->setValue($v_name));
+
+    $form->appendChild(id(new AphrontFormDividerControl()));
+
+    $field_list->appendFieldsToForm($form);
+
+    $form->appendChild(id(new AphrontFormDividerControl()));
 
     $form
       ->appendControl(
@@ -152,8 +169,6 @@ final class HarbormasterStepEditController extends HarbormasterController {
           ->setError($e_depends_on)
           ->setValue($v_depends_on));
 
-    $field_list->appendFieldsToForm($form);
-
     $form
       ->appendChild(
         id(new PhabricatorRemarkupControl())
@@ -163,30 +178,36 @@ final class HarbormasterStepEditController extends HarbormasterController {
           ->setError($e_description)
           ->setValue($v_description));
 
+    $crumbs = $this->buildApplicationCrumbs();
+    $id = $plan->getID();
+    $crumbs->addTextCrumb(pht('Plan %d', $id), $plan_uri);
+
     if ($is_new) {
       $submit = pht('Create Build Step');
-      $header = pht('New Step: %s', $implementation->getName());
-      $crumb = pht('Add Step');
+      $header = id(new PHUIHeaderView())
+        ->setHeader(pht('New Step: %s', $implementation->getName()))
+        ->setHeaderIcon('fa-plus-square');
+      $crumbs->addTextCrumb(pht('Add Step'));
     } else {
       $submit = pht('Save Build Step');
-      $header = pht('Edit Step: %s', $implementation->getName());
-      $crumb = pht('Edit Step');
+      $header = id(new PHUIHeaderView())
+        ->setHeader(pht('Edit Step: %s', $implementation->getName()))
+        ->setHeaderIcon('fa-pencil');
+      $crumbs->addTextCrumb(pht('Step %d', $step->getID()), $cancel_uri);
+      $crumbs->addTextCrumb(pht('Edit Step'));
     }
+    $crumbs->setBorder(true);
 
     $form->appendChild(
       id(new AphrontFormSubmitControl())
         ->setValue($submit)
-        ->addCancelButton($plan_uri));
+        ->addCancelButton($cancel_uri));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText($header)
+      ->setHeaderText(pht('Step'))
       ->setValidationException($validation_exception)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
-
-    $crumbs = $this->buildApplicationCrumbs();
-    $id = $plan->getID();
-    $crumbs->addTextCrumb(pht('Plan %d', $id), $plan_uri);
-    $crumbs->addTextCrumb($crumb);
 
     $variables = $this->renderBuildVariablesTable();
 
@@ -200,16 +221,19 @@ final class HarbormasterStepEditController extends HarbormasterController {
       $timeline->setShouldTerminate(true);
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $box,
         $variables,
         $timeline,
-      ),
-      array(
-        'title' => $implementation->getName(),
       ));
+
+    return $this->newPage()
+      ->setTitle($implementation->getName())
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
   private function renderBuildVariablesTable() {
@@ -223,7 +247,10 @@ final class HarbormasterStepEditController extends HarbormasterController {
       'The following variables can be used in most fields. '.
       'To reference a variable, use `%s` in a field.',
       '${name}');
-    $rows[] = pht('| Variable | Description |');
+    $rows[] = sprintf(
+      '| %s | %s |',
+      pht('Variable'),
+      pht('Description'));
     $rows[] = '|---|---|';
     foreach ($variables as $name => $description) {
       $rows[] = '| `'.$name.'` | '.$description.' |';
@@ -236,6 +263,7 @@ final class HarbormasterStepEditController extends HarbormasterController {
 
     return id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Build Variables'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($form);
   }
 

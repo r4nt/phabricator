@@ -35,22 +35,19 @@ final class PhortuneSubscriptionViewController extends PhortuneController {
     $title = $subscription->getSubscriptionFullName();
 
     $header = id(new PHUIHeaderView())
-      ->setHeader($title);
+      ->setHeader($title)
+      ->setHeaderIcon('fa-calendar-o');
 
-    $actions = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObjectURI($request->getRequestURI());
-
+    $curtain = $this->newCurtainView($subscription);
     $edit_uri = $subscription->getEditURI();
 
-    $actions->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setIcon('fa-pencil')
         ->setName(pht('Edit Subscription'))
         ->setHref($edit_uri)
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
-
 
     $crumbs = $this->buildApplicationCrumbs();
     if ($authority) {
@@ -59,10 +56,10 @@ final class PhortuneSubscriptionViewController extends PhortuneController {
       $this->addAccountCrumb($crumbs, $account);
     }
     $crumbs->addTextCrumb($subscription->getSubscriptionCrumbName());
+    $crumbs->setBorder(true);
 
     $properties = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setActionList($actions);
+      ->setUser($viewer);
 
     $next_invoice = $subscription->getTrigger()->getNextEventPrediction();
     $properties->addProperty(
@@ -84,23 +81,27 @@ final class PhortuneSubscriptionViewController extends PhortuneController {
       pht('Autopay With'),
       $autopay_method);
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
+    $details = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Details'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($properties);
 
     $due_box = $this->buildDueInvoices($subscription, $authority);
     $invoice_box = $this->buildPastInvoices($subscription, $authority);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+        $details,
         $due_box,
         $invoice_box,
-      ),
-      array(
-        'title' => $title,
-      ));
+    ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function buildDueInvoices(
@@ -137,6 +138,7 @@ final class PhortuneSubscriptionViewController extends PhortuneController {
 
     return id(new PHUIObjectBoxView())
       ->setHeader($invoice_header)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($invoice_table);
   }
 
@@ -194,14 +196,13 @@ final class PhortuneSubscriptionViewController extends PhortuneController {
       ->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-list'))
+          ->setIcon('fa-list')
           ->setHref($invoices_uri)
           ->setText(pht('View All Invoices')));
 
     return id(new PHUIObjectBoxView())
       ->setHeader($invoice_header)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($invoice_table);
   }
 

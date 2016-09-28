@@ -3,19 +3,13 @@
 final class PhabricatorProjectArchiveController
   extends PhabricatorProjectController {
 
-  private $id;
-
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     $project = id(new PhabricatorProjectQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,
@@ -26,7 +20,7 @@ final class PhabricatorProjectArchiveController
       return new Aphront404Response();
     }
 
-    $edit_uri = $this->getApplicationURI('profile/'.$project->getID().'/');
+    $edit_uri = $this->getApplicationURI('manage/'.$project->getID().'/');
 
     if ($request->isFormPost()) {
       if ($project->isArchived()) {

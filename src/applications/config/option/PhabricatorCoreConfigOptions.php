@@ -11,7 +11,7 @@ final class PhabricatorCoreConfigOptions
     return pht('Configure core options, including URIs.');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-bullseye';
   }
 
@@ -174,11 +174,11 @@ final class PhabricatorCoreConfigOptions
             "The current value of PATH after configuration is applied is:\n\n".
             "  lang=text\n".
             "  %s",
+            'pygmentize',
             '$PATH',
             '$PATH',
             'phabricator/support/bin/',
-            $path,
-            'pygmentize'))
+            $path))
         ->setLocked(true)
         ->addExample('/usr/local/bin', pht('Add One Path'))
         ->addExample("/usr/bin\n/usr/local/bin", pht('Add Multiple Paths')),
@@ -213,10 +213,6 @@ final class PhabricatorCoreConfigOptions
         ->setLocked(true)
         ->setDescription(
           pht('Customized settings for Phabricator applications.')),
-      $this->newOption('welcome.html', 'string', null)
-        ->setLocked(true)
-        ->setDescription(
-          pht('Custom HTML to show on the main Phabricator dashboard.')),
       $this->newOption('phabricator.cache-namespace', 'string', 'phabricator')
         ->setLocked(true)
         ->setDescription(pht('Cache namespace.')),

@@ -50,8 +50,14 @@ final class PhabricatorBotObjectNameHandler extends PhabricatorBotHandler {
           '(?:\b|$)'.
           '@';
 
+        $regex = trim(
+          PhabricatorEnv::getEnvConfig('remarkup.ignored-object-names'));
+
         if (preg_match_all($pattern, $message, $matches, PREG_SET_ORDER)) {
           foreach ($matches as $match) {
+            if ($regex && preg_match($regex, $match[0])) {
+              continue;
+            }
             switch ($match[1]) {
               case 'P':
                 $paste_ids[] = $match[2];
@@ -173,7 +179,7 @@ final class PhabricatorBotObjectNameHandler extends PhabricatorBotHandler {
 
           // Don't mention the same object more than once every 10 minutes
           // in public channels, so we avoid spamming the chat over and over
-          // again for discsussions of a specific revision, for example.
+          // again for discussions of a specific revision, for example.
 
           $target_name = $original_message->getTarget()->getName();
           if (empty($this->recentlyMentioned[$target_name])) {

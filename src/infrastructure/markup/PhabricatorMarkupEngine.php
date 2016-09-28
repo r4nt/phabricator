@@ -42,8 +42,9 @@ final class PhabricatorMarkupEngine extends Phobject {
   private $objects = array();
   private $viewer;
   private $contextObject;
-  private $version = 15;
+  private $version = 16;
   private $engineCaches = array();
+  private $auxiliaryConfig = array();
 
 
 /* -(  Markup Pipeline  )---------------------------------------------------- */
@@ -122,6 +123,10 @@ final class PhabricatorMarkupEngine extends Phobject {
       $engines[$key] = $info['object']->newMarkupEngine($info['field']);
       $engines[$key]->setConfig('viewer', $this->viewer);
       $engines[$key]->setConfig('contextObject', $this->contextObject);
+
+      foreach ($this->auxiliaryConfig as $aux_key => $aux_value) {
+        $engines[$key]->setConfig($aux_key, $aux_value);
+      }
     }
 
     // Load or build the preprocessor caches.
@@ -249,6 +254,8 @@ final class PhabricatorMarkupEngine extends Phobject {
       }
     }
 
+    $is_readonly = PhabricatorEnv::isReadOnly();
+
     foreach ($objects as $key => $info) {
       // False check in case MySQL doesn't support unicode characters
       // in the string (T1191), resulting in unserialize returning false.
@@ -274,7 +281,7 @@ final class PhabricatorMarkupEngine extends Phobject {
         ->setCacheData($data)
         ->setMetadata($metadata);
 
-      if (isset($use_cache[$key])) {
+      if (isset($use_cache[$key]) && !$is_readonly) {
         // This is just filling a cache and always safe, even on a read pathway.
         $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
           $blocks[$key]->replace();
@@ -310,6 +317,12 @@ final class PhabricatorMarkupEngine extends Phobject {
     return $this;
   }
 
+  public function setAuxiliaryConfig($key, $value) {
+    // TODO: This is gross and should be removed. Avoid use.
+    $this->auxiliaryConfig[$key] = $value;
+    return $this;
+  }
+
 
 /* -(  Engine Construction  )------------------------------------------------ */
 
@@ -338,10 +351,13 @@ final class PhabricatorMarkupEngine extends Phobject {
    * @task engine
    */
   public static function newPhameMarkupEngine() {
-    return self::newMarkupEngine(array(
-      'macros' => false,
-      'uri.full' => true,
-    ));
+    return self::newMarkupEngine(
+      array(
+        'macros' => false,
+        'uri.full' => true,
+        'uri.same-window' => true,
+        'uri.base' => PhabricatorEnv::getURI('/'),
+      ));
   }
 
 
@@ -457,6 +473,7 @@ final class PhabricatorMarkupEngine extends Phobject {
     $engine = new PhutilRemarkupEngine();
 
     $engine->setConfig('preserve-linebreaks', $options['preserve-linebreaks']);
+
     $engine->setConfig('pygments.enabled', $options['pygments']);
     $engine->setConfig(
       'uri.allowed-protocols',
@@ -467,7 +484,19 @@ final class PhabricatorMarkupEngine extends Phobject {
       'syntax-highlighter.engine',
       $options['syntax-highlighter.engine']);
 
+    $style_map = id(new PhabricatorDefaultSyntaxStyle())
+      ->getRemarkupStyleMap();
+    $engine->setConfig('phutil.codeblock.style-map', $style_map);
+
     $engine->setConfig('uri.full', $options['uri.full']);
+
+    if (isset($options['uri.base'])) {
+      $engine->setConfig('uri.base', $options['uri.base']);
+    }
+
+    if (isset($options['uri.same-window'])) {
+      $engine->setConfig('uri.same-window', $options['uri.same-window']);
+    }
 
     $rules = array();
     $rules[] = new PhutilRemarkupEscapeRemarkupRule();
@@ -476,10 +505,15 @@ final class PhabricatorMarkupEngine extends Phobject {
 
     $rules[] = new PhutilRemarkupDocumentLinkRule();
     $rules[] = new PhabricatorNavigationRemarkupRule();
+    $rules[] = new PhabricatorKeyboardRemarkupRule();
 
     if ($options['youtube']) {
       $rules[] = new PhabricatorYoutubeRemarkupRule();
     }
+
+    $rules[] = new PhabricatorIconRemarkupRule();
+    $rules[] = new PhabricatorEmojiRemarkupRule();
+    $rules[] = new PhabricatorHandleRemarkupRule();
 
     $applications = PhabricatorApplication::getAllInstalledApplications();
     foreach ($applications as $application) {
@@ -499,9 +533,10 @@ final class PhabricatorMarkupEngine extends Phobject {
     $rules[] = new PhutilRemarkupItalicRule();
     $rules[] = new PhutilRemarkupDelRule();
     $rules[] = new PhutilRemarkupUnderlineRule();
+    $rules[] = new PhutilRemarkupHighlightRule();
 
     foreach (self::loadCustomInlineRules() as $rule) {
-      $rules[] = $rule;
+      $rules[] = clone $rule;
     }
 
     $blocks = array();
@@ -622,15 +657,15 @@ final class PhabricatorMarkupEngine extends Phobject {
   }
 
   private static function loadCustomInlineRules() {
-    return id(new PhutilSymbolLoader())
+    return id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorRemarkupCustomInlineRule')
-      ->loadObjects();
+      ->execute();
   }
 
   private static function loadCustomBlockRules() {
-    return id(new PhutilSymbolLoader())
+    return id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorRemarkupCustomBlockRule')
-      ->loadObjects();
+      ->execute();
   }
 
 }

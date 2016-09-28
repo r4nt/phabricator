@@ -3,8 +3,7 @@
 final class HarbormasterPlanViewController extends HarbormasterPlanController {
 
   public function handleRequest(AphrontRequest $request) {
-    $viewer = $this->getviewer();
-
+    $viewer = $this->getViewer();
     $id = $request->getURIData('id');
 
     $plan = id(new HarbormasterBuildPlanQuery())
@@ -25,50 +24,50 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
     $header = id(new PHUIHeaderView())
       ->setHeader($plan->getName())
       ->setUser($viewer)
-      ->setPolicyObject($plan);
+      ->setPolicyObject($plan)
+      ->setHeaderIcon('fa-ship');
 
-    $box = id(new PHUIObjectBoxView())
-      ->setHeader($header);
-
-    $actions = $this->buildActionList($plan);
-    $this->buildPropertyLists($box, $plan, $actions);
+    $curtain = $this->buildCurtainView($plan);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Plan %d', $id));
+    $crumbs->setBorder(true);
 
     list($step_list, $has_any_conflicts, $would_deadlock) =
       $this->buildStepList($plan);
 
+    $error = null;
     if ($would_deadlock) {
-      $box->setFormErrors(
-        array(
-          pht(
-            'This build plan will deadlock when executed, due to '.
-            'circular dependencies present in the build plan. '.
-            'Examine the step list and resolve the deadlock.'),
-        ));
+      $error = pht('This build plan will deadlock when executed, due to '.
+                   'circular dependencies present in the build plan. '.
+                   'Examine the step list and resolve the deadlock.');
     } else if ($has_any_conflicts) {
       // A deadlocking build will also cause all the artifacts to be
       // invalid, so we just skip showing this message if that's the
       // case.
-      $box->setFormErrors(
-        array(
-          pht(
-            'This build plan has conflicts in one or more build steps. '.
-            'Examine the step list and resolve the listed errors.'),
-        ));
+      $error = pht('This build plan has conflicts in one or more build steps. '.
+                   'Examine the step list and resolve the listed errors.');
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
+    if ($error) {
+      $error = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->appendChild($error);
+    }
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+        $error,
         $step_list,
         $timeline,
-      ),
-      array(
-        'title' => $title,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function buildStepList(HarbormasterBuildPlan $plan) {
@@ -82,15 +81,10 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
       ->execute();
     $steps = mpull($steps, null, 'getPHID');
 
-    $has_manage = $this->hasApplicationCapability(
-      HarbormasterManagePlansCapability::CAPABILITY);
-
-    $has_edit = PhabricatorPolicyFilter::hasCapability(
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
       $plan,
       PhabricatorPolicyCapability::CAN_EDIT);
-
-    $can_edit = ($has_manage && $has_edit);
 
     $step_list = id(new PHUIObjectItemListView())
       ->setUser($viewer)
@@ -111,55 +105,32 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
         $i++;
       }
 
+      $step_id = $step->getID();
+      $view_uri = $this->getApplicationURI("step/view/{$step_id}/");
+
+      $item = id(new PHUIObjectItemView())
+        ->setObjectName(pht('Step %d.%d', $depth, $i))
+        ->setHeader($step->getName())
+        ->setHref($view_uri);
+
+      $step_list->addItem($item);
+
       $implementation = null;
       try {
         $implementation = $step->getStepImplementation();
       } catch (Exception $ex) {
         // We can't initialize the implementation. This might be because
         // it's been renamed or no longer exists.
-        $item = id(new PHUIObjectItemView())
-          ->setObjectName(pht('Step %d.%d', $depth, $i))
-          ->setHeader(pht('Unknown Implementation'))
-          ->setBarColor('red')
+        $item
+          ->setStatusIcon('fa-warning red')
           ->addAttribute(pht(
             'This step has an invalid implementation (%s).',
-            $step->getClassName()))
-          ->addAction(
-            id(new PHUIListItemView())
-              ->setIcon('fa-times')
-              ->addSigil('harbormaster-build-step-delete')
-              ->setWorkflow(true)
-              ->setRenderNameAsTooltip(true)
-              ->setName(pht('Delete'))
-              ->setHref(
-                $this->getApplicationURI('step/delete/'.$step->getID().'/')));
-        $step_list->addItem($item);
+            $step->getClassName()));
         continue;
       }
-      $item = id(new PHUIObjectItemView())
-        ->setObjectName(pht('Step %d.%d', $depth, $i))
-        ->setHeader($step->getName());
 
       $item->addAttribute($implementation->getDescription());
-
-      $step_id = $step->getID();
-      $edit_uri = $this->getApplicationURI("step/edit/{$step_id}/");
-      $delete_uri = $this->getApplicationURI("step/delete/{$step_id}/");
-
-      if ($can_edit) {
-        $item->setHref($edit_uri);
-      }
-
-      $item
-        ->setHref($edit_uri)
-        ->addAction(
-          id(new PHUIListItemView())
-            ->setIcon('fa-times')
-            ->addSigil('harbormaster-build-step-delete')
-            ->setWorkflow(true)
-            ->setDisabled(!$can_edit)
-            ->setHref(
-              $this->getApplicationURI('step/delete/'.$step->getID().'/')));
+      $item->setHref($view_uri);
 
       $depends = $step->getStepImplementation()->getDependencies($step);
       $inputs = $step->getStepImplementation()->getArtifactInputs();
@@ -206,7 +177,7 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
 
       if ($has_conflicts) {
         $has_any_conflicts = true;
-        $item->setBarColor('red');
+        $item->setStatusIcon('fa-warning red');
       }
 
       if ($run_ref['cycle']) {
@@ -214,10 +185,8 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
       }
 
       if ($is_deadlocking) {
-        $item->setBarColor('red');
+        $item->setStatusIcon('fa-warning red');
       }
-
-      $step_list->addItem($item);
     }
 
     $step_list->setFlush(true);
@@ -231,39 +200,30 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
           ->setText(pht('Add Build Step'))
           ->setHref($this->getApplicationURI("step/add/{$plan_id}/"))
           ->setTag('a')
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-plus'))
+          ->setIcon('fa-plus')
           ->setDisabled(!$can_edit)
-          ->setWorkflow(true));
+          ->setWorkflow(!$can_edit));
 
     $step_box = id(new PHUIObjectBoxView())
       ->setHeader($header)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($step_list);
 
     return array($step_box, $has_any_conflicts, $is_deadlocking);
   }
 
-  private function buildActionList(HarbormasterBuildPlan $plan) {
+  private function buildCurtainView(HarbormasterBuildPlan $plan) {
     $viewer = $this->getViewer();
     $id = $plan->getID();
 
-    $list = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObject($plan)
-      ->setObjectURI($this->getApplicationURI("plan/{$id}/"));
+    $curtain = $this->newCurtainView($plan);
 
-    $has_manage = $this->hasApplicationCapability(
-      HarbormasterManagePlansCapability::CAPABILITY);
-
-    $has_edit = PhabricatorPolicyFilter::hasCapability(
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
       $plan,
       PhabricatorPolicyCapability::CAN_EDIT);
 
-    $can_edit = ($has_manage && $has_edit);
-
-    $list->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Edit Plan'))
         ->setHref($this->getApplicationURI("plan/edit/{$id}/"))
@@ -272,7 +232,7 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
         ->setIcon('fa-pencil'));
 
     if ($plan->isDisabled()) {
-      $list->addAction(
+      $curtain->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('Enable Plan'))
           ->setHref($this->getApplicationURI("plan/disable/{$id}/"))
@@ -280,7 +240,7 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
           ->setDisabled(!$can_edit)
           ->setIcon('fa-check'));
     } else {
-      $list->addAction(
+      $curtain->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('Disable Plan'))
           ->setHref($this->getApplicationURI("plan/disable/{$id}/"))
@@ -289,34 +249,22 @@ final class HarbormasterPlanViewController extends HarbormasterPlanController {
           ->setIcon('fa-ban'));
     }
 
-    $list->addAction(
+    $can_run = ($can_edit && $plan->canRunManually());
+
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Run Plan Manually'))
         ->setHref($this->getApplicationURI("plan/run/{$id}/"))
         ->setWorkflow(true)
-        ->setDisabled(!$has_manage)
+        ->setDisabled(!$can_run)
         ->setIcon('fa-play-circle'));
 
-    return $list;
-  }
+    $curtain->addPanel(
+      id(new PHUICurtainPanelView())
+        ->setHeaderText(pht('Created'))
+        ->appendChild(phabricator_datetime($plan->getDateCreated(), $viewer)));
 
-  private function buildPropertyLists(
-    PHUIObjectBoxView $box,
-    HarbormasterBuildPlan $plan,
-    PhabricatorActionListView $actions) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    $properties = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setObject($plan)
-      ->setActionList($actions);
-    $box->addPropertyList($properties);
-
-    $properties->addProperty(
-      pht('Created'),
-      phabricator_datetime($plan->getDateCreated(), $viewer));
-
+    return $curtain;
   }
 
   private function buildArtifactList(

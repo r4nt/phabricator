@@ -5,6 +5,7 @@ final class PhabricatorNotificationBuilder extends Phobject {
   private $stories;
   private $parsedStories;
   private $user = null;
+  private $showTimestamps = true;
 
   public function __construct(array $stories) {
     assert_instances_of($stories, 'PhabricatorFeedStory');
@@ -14,6 +15,15 @@ final class PhabricatorNotificationBuilder extends Phobject {
   public function setUser($user) {
     $this->user = $user;
     return $this;
+  }
+
+  public function setShowTimestamps($show_timestamps) {
+    $this->showTimestamps = $show_timestamps;
+    return $this;
+  }
+
+  public function getShowTimestamps() {
+    return $this->showTimestamps;
   }
 
   private function parseStories() {
@@ -121,6 +131,9 @@ final class PhabricatorNotificationBuilder extends Phobject {
         // TODO: Render a nice debuggable notice instead?
         continue;
       }
+
+      $view->setShowTimestamp($this->getShowTimestamps());
+
       $null_view->appendChild($view->renderNotification($this->user));
     }
 
@@ -131,10 +144,14 @@ final class PhabricatorNotificationBuilder extends Phobject {
     $stories = $this->parseStories();
     $dict = array();
 
+    $viewer = $this->user;
+    $desktop_key = PhabricatorDesktopNotificationsSetting::SETTINGKEY;
+    $desktop_enabled = $viewer->getUserSetting($desktop_key);
+
     foreach ($stories as $story) {
       if ($story instanceof PhabricatorApplicationTransactionFeedStory) {
         $dict[] = array(
-          'desktopReady' => true,
+          'desktopReady' => $desktop_enabled,
           'title'        => $story->renderText(),
           'body'         => $story->renderTextBody(),
           'href'         => $story->getURI(),
@@ -142,7 +159,7 @@ final class PhabricatorNotificationBuilder extends Phobject {
         );
       } else if ($story instanceof PhabricatorNotificationTestFeedStory) {
         $dict[] = array(
-          'desktopReady' => true,
+          'desktopReady' => $desktop_enabled,
           'title'        => pht('Test Notification'),
           'body'         => $story->renderText(),
           'href'         => null,

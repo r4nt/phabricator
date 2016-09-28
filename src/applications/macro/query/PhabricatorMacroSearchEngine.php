@@ -22,7 +22,7 @@ final class PhabricatorMacroSearchEngine
         ->setLabel(pht('Status'))
         ->setKey('status')
         ->setOptions(PhabricatorMacroQuery::getStatusOptions()),
-      id(new PhabricatorSearchUsersField())
+      id(new PhabricatorUsersSearchField())
         ->setLabel(pht('Authors'))
         ->setKey('authorPHIDs')
         ->setAliases(array('author', 'authors')),
@@ -111,7 +111,9 @@ final class PhabricatorMacroSearchEngine
 
     switch ($query_key) {
       case 'active':
-        return $query;
+        return $query->setParameter(
+          'status',
+          PhabricatorMacroQuery::STATUS_ACTIVE);
       case 'all':
         return $query->setParameter(
           'status',
@@ -181,7 +183,29 @@ final class PhabricatorMacroSearchEngine
       $pinboard->addItem($item);
     }
 
-    return $pinboard;
+    $result = new PhabricatorApplicationSearchResultView();
+    $result->setContent($pinboard);
+
+    return $result;
+  }
+
+  protected function getNewUserBody() {
+    $create_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Create a Macro'))
+      ->setHref('/macro/create/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Create easy to remember shortcuts to images and memes.'))
+      ->addAction($create_button);
+
+      return $view;
   }
 
 }

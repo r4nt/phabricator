@@ -264,6 +264,7 @@ JX.behavior('fancy-datepicker', function(config, statics) {
 
   function getValidDate() {
     var written_date = new Date(value_y, value_m-1, value_d);
+
     if (isNaN(written_date.getTime())) {
       return new Date();
     } else {
@@ -272,6 +273,14 @@ JX.behavior('fancy-datepicker', function(config, statics) {
         value_y += 2000;
         written_date = new Date(value_y, value_m-1, value_d);
       }
+
+      // adjust for a date like February 31
+      var adjust = 1;
+      while (written_date.getMonth() !== value_m-1) {
+        written_date = new Date(value_y, value_m-1, value_d-adjust);
+        adjust++;
+      }
+
       return written_date;
     }
   }
@@ -300,10 +309,10 @@ JX.behavior('fancy-datepicker', function(config, statics) {
     // Render the calendar itself. NOTE: Javascript uses 0-based month indexes
     // while we use 1-based month indexes, so we have to adjust for that.
     var days = [];
-    var start = new Date(
+    var start = (new Date(
       valid_date.getYear() + 1900,
       valid_date.getMonth(),
-      1).getDay() - week_start;
+      1).getDay() - week_start + 7) % 7;
 
     while (start--) {
       days.push(cell('', null, false, 'day-placeholder'));

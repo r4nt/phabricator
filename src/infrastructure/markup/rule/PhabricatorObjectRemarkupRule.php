@@ -25,6 +25,13 @@ abstract class PhabricatorObjectRemarkupRule extends PhutilRemarkupRule {
     return true;
   }
 
+  protected function getObjectNameText(
+    $object,
+    PhabricatorObjectHandle $handle,
+    $id) {
+    return $this->getObjectNamePrefix().$id;
+  }
+
   protected function loadHandles(array $objects) {
     $phids = mpull($objects, 'getPHID');
 
@@ -53,14 +60,14 @@ abstract class PhabricatorObjectRemarkupRule extends PhutilRemarkupRule {
     return $uri;
   }
 
-  protected function renderObjectRefForAnyMedia (
+  protected function renderObjectRefForAnyMedia(
     $object,
     PhabricatorObjectHandle $handle,
     $anchor,
     $id) {
 
     $href = $this->getObjectHref($object, $handle, $id);
-    $text = $this->getObjectNamePrefix().$id;
+    $text = $this->getObjectNameText($object, $handle, $id);
 
     if ($anchor) {
       $href = $href.'#'.$anchor;
@@ -85,7 +92,7 @@ abstract class PhabricatorObjectRemarkupRule extends PhutilRemarkupRule {
     $id) {
 
     $href = $this->getObjectHref($object, $handle, $id);
-    $text = $this->getObjectNamePrefix().$id;
+    $text = $this->getObjectNameText($object, $handle, $id);
     $status_closed = PhabricatorObjectHandle::STATUS_CLOSED;
 
     if ($anchor) {
@@ -209,13 +216,14 @@ abstract class PhabricatorObjectRemarkupRule extends PhutilRemarkupRule {
       $boundary = '\\B';
     }
 
-    // The "(?<![#-])" prevents us from linking "#abcdef" or similar, and
-    // "ABC-T1" (see T5714).
+    // The "(?<![#@-])" prevents us from linking "#abcdef" or similar, and
+    // "ABC-T1" (see T5714), and from matching "@T1" as a task (it is a user)
+    // (see T9479).
 
     // The "\b" allows us to link "(abcdef)" or similar without linking things
     // in the middle of words.
 
-    return '((?<![#-])'.$boundary.$prefix.'('.$id.')(?:#([-\w\d]+))?(?!\w))u';
+    return '((?<![#@-])'.$boundary.$prefix.'('.$id.')(?:#([-\w\d]+))?(?!\w))u';
   }
 
 

@@ -9,9 +9,8 @@ final class PhabricatorAuthNeedsMultiFactorController
     return false;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
 
     $panel = id(new PhabricatorMultiFactorSettingsPanel())
       ->setUser($viewer)
@@ -77,15 +76,16 @@ final class PhabricatorAuthNeedsMultiFactorController
           ));
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $help,
-        $panel,
-      ),
-      array(
-        'title' => pht('Add Multi-Factor Authentication'),
-      ));
+    $view = array(
+      $help,
+      $panel,
+    );
+
+    return $this->newPage()
+      ->setTitle(pht('Add Multi-Factor Authentication'))
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
 }
