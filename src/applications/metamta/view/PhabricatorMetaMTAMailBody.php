@@ -116,7 +116,7 @@ final class PhabricatorMetaMTAMailBody extends Phobject {
       $this->sections[] = $text;
     } else {
       if ($indent) {
-        $text = $this->indent($text)
+        $text = $this->indent($text);
       }
       $this->sections[] = $header."\n".$text;
     }
