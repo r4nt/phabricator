@@ -29,10 +29,15 @@ final class DifferentialInlineCommentMailView
   public function buildMailSection() {
     $inlines = $this->getInlines();
 
-    $comments = mpull($inlines, 'getComment');
-    $comments = mpull($comments, null, 'getPHID');
-    $parents = $this->loadParents($comments);
-    $all_comments = $comments + $parents;
+    $show_email_context = true;
+    $all_comments = loadAllComments($inlines)
+    $comments_by_line_number = array();
+    foreach ($all_comments as $comment) {
+      $comments_by_line_number
+        [$comment->getChangesetID()]
+        [$comment->getLineNumber()]
+        [$comment->getID()] = $comment;
+    }
 
     $this->changesets = $this->loadChangesets($all_comments);
     $this->authors = $this->loadAuthors($all_comments);
@@ -64,16 +69,19 @@ final class DifferentialInlineCommentMailView
         $context_text = null;
         $context_html = null;
 
+        if ($show_email_context) {
+          $nested_comments = renderNestedCommentContext($comment,
+            $comments_by_line_number)
+        }
+        $patch_text = $this->getPatch($hunk_parser, $comment, false);
         if ($parent_phid) {
-          $parent = idx($parents, $parent_phid);
+          $parent = idx($all_comments, $parent_phid);
           if ($parent) {
             $context_text = $this->renderInline($parent, false, true);
             $context_html = $this->renderInline($parent, true, true);
           }
         } else {
-          $patch_text = $this->getPatch($hunk_parser, $comment, false);
           $context_text = $this->renderPatch($comment, $patch_text, false);
-
           $patch_html = $this->getPatch($hunk_parser, $comment, true);
           $context_html = $this->renderPatch($comment, $patch_html, true);
         }
@@ -81,9 +89,27 @@ final class DifferentialInlineCommentMailView
         $render_text = $this->renderInline($comment, false, false);
         $render_html = $this->renderInline($comment, true, false);
 
-        $section->addPlaintextFragment($context_text);
-        $section->addPlaintextFragment($spacer_text);
-        $section->addPlaintextFragment($render_text);
+        if (!show_email_context) {
+          $section->addPlaintextFragment($context_text);
+          $section->addPlaintextFragment($spacer_text);
+          $section->addPlaintextFragment($render_text);
+        } else {
+          $changeset = $this->getChangeset($comment->getChangesetID());
+          $file = $changeset->getFilename();
+          $start = $comment->getLineNumber();
+          $len = $comment->getLineLength();
+          if ($len) {
+            $range = $start.'-'.($start + $len);
+          } else {
+            $range = $start;
+          }
+          $section->addPlaintextFragment('================');
+          $section->addPlaintextFragment('Comment at: '.$file.':'.$range);
+          $section->addPlaintextFragment($patch_text);
+          $section->addPlaintextFragment('----------------');
+          $section->addPlaintextFragment($context_text);
+          $section->addPlaintextFragment($spacer_text);
+        }
 
         $html_fragment = $this->renderContentBox(
           array(
@@ -101,6 +127,60 @@ final class DifferentialInlineCommentMailView
     }
 
     return $section;
+  }
+
+  private function loadAllComments(array $inlines) {
+    $comments = mpull($inlines, 'getComment');
+    $line_numbers_by_changeset = array();
+    foreach ($comments as $comment) {
+      $id = $comment->getChangesetID();
+      $line_numbers_by_changeset[$id][] = $comment->getLineNumber();
+    }
+
+    $table = new DifferentialTransactionComment();;
+    $conn_r = $table->establishConnection('r');
+    $queries = array();
+    foreach ($line_numbers_by_changeset as $id => $line_numbers) {
+      $queries[] = qsprintf(
+        $conn_r,
+        '(changesetID = %d AND lineNumber IN (%Ld))',
+        $id, $line_numbers);
+    }
+    $all_comments = id(new DifferentialTransactionComment())->loadAllWhere(
+      'transactionPHID IS NOT NULL AND (%Q)', implode(' OR ', $queries));
+
+    return mpull($all_comments, null, 'getPHID');
+  }
+
+  private function indentForMail(array $lines) {
+    $indented = array();
+    foreach ($lines as $line) {
+      $indented[] = '> '.$line;
+    }
+    return $indented;
+  }
+
+
+  private function nestCommentHistory(
+    DifferentialTransactionComment $comment, array $comments_by_line_number) {
+    $nested = array();
+    $previous_comments = $comments_by_line_number[$comment->getChangesetID()]
+                                                 [$comment->getLineNumber()];
+    foreach ($previous_comments as $previous_comment) {
+      if ($previous_comment->getID() >= $comment->getID())
+        break;
+      $nested = $this->indentForMail(
+        array_merge(
+          $nested,
+          explode("\n", $previous_comment->getContent())));
+      $user = $this->getAuthor($previous_comment->getAuthorPHID()
+      if ($user) {
+        array_unshift($nested, pht('%s wrote:', $user->getUserName()));
+      }
+    }
+
+    $nested = array_merge($nested, explode("\n", $comment->getContent()));
+    return implode("\n", $nested);
   }
 
   private function loadChangesets(array $comments) {
