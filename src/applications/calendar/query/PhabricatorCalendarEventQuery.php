@@ -14,6 +14,13 @@ final class PhabricatorCalendarEventQuery
   private $instanceSequencePairs;
   private $isStub;
   private $parentEventPHIDs;
+  private $importSourcePHIDs;
+  private $importAuthorPHIDs;
+  private $importUIDs;
+  private $utcInitialEpochMin;
+  private $utcInitialEpochMax;
+  private $isImported;
+  private $needRSVPs;
 
   private $generateGhosts = false;
 
@@ -39,6 +46,12 @@ final class PhabricatorCalendarEventQuery
   public function withDateRange($begin, $end) {
     $this->rangeBegin = $begin;
     $this->rangeEnd = $end;
+    return $this;
+  }
+
+  public function withUTCInitialEpochBetween($min, $max) {
+    $this->utcInitialEpochMin = $min;
+    $this->utcInitialEpochMax = $max;
     return $this;
   }
 
@@ -77,6 +90,31 @@ final class PhabricatorCalendarEventQuery
     return $this;
   }
 
+  public function withImportSourcePHIDs(array $import_phids) {
+    $this->importSourcePHIDs = $import_phids;
+    return $this;
+  }
+
+  public function withImportAuthorPHIDs(array $author_phids) {
+    $this->importAuthorPHIDs = $author_phids;
+    return $this;
+  }
+
+  public function withImportUIDs(array $uids) {
+    $this->importUIDs = $uids;
+    return $this;
+  }
+
+  public function withIsImported($is_imported) {
+    $this->isImported = $is_imported;
+    return $this;
+  }
+
+  public function needRSVPs(array $phids) {
+    $this->needRSVPs = $phids;
+    return $this;
+  }
+
   protected function getDefaultOrderVector() {
     return array('start', 'id');
   }
@@ -94,7 +132,7 @@ final class PhabricatorCalendarEventQuery
     return array(
       'start' => array(
         'table' => $this->getPrimaryTableAlias(),
-        'column' => 'dateFrom',
+        'column' => 'utcInitialEpoch',
         'reverse' => true,
         'type' => 'int',
         'unique' => false,
@@ -134,7 +172,6 @@ final class PhabricatorCalendarEventQuery
     }
 
     $raw_limit = $this->getRawResultLimit();
-
     if (!$raw_limit && !$this->rangeEnd) {
       throw new Exception(
         pht(
@@ -353,6 +390,20 @@ final class PhabricatorCalendarEventQuery
         $this->rangeEnd + phutil_units('16 hours in seconds'));
     }
 
+    if ($this->utcInitialEpochMin !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'event.utcInitialEpoch >= %d',
+        $this->utcInitialEpochMin);
+    }
+
+    if ($this->utcInitialEpochMax !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'event.utcInitialEpoch <= %d',
+        $this->utcInitialEpochMax);
+    }
+
     if ($this->inviteePHIDs !== null) {
       $where[] = qsprintf(
         $conn,
@@ -411,6 +462,39 @@ final class PhabricatorCalendarEventQuery
         $this->parentEventPHIDs);
     }
 
+    if ($this->importSourcePHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'event.importSourcePHID IN (%Ls)',
+        $this->importSourcePHIDs);
+    }
+
+    if ($this->importAuthorPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'event.importAuthorPHID IN (%Ls)',
+        $this->importAuthorPHIDs);
+    }
+
+    if ($this->importUIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'event.importUID IN (%Ls)',
+        $this->importUIDs);
+    }
+
+    if ($this->isImported !== null) {
+      if ($this->isImported) {
+        $where[] = qsprintf(
+          $conn,
+          'event.importSourcePHID IS NOT NULL');
+      } else {
+        $where[] = qsprintf(
+          $conn,
+          'event.importSourcePHID IS NULL');
+      }
+    }
+
     return $where;
   }
 
@@ -440,6 +524,42 @@ final class PhabricatorCalendarEventQuery
     $viewer = $this->getViewer();
 
     $events = $this->getEventsInRange($events);
+
+    $import_phids = array();
+    foreach ($events as $event) {
+      $import_phid = $event->getImportSourcePHID();
+      if ($import_phid !== null) {
+        $import_phids[$import_phid] = $import_phid;
+      }
+    }
+
+    if ($import_phids) {
+      $imports = id(new PhabricatorCalendarImportQuery())
+        ->setParentQuery($this)
+        ->setViewer($viewer)
+        ->withPHIDs($import_phids)
+        ->execute();
+      $imports = mpull($imports, null, 'getPHID');
+    } else {
+      $imports = array();
+    }
+
+    foreach ($events as $key => $event) {
+      $import_phid = $event->getImportSourcePHID();
+      if ($import_phid === null) {
+        $event->attachImportSource(null);
+        continue;
+      }
+
+      $import = idx($imports, $import_phid);
+      if (!$import) {
+        unset($events[$key]);
+        $this->didRejectResult($event);
+        continue;
+      }
+
+      $event->attachImportSource($import);
+    }
 
     $phids = array();
 
@@ -498,6 +618,70 @@ final class PhabricatorCalendarEventQuery
     }
 
     $events = msort($events, 'getStartDateTimeEpoch');
+
+    if ($this->needRSVPs) {
+      $rsvp_phids = $this->needRSVPs;
+      $project_type = PhabricatorProjectProjectPHIDType::TYPECONST;
+
+      $project_phids = array();
+      foreach ($events as $event) {
+        foreach ($event->getInvitees() as $invitee) {
+          $invitee_phid = $invitee->getInviteePHID();
+          if (phid_get_type($invitee_phid) == $project_type) {
+            $project_phids[] = $invitee_phid;
+          }
+        }
+      }
+
+      if ($project_phids) {
+        $member_type = PhabricatorProjectMaterializedMemberEdgeType::EDGECONST;
+
+        $query = id(new PhabricatorEdgeQuery())
+          ->withSourcePHIDs($project_phids)
+          ->withEdgeTypes(array($member_type))
+          ->withDestinationPHIDs($rsvp_phids);
+
+        $edges = $query->execute();
+
+        $project_map = array();
+        foreach ($edges as $src => $types) {
+          foreach ($types as $type => $dsts) {
+            foreach ($dsts as $dst => $edge) {
+              $project_map[$dst][] = $src;
+            }
+          }
+        }
+      } else {
+        $project_map = array();
+      }
+
+      $membership_map = array();
+      foreach ($rsvp_phids as $rsvp_phid) {
+        $membership_map[$rsvp_phid] = array();
+        $membership_map[$rsvp_phid][] = $rsvp_phid;
+
+        $project_phids = idx($project_map, $rsvp_phid);
+        if ($project_phids) {
+          foreach ($project_phids as $project_phid) {
+            $membership_map[$rsvp_phid][] = $project_phid;
+          }
+        }
+      }
+
+      foreach ($events as $event) {
+        $invitees = $event->getInvitees();
+        $invitees = mpull($invitees, null, 'getInviteePHID');
+
+        $rsvp_map = array();
+        foreach ($rsvp_phids as $rsvp_phid) {
+          $membership_phids = $membership_map[$rsvp_phid];
+          $rsvps = array_select_keys($invitees, $membership_phids);
+          $rsvp_map[$rsvp_phid] = $rsvps;
+        }
+
+        $event->attachRSVPs($rsvp_map);
+      }
+    }
 
     return $events;
   }
@@ -558,8 +742,12 @@ final class PhabricatorCalendarEventQuery
     PhabricatorCalendarEvent $event,
     $raw_limit) {
 
+    $count = $event->getRecurrenceCount();
+    if ($count && ($count <= $raw_limit)) {
+      return ($count - 1);
+    }
+
     return $raw_limit;
   }
-
 
 }

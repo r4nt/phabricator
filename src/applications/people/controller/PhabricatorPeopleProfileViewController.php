@@ -58,8 +58,8 @@ final class PhabricatorPeopleProfileViewController
       ->appendChild($feed);
 
     $projects = $this->buildProjectsView($user);
-    $badges = $this->buildBadgesView($user);
     $calendar = $this->buildCalendarDayView($user);
+    $badges = $this->buildBadgesView($user);
     require_celerity_resource('project-view-css');
 
     $home = id(new PHUITwoColumnView())
@@ -73,12 +73,12 @@ final class PhabricatorPeopleProfileViewController
       ->setSideColumn(
         array(
           $projects,
-          $badges,
           $calendar,
+          $badges,
         ));
 
     $nav = $this->getProfileMenu();
-    $nav->selectFilter(PhabricatorPeopleProfilePanelEngine::PANEL_PROFILE);
+    $nav->selectFilter(PhabricatorPeopleProfileMenuEngine::ITEM_PROFILE);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->setBorder(true);
@@ -194,11 +194,12 @@ final class PhabricatorPeopleProfileViewController
       ->withDateRange($range_start, $range_end)
       ->withInvitedPHIDs(array($user->getPHID()))
       ->withIsCancelled(false)
+      ->needRSVPs(array($viewer->getPHID()))
       ->execute();
 
     $event_views = array();
     foreach ($events as $event) {
-      $viewer_is_invited = $event->getIsUserInvited($viewer->getPHID());
+      $viewer_is_invited = $event->isRSVPInvited($viewer->getPHID());
 
       $can_edit = PhabricatorPolicyFilter::hasCapability(
         $viewer,
@@ -216,6 +217,7 @@ final class PhabricatorPeopleProfileViewController
         ->setIcon($event->getIcon())
         ->setViewerIsInvited($viewer_is_invited)
         ->setName($event->getName())
+        ->setDatetimeSummary($event->renderEventDate($viewer, true))
         ->setURI($event->getURI());
 
       $event_views[] = $event_view;
