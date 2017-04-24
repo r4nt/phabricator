@@ -26,6 +26,14 @@ final class PhabricatorProjectEditEngine
     return $this->milestoneProject;
   }
 
+  public function isDefaultQuickCreateEngine() {
+    return true;
+  }
+
+  public function getQuickCreateOrderVector() {
+    return id(new PhutilSortVector())->addInt(200);
+  }
+
   public function getEngineName() {
     return pht('Projects');
   }

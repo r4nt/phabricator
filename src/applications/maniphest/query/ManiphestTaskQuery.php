@@ -24,6 +24,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
   private $hasOpenSubtasks;
   private $parentTaskIDs;
   private $subtaskIDs;
+  private $subtypes;
 
   private $fullTextSearch   = '';
 
@@ -205,6 +206,11 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
   public function withBridgedObjectPHIDs(array $phids) {
     $this->bridgedObjectPHIDs = $phids;
+    return $this;
+  }
+
+  public function withSubtypes(array $subtypes) {
+    $this->subtypes = $subtypes;
     return $this;
   }
 
@@ -423,6 +429,13 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         $this->bridgedObjectPHIDs);
     }
 
+    if ($this->subtypes !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'task.subtype IN (%Ls)',
+        $this->subtypes);
+    }
+
     return $where;
   }
 
@@ -500,14 +513,14 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
       ->setEngineClassName('PhabricatorSearchApplicationSearchEngine')
       ->setParameter('query', $this->fullTextSearch);
 
-    // NOTE: Setting this to something larger than 2^53 will raise errors in
-    // ElasticSearch, and billions of results won't fit in memory anyway.
-    $fulltext_query->setParameter('limit', 100000);
+    // NOTE: Setting this to something larger than 10,000 will raise errors in
+    // Elasticsearch, and billions of results won't fit in memory anyway.
+    $fulltext_query->setParameter('limit', 10000);
     $fulltext_query->setParameter('types',
       array(ManiphestTaskPHIDType::TYPECONST));
 
-    $engine = PhabricatorFulltextStorageEngine::loadEngine();
-    $fulltext_results = $engine->executeSearch($fulltext_query);
+    $fulltext_results = PhabricatorSearchService::executeSearch(
+      $fulltext_query);
 
     if (empty($fulltext_results)) {
       $fulltext_results = array(null);

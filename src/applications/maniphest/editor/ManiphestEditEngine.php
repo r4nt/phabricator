@@ -21,6 +21,14 @@ final class ManiphestEditEngine
     return 'PhabricatorManiphestApplication';
   }
 
+  public function isDefaultQuickCreateEngine() {
+    return true;
+  }
+
+  public function getQuickCreateOrderVector() {
+    return id(new PhutilSortVector())->addInt(100);
+  }
+
   protected function newEditableObject() {
     return ManiphestTask::initializeNewTask($this->getViewer());
   }

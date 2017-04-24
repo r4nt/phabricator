@@ -30,6 +30,10 @@ final class PHUIListItemView extends AphrontTagView {
   private $hideInApplicationMenu;
   private $icons = array();
   private $openInNewWindow = false;
+  private $tooltip;
+  private $actionIcon;
+  private $actionIconHref;
+  private $count;
 
   public function setOpenInNewWindow($open_in_new_window) {
     $this->openInNewWindow = $open_in_new_window;
@@ -108,6 +112,11 @@ final class PHUIListItemView extends AphrontTagView {
     return $this->icon;
   }
 
+  public function setCount($count) {
+    $this->count = $count;
+    return $this;
+  }
+
   public function setIndented($indented) {
     $this->indented = $indented;
     return $this;
@@ -153,6 +162,12 @@ final class PHUIListItemView extends AphrontTagView {
     return $this->name;
   }
 
+  public function setActionIcon($icon, $href) {
+    $this->actionIcon = $icon;
+    $this->actionIconHref = $href;
+    return $this;
+  }
+
   public function setIsExternal($is_external) {
     $this->isExternal = $is_external;
     return $this;
@@ -176,6 +191,11 @@ final class PHUIListItemView extends AphrontTagView {
     return $this->icons;
   }
 
+  public function setTooltip($tooltip) {
+    $this->tooltip = $tooltip;
+    return $this;
+  }
+
   protected function getTagName() {
     return 'li';
   }
@@ -185,7 +205,7 @@ final class PHUIListItemView extends AphrontTagView {
     $classes[] = 'phui-list-item-view';
     $classes[] = 'phui-list-item-'.$this->type;
 
-    if ($this->icon) {
+    if ($this->icon || $this->profileImage) {
       $classes[] = 'phui-list-item-has-icon';
     }
 
@@ -201,8 +221,12 @@ final class PHUIListItemView extends AphrontTagView {
       $classes[] = $this->statusColor;
     }
 
+    if ($this->actionIcon) {
+      $classes[] = 'phui-list-item-has-action-icon';
+    }
+
     return array(
-      'class' => $classes,
+      'class' => implode(' ', $classes),
     );
   }
 
@@ -230,6 +254,16 @@ final class PHUIListItemView extends AphrontTagView {
           'align' => 'E',
         );
       } else {
+        if ($this->tooltip) {
+          Javelin::initBehavior('phabricator-tooltips');
+          $sigil = 'has-tooltip';
+          $meta = array(
+            'tip' => $this->tooltip,
+            'align' => 'E',
+            'size' => 300,
+          );
+        }
+
         $external = null;
         if ($this->isExternal) {
           $external = " \xE2\x86\x97";
@@ -295,9 +329,33 @@ final class PHUIListItemView extends AphrontTagView {
       $classes[] = 'phui-list-item-indented';
     }
 
+    $action_link = null;
+    if ($this->actionIcon) {
+      $action_icon = id(new PHUIIconView())
+        ->setIcon($this->actionIcon)
+        ->addClass('phui-list-item-action-icon');
+      $action_link = phutil_tag(
+        'a',
+        array(
+          'href' => $this->actionIconHref,
+          'class' => 'phui-list-item-action-href',
+        ),
+        $action_icon);
+    }
+
+    $count = null;
+    if ($this->count) {
+      $count = phutil_tag(
+        'span',
+        array(
+          'class' => 'phui-list-item-count',
+        ),
+        $this->count);
+    }
+
     $icons = $this->getIcons();
 
-    return javelin_tag(
+    $list_item = javelin_tag(
       $this->href ? 'a' : 'div',
       array(
         'href' => $this->href,
@@ -312,7 +370,10 @@ final class PHUIListItemView extends AphrontTagView {
         $icons,
         $this->renderChildren(),
         $name,
+        $count,
       ));
+
+    return array($list_item, $action_link);
   }
 
 }

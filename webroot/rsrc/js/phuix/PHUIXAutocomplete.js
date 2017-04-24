@@ -118,7 +118,6 @@ JX.install('PHUIXAutocomplete', {
         case '|': // Might be a table cell.
         case '>': // Might be a blockquote.
         case '!': // Might be a blockquote attribution line.
-        case ':': // Might be a "NOTE:".
           // We'll let these autocomplete.
           break;
         default:
@@ -154,7 +153,6 @@ JX.install('PHUIXAutocomplete', {
         datasource.setTransformer(JX.bind(this, this._transformresult));
         datasource.setSortHandler(
           JX.bind(datasource, JX.Prefab.sortHandler, {}));
-        datasource.setFilterHandler(JX.Prefab.filterClosedResults);
 
         this._datasources[code] = datasource;
       }
@@ -344,6 +342,10 @@ JX.install('PHUIXAutocomplete', {
       return [' ', ':', ',', '.', '!', '?'];
     },
 
+    _getIgnoreList: function() {
+      return this._map[this._active].ignore || [];
+    },
+
     _isTerminatedString: function(string) {
       var terminators = this._getTerminators();
       for (var ii = 0; ii < terminators.length; ii++) {
@@ -430,12 +432,31 @@ JX.install('PHUIXAutocomplete', {
         }
       }
 
+      // Deactivate if the user moves the cursor to the left of the assist
+      // range. For example, they might press the "left" arrow to move the
+      // cursor to the left, or click in the textarea prior to the active
+      // range.
+      var range = JX.TextAreaUtils.getSelectionRange(area);
+      if (range.start < this._cursorHead) {
+        this._deactivate();
+        return;
+      }
+
       if (special == 'tab' || special == 'return') {
         var r = e.getRawEvent();
         if (r.shiftKey && special == 'tab') {
           // Don't treat "Shift + Tab" as an autocomplete action. Instead,
           // let it through normally so the focus shifts to the previous
           // control.
+          this._deactivate();
+          return;
+        }
+
+        // If the user hasn't typed any text yet after typing the character
+        // which can summon the autocomplete, deactivate and let the keystroke
+        // through. For example, We hit this when a line ends with an
+        // autocomplete character and the user is trying to type a newline.
+        if (range.start == this._cursorHead) {
           this._deactivate();
           return;
         }
@@ -448,16 +469,6 @@ JX.install('PHUIXAutocomplete', {
         }
 
         e.kill();
-        return;
-      }
-
-      // Deactivate if the user moves the cursor to the left of the assist
-      // range. For example, they might press the "left" arrow to move the
-      // cursor to the left, or click in the textarea prior to the active
-      // range.
-      var range = JX.TextAreaUtils.getSelectionRange(area);
-      if (range.start < this._cursorHead) {
-        this._deactivate();
         return;
       }
 
@@ -513,6 +524,14 @@ JX.install('PHUIXAutocomplete', {
       var cancels = this._getCancelCharacters();
       for (var ii = 0; ii < cancels.length; ii++) {
         if (trim.indexOf(cancels[ii]) !== -1) {
+          this._deactivate();
+          return;
+        }
+      }
+
+      var ignore = this._getIgnoreList();
+      for (ii = 0; ii < ignore.length; ii++) {
+        if (trim.indexOf(ignore[ii]) === 0) {
           this._deactivate();
           return;
         }

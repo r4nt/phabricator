@@ -18,6 +18,8 @@ abstract class PhabricatorEditEngine
 
   const EDITENGINECONFIG_DEFAULT = 'default';
 
+  const SUBTYPE_DEFAULT = 'default';
+
   private $viewer;
   private $controller;
   private $isCreate;
@@ -77,6 +79,33 @@ abstract class PhabricatorEditEngine
     return true;
   }
 
+  public function isDefaultQuickCreateEngine() {
+    return false;
+  }
+
+  public function getDefaultQuickCreateFormKeys() {
+    $keys = array();
+
+    if ($this->isDefaultQuickCreateEngine()) {
+      $keys[] = self::EDITENGINECONFIG_DEFAULT;
+    }
+
+    foreach ($keys as $idx => $key) {
+      $keys[$idx] = $this->getEngineKey().'/'.$key;
+    }
+
+    return $keys;
+  }
+
+  public static function splitFullKey($full_key) {
+    return explode('/', $full_key, 2);
+  }
+
+  public function getQuickCreateOrderVector() {
+    return id(new PhutilSortVector())
+      ->addString($this->getObjectCreateShortText());
+  }
+
   /**
    * Force the engine to edit a particular object.
    */
@@ -105,10 +134,6 @@ abstract class PhabricatorEditEngine
 
   public function getHideHeader() {
     return $this->hideHeader;
-  }
-
-  public function getProfileMenuItemDefault() {
-    return $this->getEngineKey().'/'.self::EDITENGINECONFIG_DEFAULT;
   }
 
 
@@ -186,6 +211,20 @@ abstract class PhabricatorEditEngine
 
   protected function willConfigureFields($object, array $fields) {
     return $fields;
+  }
+
+  final public function supportsSubtypes() {
+    try {
+      $object = $this->newEditableObject();
+    } catch (Exception $ex) {
+      return false;
+    }
+
+    return ($object instanceof PhabricatorEditEngineSubtypeInterface);
+  }
+
+  final public function newSubtypeMap() {
+    return $this->newEditableObject()->newEditEngineSubtypeMap();
   }
 
 
@@ -284,14 +323,6 @@ abstract class PhabricatorEditEngine
 
 
   /**
-   * @task text
-   */
-  protected function getQuickCreateMenuHeaderText() {
-    return $this->getObjectCreateShortText();
-  }
-
-
-  /**
    * Return a human-readable header describing what this engine is used to do,
    * like "Configure Maniphest Task Forms".
    *
@@ -377,10 +408,19 @@ abstract class PhabricatorEditEngine
       'getCreateSortKey');
   }
 
-  public function loadDefaultEditConfiguration() {
+  public function loadDefaultEditConfiguration($object) {
     $query = $this->newConfigurationQuery()
       ->withIsEdit(true)
       ->withIsDisabled(false);
+
+    // If this object supports subtyping, we edit it with a form of the same
+    // subtype: so "bug" tasks get edited with "bug" forms.
+    if ($object instanceof PhabricatorEditEngineSubtypeInterface) {
+      $query->withSubtypes(
+        array(
+          $object->getEditEngineSubtype(),
+        ));
+    }
 
     return $this->loadEditEngineConfigurationWithQuery(
       $query,
@@ -860,7 +900,7 @@ abstract class PhabricatorEditEngine
         }
       } else {
         if ($id) {
-          $config = $this->loadDefaultEditConfiguration();
+          $config = $this->loadDefaultEditConfiguration($object);
           if (!$config) {
             return $this->buildNoEditResponse($object);
           }
@@ -945,6 +985,37 @@ abstract class PhabricatorEditEngine
     $fields = $this->buildEditFields($object);
     $template = $object->getApplicationTransactionTemplate();
 
+    if ($this->getIsCreate()) {
+      $cancel_uri = $this->getObjectCreateCancelURI($object);
+      $submit_button = $this->getObjectCreateButtonText($object);
+    } else {
+      $cancel_uri = $this->getEffectiveObjectEditCancelURI($object);
+      $submit_button = $this->getObjectEditButtonText($object);
+    }
+
+    $config = $this->getEditEngineConfiguration()
+      ->attachEngine($this);
+
+    // NOTE: Don't prompt users to override locks when creating objects,
+    // even if the default settings would create a locked object.
+
+    $can_interact = PhabricatorPolicyFilter::canInteract($viewer, $object);
+    if (!$can_interact &&
+        !$this->getIsCreate() &&
+        !$request->getBool('editEngine') &&
+        !$request->getBool('overrideLock')) {
+
+      $lock = PhabricatorEditEngineLock::newForObject($viewer, $object);
+
+      $dialog = $this->getController()
+        ->newDialog()
+        ->addHiddenInput('overrideLock', true)
+        ->setDisableWorkflowOnSubmit(true)
+        ->addCancelButton($cancel_uri);
+
+      return $lock->willPromptUserForLockOverrideWithDialog($dialog);
+    }
+
     $validation_exception = null;
     if ($request->isFormPost() && $request->getBool('editEngine')) {
       $submit_fields = $fields;
@@ -979,6 +1050,12 @@ abstract class PhabricatorEditEngine
       if ($this->getIsCreate()) {
         $xactions[] = id(clone $template)
           ->setTransactionType(PhabricatorTransactions::TYPE_CREATE);
+
+        if ($this->supportsSubtypes()) {
+          $xactions[] = id(clone $template)
+            ->setTransactionType(PhabricatorTransactions::TYPE_SUBTYPE)
+            ->setNewValue($config->getSubtype());
+        }
       }
 
       foreach ($submit_fields as $key => $field) {
@@ -1105,14 +1182,6 @@ abstract class PhabricatorEditEngine
     $form = $this->buildEditForm($object, $fields);
 
     if ($request->isAjax()) {
-      if ($this->getIsCreate()) {
-        $cancel_uri = $this->getObjectCreateCancelURI($object);
-        $submit_button = $this->getObjectCreateButtonText($object);
-      } else {
-        $cancel_uri = $this->getEffectiveObjectEditCancelURI($object);
-        $submit_button = $this->getObjectEditButtonText($object);
-      }
-
       return $this->getController()
         ->newDialog()
         ->setWidth(AphrontDialogView::WIDTH_FULL)
@@ -1330,14 +1399,14 @@ abstract class PhabricatorEditEngine
   final public function hasEditAccessToTransaction($xaction_type) {
     $viewer = $this->getViewer();
 
-    $config = $this->loadDefaultEditConfiguration();
-    if (!$config) {
-      return false;
-    }
-
     $object = $this->getTargetObject();
     if (!$object) {
       $object = $this->newEditableObject();
+    }
+
+    $config = $this->loadDefaultEditConfiguration($object);
+    if (!$config) {
+      return false;
     }
 
     $fields = $this->buildEditFields($object);
@@ -1434,7 +1503,7 @@ abstract class PhabricatorEditEngine
    * Build a raw description of available "Create New Object" UI options so
    * other methods can build menus or buttons.
    */
-  private function newCreateActionSpecifications(array $parameters) {
+  public function newCreateActionSpecifications(array $parameters) {
     $viewer = $this->getViewer();
 
     $can_create = $this->hasCreateCapability();
@@ -1474,8 +1543,7 @@ abstract class PhabricatorEditEngine
       );
     } else {
       foreach ($configs as $config) {
-        $form_key = $config->getIdentifier();
-        $config_uri = $this->getEditURI(null, "form/{$form_key}/");
+        $config_uri = $config->getCreateURI();
 
         if ($parameters) {
           $config_uri = (string)id(new PhutilURI($config_uri))
@@ -1496,7 +1564,7 @@ abstract class PhabricatorEditEngine
   }
 
   final public function buildEditEngineCommentView($object) {
-    $config = $this->loadDefaultEditConfiguration();
+    $config = $this->loadDefaultEditConfiguration($object);
 
     if (!$config) {
       // TODO: This just nukes the entire comment form if you don't have access
@@ -1506,8 +1574,16 @@ abstract class PhabricatorEditEngine
     }
 
     $viewer = $this->getViewer();
-    $object_phid = $object->getPHID();
 
+    $can_interact = PhabricatorPolicyFilter::canInteract($viewer, $object);
+    if (!$can_interact) {
+      $lock = PhabricatorEditEngineLock::newForObject($viewer, $object);
+
+      return id(new PhabricatorApplicationTransactionCommentView())
+        ->setEditEngineLock($lock);
+    }
+
+    $object_phid = $object->getPHID();
     $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
 
     if ($is_serious) {
@@ -1538,10 +1614,21 @@ abstract class PhabricatorEditEngine
 
     $fields = $this->buildEditFields($object);
 
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $object,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
     $comment_actions = array();
     foreach ($fields as $field) {
       if (!$field->shouldGenerateTransactionsFromComment()) {
         continue;
+      }
+
+      if (!$can_edit) {
+        if (!$field->getCanApplyWithoutEditCapability()) {
+          continue;
+        }
       }
 
       $comment_action = $field->getCommentAction();
@@ -1641,11 +1728,19 @@ abstract class PhabricatorEditEngine
   private function buildError($object, $title, $body) {
     $cancel_uri = $this->getObjectCreateCancelURI($object);
 
-    return $this->getController()
+    $dialog = $this->getController()
       ->newDialog()
-      ->setTitle($title)
-      ->appendParagraph($body)
       ->addCancelButton($cancel_uri);
+
+    if ($title !== null) {
+      $dialog->setTitle($title);
+    }
+
+    if ($body !== null) {
+      $dialog->appendParagraph($body);
+    }
+
+    return $dialog;
   }
 
 
@@ -1702,6 +1797,14 @@ abstract class PhabricatorEditEngine
         $config->getName()));
   }
 
+  private function buildLockedObjectResponse($object) {
+    $dialog = $this->buildError($object, null, null);
+    $viewer = $this->getViewer();
+
+    $lock = PhabricatorEditEngineLock::newForObject($viewer, $object);
+    return $lock->willBlockUserInteractionWithDialog($dialog);
+  }
+
   private function buildCommentResponse($object) {
     $viewer = $this->getViewer();
 
@@ -1716,7 +1819,12 @@ abstract class PhabricatorEditEngine
       return new Aphront400Response();
     }
 
-    $config = $this->loadDefaultEditConfiguration();
+    $can_interact = PhabricatorPolicyFilter::canInteract($viewer, $object);
+    if (!$can_interact) {
+      return $this->buildLockedObjectResponse($object);
+    }
+
+    $config = $this->loadDefaultEditConfiguration($object);
     if (!$config) {
       return new Aphront404Response();
     }
@@ -1764,6 +1872,11 @@ abstract class PhabricatorEditEngine
 
     $xactions = array();
 
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $object,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
     if ($actions) {
       $action_map = array();
       foreach ($actions as $action) {
@@ -1784,6 +1897,21 @@ abstract class PhabricatorEditEngine
 
         if (!$field->shouldGenerateTransactionsFromComment()) {
           continue;
+        }
+
+        // If you don't have edit permission on the object, you're limited in
+        // which actions you can take via the comment form. Most actions
+        // need edit permission, but some actions (like "Accept Revision")
+        // can be applied by anyone with view permission.
+        if (!$can_edit) {
+          if (!$field->getCanApplyWithoutEditCapability()) {
+            // We know the user doesn't have the capability, so this will
+            // raise a policy exception.
+            PhabricatorPolicyFilter::requireCapability(
+              $viewer,
+              $object,
+              PhabricatorPolicyCapability::CAN_EDIT);
+          }
         }
 
         if (array_key_exists('initialValue', $action)) {
@@ -2100,50 +2228,6 @@ abstract class PhabricatorEditEngine
     return $application->getIcon();
   }
 
-  public function hasQuickCreateActions() {
-    if (!$this->isEngineConfigurable()) {
-      return false;
-    }
-
-    return true;
-  }
-
-  public function newQuickCreateActions(array $configs) {
-    $items = array();
-
-    if (!$configs) {
-      return array();
-    }
-
-    // If the viewer is logged in and can't create objects, don't show the
-    // menu item. If they're logged out, we assume they could create objects
-    // if they logged in, so we show the item as a hint about how to
-    // accomplish the action.
-    if ($this->getViewer()->isLoggedIn()) {
-      if (!$this->hasCreateCapability()) {
-        return array();
-      }
-    }
-
-    if (count($configs) == 1) {
-      $config = head($configs);
-      $items[] = $this->newQuickCreateAction($config);
-    } else {
-      $group_name = $this->getQuickCreateMenuHeaderText();
-
-      $items[] = id(new PHUIListItemView())
-        ->setType(PHUIListItemView::TYPE_LABEL)
-        ->setName($group_name);
-
-      foreach ($configs as $config) {
-        $items[] = $this->newQuickCreateAction($config)
-          ->setIndented(true);
-      }
-    }
-
-    return $items;
-  }
-
   private function loadUsableConfigurationsForCreate() {
     $viewer = $this->getViewer();
 
@@ -2156,21 +2240,14 @@ abstract class PhabricatorEditEngine
 
     $configs = msort($configs, 'getCreateSortKey');
 
+    // Attach this specific engine to configurations we load so they can access
+    // any runtime configuration. For example, this allows us to generate the
+    // correct "Create Form" buttons when editing forms, see T12301.
+    foreach ($configs as $config) {
+      $config->attachEngine($this);
+    }
+
     return $configs;
-  }
-
-  private function newQuickCreateAction(
-    PhabricatorEditEngineConfiguration $config) {
-
-    $item_name = $config->getName();
-    $item_icon = $config->getIcon();
-    $form_key = $config->getIdentifier();
-    $item_uri = $this->getEditURI(null, "form/{$form_key}/");
-
-    return id(new PHUIListItemView())
-      ->setName($item_name)
-      ->setIcon($item_icon)
-      ->setHref($item_uri);
   }
 
   protected function getValidationExceptionShortMessage(

@@ -4,7 +4,7 @@ final class PhabricatorCommitSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
   public function getResultTypeDescription() {
-    return pht('Commits');
+    return pht('Diffusion Commits');
   }
 
   public function getApplicationClassName() {
@@ -14,7 +14,8 @@ final class PhabricatorCommitSearchEngine
   public function newQuery() {
     return id(new DiffusionCommitQuery())
       ->needAuditRequests(true)
-      ->needCommitData(true);
+      ->needCommitData(true)
+      ->needDrafts(true);
   }
 
   protected function newResultBuckets() {
@@ -42,6 +43,14 @@ final class PhabricatorCommitSearchEngine
 
     if ($map['repositoryPHIDs']) {
       $query->withRepositoryPHIDs($map['repositoryPHIDs']);
+    }
+
+    if ($map['packagePHIDs']) {
+      $query->withPackagePHIDs($map['packagePHIDs']);
+    }
+
+    if ($map['unreachable'] !== null) {
+      $query->withUnreachable($map['unreachable']);
     }
 
     return $query;
@@ -76,7 +85,24 @@ final class PhabricatorCommitSearchEngine
         ->setKey('repositoryPHIDs')
         ->setConduitKey('repositories')
         ->setAliases(array('repository', 'repositories', 'repositoryPHID'))
-        ->setDatasource(new DiffusionRepositoryDatasource()),
+        ->setDatasource(new DiffusionRepositoryFunctionDatasource()),
+      id(new PhabricatorSearchDatasourceField())
+        ->setLabel(pht('Packages'))
+        ->setKey('packagePHIDs')
+        ->setConduitKey('packages')
+        ->setAliases(array('package', 'packages', 'packagePHID'))
+        ->setDatasource(new PhabricatorOwnersPackageDatasource()),
+      id(new PhabricatorSearchThreeStateField())
+        ->setLabel(pht('Unreachable'))
+        ->setKey('unreachable')
+        ->setOptions(
+          pht('(Show All)'),
+          pht('Show Only Unreachable Commits'),
+          pht('Hide Unreachable Commits'))
+        ->setDescription(
+          pht(
+            'Find or exclude unreachable commits which are not ancestors of '.
+            'any branch, tag, or ref.')),
     );
   }
 
@@ -115,7 +141,8 @@ final class PhabricatorCommitSearchEngine
         $query
           ->setParameter('responsiblePHIDs', array($viewer_phid))
           ->setParameter('statuses', $open)
-          ->setParameter('bucket', $bucket_key);
+          ->setParameter('bucket', $bucket_key)
+          ->setParameter('unreachable', false);
         return $query;
       case 'authored':
         $query
@@ -140,7 +167,8 @@ final class PhabricatorCommitSearchEngine
     $bucket = $this->getResultBucket($query);
 
     $template = id(new PhabricatorAuditListView())
-      ->setViewer($viewer);
+      ->setViewer($viewer)
+      ->setShowDrafts(true);
 
     $views = array();
     if ($bucket) {
@@ -150,10 +178,13 @@ final class PhabricatorCommitSearchEngine
         $groups = $bucket->newResultGroups($query, $commits);
 
         foreach ($groups as $group) {
-          $views[] = id(clone $template)
-            ->setHeader($group->getName())
-            ->setNoDataString($group->getNoDataString())
-            ->setCommits($group->getObjects());
+          // Don't show groups in Dashboard Panels
+          if ($group->getObjects() || !$this->isPanelContext()) {
+            $views[] = id(clone $template)
+              ->setHeader($group->getName())
+              ->setNoDataString($group->getNoDataString())
+              ->setCommits($group->getObjects());
+          }
         }
       } catch (Exception $ex) {
         $this->addError($ex->getMessage());
@@ -161,7 +192,13 @@ final class PhabricatorCommitSearchEngine
     } else {
       $views[] = id(clone $template)
         ->setCommits($commits)
-        ->setNoDataString(pht('No matching commits.'));
+        ->setNoDataString(pht('No commits found.'));
+    }
+
+    if (!$views) {
+      $views[] = id(new PhabricatorAuditListView())
+        ->setViewer($viewer)
+        ->setNoDataString(pht('No commits found.'));
     }
 
     if (count($views) == 1) {

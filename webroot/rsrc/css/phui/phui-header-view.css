@@ -93,6 +93,10 @@ body .phui-header-shell.phui-bleed-header
   color: {$darkbluetext};
 }
 
+.phui-box-blue-property .phui-header-view .phui-header-header a {
+  color: {$bluetext};
+}
+
 .device-desktop .phui-header-view .phui-header-header a:hover {
   text-decoration: none;
   color: {$blue};
@@ -116,7 +120,7 @@ body .phui-header-shell.phui-bleed-header
 .device-phone .phui-header-action-link .phui-button-text {
   visibility: hidden;
   width: 0;
-  margin-left: 8px;
+  margin-left: 4px;
 }
 
 .device-phone .phui-header-action-link.button .phui-icon-view {
@@ -341,7 +345,6 @@ body .phui-header-shell.phui-bleed-header
 }
 
 .phui-profile-header.phui-header-shell .phui-header-header {
-  font-family: 'Aleo', {$fontfamily};
   font-size: 24px;
   color: #000;
 }

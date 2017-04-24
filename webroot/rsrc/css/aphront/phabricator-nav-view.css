@@ -29,6 +29,7 @@
     padding-right: 0;
     background-color: transparent;
     width: 205px;
+    max-width: 205px;
 }
 
 .device-phone .phui-basic-nav.phui-navigation-shell
@@ -66,6 +67,11 @@
 .device-desktop .phabricator-standard-page-body .has-drag-nav
   .phabricator-nav-content {
   margin-left: 212px;
+}
+
+.device-desktop .phabricator-standard-page-body .has-drag-nav
+  .phabricator-nav-local {
+    max-width: none;
 }
 
 .has-drag-nav ul.phui-list-view {
