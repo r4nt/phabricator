@@ -46,6 +46,7 @@ return array(
     'javelin-behavior-toggle-class',
     'javelin-behavior-lightbox-attachments',
     'phabricator-busy',
+    'javelin-sound',
     'javelin-aphlict',
     'phabricator-notification',
     'javelin-behavior-aphlict-listen',
@@ -84,6 +85,9 @@ return array(
     'conpherence-thread-manager',
     'javelin-behavior-detect-timezone',
     'javelin-behavior-setup-check-https',
+    'javelin-behavior-aphlict-status',
+    'javelin-behavior-user-menu',
+    'phabricator-favicon',
   ),
   'core.pkg.css' => array(
     'phabricator-core-css',
@@ -127,9 +131,7 @@ return array(
     'phui-spacing-css',
     'phui-form-css',
     'phui-icon-view-css',
-    'phui-profile-menu-css',
 
-    'phabricator-application-launch-view-css',
     'phabricator-action-list-view-css',
     'phui-property-list-view-css',
     'phui-tag-view-css',
@@ -137,7 +139,6 @@ return array(
 
     'font-fontawesome',
     'font-lato',
-    'font-aleo',
     'phui-font-icon-base-css',
     'phui-fontkit-css',
     'phui-box-css',
@@ -160,6 +161,7 @@ return array(
   'conpherence.pkg.css' => array(
     'conpherence-durable-column-view',
     'conpherence-menu-css',
+    'conpherence-color-css',
     'conpherence-message-pane-css',
     'conpherence-notification-css',
     'conpherence-transaction-css',

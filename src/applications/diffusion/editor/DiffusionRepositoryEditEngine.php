@@ -20,6 +20,14 @@ final class DiffusionRepositoryEditEngine
     return false;
   }
 
+  public function isDefaultQuickCreateEngine() {
+    return true;
+  }
+
+  public function getQuickCreateOrderVector() {
+    return id(new PhutilSortVector())->addInt(300);
+  }
+
   public function getEngineName() {
     return pht('Repositories');
   }

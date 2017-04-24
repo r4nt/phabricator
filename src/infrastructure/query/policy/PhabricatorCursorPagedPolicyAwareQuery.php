@@ -85,12 +85,20 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
 
   protected function loadStandardPageRows(PhabricatorLiskDAO $table) {
     $conn = $table->establishConnection('r');
+    return $this->loadStandardPageRowsWithConnection(
+      $conn,
+      $table->getTableName());
+  }
+
+  protected function loadStandardPageRowsWithConnection(
+    AphrontDatabaseConnection $conn,
+    $table_name) {
 
     $rows = queryfx_all(
       $conn,
       '%Q FROM %T %Q %Q %Q %Q %Q %Q %Q',
       $this->buildSelectClause($conn),
-      $table->getTableName(),
+      $table_name,
       (string)$this->getPrimaryTableAlias(),
       $this->buildJoinClause($conn),
       $this->buildWhereClause($conn),
@@ -1521,6 +1529,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
 
 
   /**
+   * @return this
    * @task edgelogic
    */
   public function withEdgeLogicConstraints($edge_type, array $constraints) {

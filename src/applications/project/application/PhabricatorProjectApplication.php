@@ -7,7 +7,7 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Get Organized');
+    return pht('Projects, Tags, and Teams');
   }
 
   public function isPinnedByDefault(PhabricatorUser $viewer) {
@@ -136,6 +136,10 @@ final class PhabricatorProjectApplication extends PhabricatorApplication {
     return array(
       PhabricatorProjectProjectPHIDType::TYPECONST,
     );
+  }
+
+  public function getApplicationOrder() {
+    return 0.150;
   }
 
   public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
