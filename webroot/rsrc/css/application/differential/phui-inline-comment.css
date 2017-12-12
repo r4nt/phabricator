@@ -25,17 +25,20 @@
 
 .differential-inline-comment,
 .differential-inline-comment-edit {
-  background: #fff;
-  border: 1px solid {$sh-yellowborder};
+  background: {$page.content};
+  border: 1px solid {$gentle.highlight.border};
   font: {$basefont};
-  margin: 0;
-  width: 100%;
   -moz-box-sizing: border-box;
   -webkit-box-sizing: border-box;
   box-sizing: border-box;
   overflow: hidden;
   white-space: normal;
   border-radius: 3px;
+  margin: 8px 12px;
+}
+
+.device .differential-inline-comment {
+  margin: 4px;
 }
 
 .inline-state-is-draft {
@@ -45,9 +48,9 @@
 .differential-inline-comment-head {
   font-weight:  bold;
   color: {$darkbluetext};
-  border-bottom: 1px solid {$sh-lightyellowborder};
+  border-bottom: 1px solid {$gentle.highlight.border};
   padding: 4px 5px 4px 8px;
-  background-color: {$sh-yellowbackground};
+  background-color: {$gentle.highlight};
 }
 
 .differential-inline-comment-content {
@@ -61,7 +64,7 @@
 
 /* Tighten up spacing on replies */
 .differential-inline-comment.inline-comment-is-reply {
-  margin-top: -12px;
+  margin-top: 0;
 }
 
 .differential-inline-comment .inline-head-right {
@@ -206,8 +209,8 @@
 */
 
 .differential-inline-comment .differential-inline-done-label {
-  border-color: {$sh-yellowborder};
-  color: {$sh-yellowicon};
+  border-color: {$gentle.highlight.border};
+  color: {$bluetext};
 }
 
 .differential-inline-comment.inline-state-is-draft
@@ -241,7 +244,7 @@
 
 .differential-inline-comment.inline-is-done
   .differential-inline-done-label {
-    background-color: #fff;
+    background-color: {$page.content};
     border-color: {$lightblueborder};
     color: {$sky};
     opacity: 1;
@@ -249,7 +252,7 @@
 
 .device-desktop .differential-inline-comment.inline-is-done
   .differential-inline-done-label:hover {
-    background-color: #fff;
+    background-color: {$page.content};
     color: {$sky};
 }
 
@@ -270,7 +273,7 @@
 }
 
 .differential-inline-comment.inline-is-done
-   .differential-inline-comment-head {
+  .differential-inline-comment-head {
     background-color: {$lightgreybackground};
     border-bottom-color: {$lightgreyborder};
 }
@@ -284,7 +287,7 @@
 .differential-inline-comment.inline-is-done .differential-inline-comment-head
   .differential-inline-done-label {
     color: {$sky};
-    background-color: #fff;
+    background-color: {$page.content};
     border-color: {$sky};
 }
 
@@ -315,10 +318,10 @@
 
 .differential-inline-undo {
   padding: 8px;
+  margin: 4px 12px;
   text-align: center;
   background: {$sh-yellowbackground};
   border: 1px solid {$sh-yellowborder};
-  margin: 4px 0;
   color: {$darkgreytext};
   font: {$basefont};
   font-size: {$normalfontsize};
@@ -374,17 +377,45 @@
 /* - Hiding Inlines ------------------------------------------------------------
 */
 
-.reveal-inlines {
-  float: left;
-  margin-left: 4px;
+.reveal-inline {
+  color: {$lightbluetext};
+  margin: 4px 0;
+  display: none;
+}
+
+.inline-hidden .reveal-inline {
+  display: block;
+}
+
+.inline-hidden .differential-inline-comment {
+  display: none;
+}
+
+.differential-inline-summary {
+  background: {$lightgreybackground};
+  padding: 2px 16px;
+  color: {$lightgreytext};
+  display: none;
+  font: {$basefont};
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device .differential-inline-summary {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.inline-hidden .differential-inline-summary {
+  display: block;
+}
+
+.reveal-inline span.phui-icon-view {
   color: {$lightbluetext};
 }
 
-.reveal-inlines span.phui-icon-view {
-  color: {$lightbluetext};
-}
-
-.reveal-inlines:hover span.phui-icon-view {
+.reveal-inline:hover span.phui-icon-view {
   color: {$darkbluetext};
 }
 

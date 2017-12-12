@@ -15,6 +15,10 @@ final class PhameBlogTransaction
     return PhabricatorPhameBlogPHIDType::TYPECONST;
   }
 
+  public function getApplicationTransactionCommentObject() {
+    return null;
+  }
+
   public function getBaseTransactionClass() {
     return 'PhameBlogTransactionType';
   }
@@ -26,14 +30,14 @@ final class PhameBlogTransaction
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
         $tags[] = self::MAILTAG_SUBSCRIBERS;
         break;
-      case self::TYPE_NAME:
-      case self::TYPE_SUBTITLE:
-      case self::TYPE_DESCRIPTION:
-      case self::TYPE_FULLDOMAIN:
-      case self::TYPE_PARENTSITE:
-      case self::TYPE_PARENTDOMAIN:
-      case self::TYPE_PROFILEIMAGE:
-      case self::TYPE_HEADERIMAGE:
+      case PhameBlogNameTransaction::TRANSACTIONTYPE:
+      case PhameBlogSubtitleTransaction::TRANSACTIONTYPE:
+      case PhameBlogDescriptionTransaction::TRANSACTIONTYPE:
+      case PhameBlogFullDomainTransaction::TRANSACTIONTYPE:
+      case PhameBlogParentSiteTransaction::TRANSACTIONTYPE:
+      case PhameBlogParentDomainTransaction::TRANSACTIONTYPE:
+      case PhameBlogProfileImageTransaction::TRANSACTIONTYPE:
+      case PhameBlogHeaderImageTransaction::TRANSACTIONTYPE:
         $tags[] = self::MAILTAG_DETAILS;
         break;
       default:

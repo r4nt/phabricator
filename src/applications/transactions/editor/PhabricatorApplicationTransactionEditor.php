@@ -486,8 +486,6 @@ abstract class PhabricatorApplicationTransactionEditor
     switch ($xaction->getTransactionType()) {
       case PhabricatorTransactions::TYPE_CREATE:
         return true;
-      case PhabricatorTransactions::TYPE_COMMENT:
-        return $xaction->hasComment();
       case PhabricatorTransactions::TYPE_CUSTOMFIELD:
         $field = $this->getCustomFieldForTransaction($object, $xaction);
         return $field->getApplicationTransactionHasEffect($xaction);
@@ -532,6 +530,10 @@ abstract class PhabricatorApplicationTransactionEditor
         $object,
         $xaction->getOldValue(),
         $xaction->getNewValue());
+    }
+
+    if ($xaction->hasComment()) {
+      return true;
     }
 
     return ($xaction->getOldValue() !== $xaction->getNewValue());
@@ -592,6 +594,8 @@ abstract class PhabricatorApplicationTransactionEditor
 
     $xtype = $this->getModularTransactionType($type);
     if ($xtype) {
+      $xtype = clone $xtype;
+      $xtype->setStorage($xaction);
       return $xtype->applyExternalEffects($object, $xaction->getNewValue());
     }
 
@@ -1101,7 +1105,7 @@ abstract class PhabricatorApplicationTransactionEditor
       $this->heraldForcedEmailPHIDs = $adapter->getForcedEmailPHIDs();
     }
 
-    $this->didApplyTransactions($xactions);
+    $xactions = $this->didApplyTransactions($object, $xactions);
 
     if ($object instanceof PhabricatorCustomFieldInterface) {
       // Maybe this makes more sense to move into the search index itself? For
@@ -1230,9 +1234,9 @@ abstract class PhabricatorApplicationTransactionEditor
     return $xactions;
   }
 
-  protected function didApplyTransactions(array $xactions) {
+  protected function didApplyTransactions($object, array $xactions) {
     // Hook for subclasses.
-    return;
+    return $xactions;
   }
 
 
@@ -1743,7 +1747,7 @@ abstract class PhabricatorApplicationTransactionEditor
     return array_values($result);
   }
 
-  protected function mergePHIDOrEdgeTransactions(
+  public function mergePHIDOrEdgeTransactions(
     PhabricatorApplicationTransaction $u,
     PhabricatorApplicationTransaction $v) {
 
@@ -3699,7 +3703,7 @@ abstract class PhabricatorApplicationTransactionEditor
 
       // If a later project in the list is an ancestor of this one, it will
       // have added itself to the map. If any ancestor of this project points
-      // at itself in the map, this project should be dicarded in favor of
+      // at itself in the map, this project should be discarded in favor of
       // that later ancestor.
       foreach ($project->getAncestorProjects() as $ancestor) {
         $ancestor_phid = $ancestor->getPHID();

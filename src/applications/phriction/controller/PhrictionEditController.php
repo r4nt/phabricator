@@ -133,10 +133,11 @@ final class PhrictionEditController
 
       $xactions = array();
       $xactions[] = id(new PhrictionTransaction())
-        ->setTransactionType(PhrictionTransaction::TYPE_TITLE)
+        ->setTransactionType(PhrictionDocumentTitleTransaction::TRANSACTIONTYPE)
         ->setNewValue($title);
       $xactions[] = id(new PhrictionTransaction())
-        ->setTransactionType(PhrictionTransaction::TYPE_CONTENT)
+        ->setTransactionType(
+          PhrictionDocumentContentTransaction::TRANSACTIONTYPE)
         ->setNewValue($content_text);
       $xactions[] = id(new PhrictionTransaction())
         ->setTransactionType(PhabricatorTransactions::TYPE_VIEW_POLICY)
@@ -174,10 +175,12 @@ final class PhrictionEditController
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
         $validation_exception = $ex;
         $e_title = nonempty(
-          $ex->getShortMessage(PhrictionTransaction::TYPE_TITLE),
+          $ex->getShortMessage(
+            PhrictionDocumentTitleTransaction::TRANSACTIONTYPE),
           true);
         $e_content = nonempty(
-          $ex->getShortMessage(PhrictionTransaction::TYPE_CONTENT),
+          $ex->getShortMessage(
+            PhrictionDocumentContentTransaction::TRANSACTIONTYPE),
           true);
 
         // if we're not supposed to process the content version error, then
@@ -192,19 +195,15 @@ final class PhrictionEditController
     }
 
     if ($document->getID()) {
-      $panel_header = pht('Edit Document: %s', $content->getTitle());
-      $page_title = pht('Edit Document');
-      $header_icon = 'fa-pencil';
+      $page_title = pht('Edit Document: %s', $content->getTitle());
       if ($overwrite) {
         $submit_button = pht('Overwrite Changes');
       } else {
         $submit_button = pht('Save Changes');
       }
     } else {
-      $panel_header = pht('Create New Phriction Document');
       $submit_button = pht('Create Document');
       $page_title = pht('Create Document');
-      $header_icon = 'fa-plus-square';
     }
 
     $uri = $document->getSlug();
@@ -286,9 +285,9 @@ final class PhrictionEditController
           ->setValue($submit_button));
 
     $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Document'))
+      ->setHeaderText($page_title)
       ->setValidationException($validation_exception)
-      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setForm($form);
 
     $preview = id(new PHUIRemarkupPreviewPanel())
@@ -308,12 +307,7 @@ final class PhrictionEditController
     }
     $crumbs->setBorder(true);
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($panel_header)
-      ->setHeaderIcon($header_icon);
-
     $view = id(new PHUITwoColumnView())
-      ->setHeader($header)
       ->setFooter(array(
         $draft_note,
         $form_box,

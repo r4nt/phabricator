@@ -21,6 +21,14 @@ final class LegalpadDocumentEditor
     return $types;
   }
 
+  public function getCreateObjectTitle($author, $object) {
+    return pht('%s created this document.', $author);
+  }
+
+  public function getCreateObjectTitleForFeed($author, $object) {
+    return pht('%s created %s.', $author, $object);
+  }
+
   protected function applyFinalEffects(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -37,18 +45,23 @@ final class LegalpadDocumentEditor
     }
 
     if ($is_contribution) {
+      $text = $object->getDocumentBody()->getText();
+      $title = $object->getDocumentBody()->getTitle();
       $object->setVersions($object->getVersions() + 1);
-      $body = $object->getDocumentBody();
+
+      $body = new LegalpadDocumentBody();
+      $body->setCreatorPHID($this->getActingAsPHID());
+      $body->setText($text);
+      $body->setTitle($title);
       $body->setVersion($object->getVersions());
       $body->setDocumentPHID($object->getPHID());
       $body->save();
 
       $object->setDocumentBodyPHID($body->getPHID());
 
-      $actor = $this->getActor();
       $type = PhabricatorContributedToObjectEdgeType::EDGECONST;
       id(new PhabricatorEdgeEditor())
-        ->addEdge($actor->getPHID(), $type, $object->getPHID())
+        ->addEdge($this->getActingAsPHID(), $type, $object->getPHID())
         ->save();
 
       $type = PhabricatorObjectHasContributorEdgeType::EDGECONST;
@@ -62,6 +75,37 @@ final class LegalpadDocumentEditor
     }
 
     return $xactions;
+  }
+
+  protected function validateAllTransactions(PhabricatorLiskDAO $object,
+    array $xactions) {
+    $errors = array();
+
+    $is_required = (bool)$object->getRequireSignature();
+    $document_type = $object->getSignatureType();
+    $individual = LegalpadDocument::SIGNATURE_TYPE_INDIVIDUAL;
+
+    foreach ($xactions as $xaction) {
+      switch ($xaction->getTransactionType()) {
+        case LegalpadDocumentRequireSignatureTransaction::TRANSACTIONTYPE:
+          $is_required = (bool)$xaction->getNewValue();
+          break;
+        case LegalpadDocumentSignatureTypeTransaction::TRANSACTIONTYPE:
+          $document_type = $xaction->getNewValue();
+          break;
+      }
+    }
+
+    if ($is_required && ($document_type != $individual)) {
+      $errors[] = new PhabricatorApplicationTransactionValidationError(
+        LegalpadDocumentRequireSignatureTransaction::TRANSACTIONTYPE,
+        pht('Invalid'),
+        pht('Only documents with signature type "individual" may '.
+            'require signing to use Phabricator.'),
+        null);
+    }
+
+    return $errors;
   }
 
 

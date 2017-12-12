@@ -56,6 +56,10 @@ final class PhabricatorFulltextToken extends Phobject {
           $shade = PHUITagView::COLOR_RED;
           $icon = 'fa-minus';
           break;
+        case PhutilSearchQueryCompiler::OPERATOR_SUBSTRING:
+          $tip = pht('Substring Search');
+          $shade = PHUITagView::COLOR_VIOLET;
+          break;
         default:
           $shade = PHUITagView::COLOR_BLUE;
           break;
@@ -64,7 +68,7 @@ final class PhabricatorFulltextToken extends Phobject {
 
     $tag = id(new PHUITagView())
       ->setType(PHUITagView::TYPE_SHADE)
-      ->setShade($shade)
+      ->setColor($shade)
       ->setName($token->getValue());
 
     if ($tip !== null) {

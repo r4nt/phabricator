@@ -49,18 +49,8 @@ final class ManiphestPriorityEmailCommand
     array $argv) {
     $xactions = array();
 
-    $target = phutil_utf8_strtolower(head($argv));
-    $priority = null;
-
-    $keywords = ManiphestTaskPriority::getTaskPriorityKeywordsMap();
-    foreach ($keywords as $key => $words) {
-      foreach ($words as $word) {
-        if ($word == $target) {
-          $priority = $key;
-          break;
-        }
-      }
-    }
+    $keyword = phutil_utf8_strtolower(head($argv));
+    $priority = ManiphestTaskPriority::getTaskPriorityFromKeyword($keyword);
 
     if ($priority === null) {
       return array();
@@ -71,8 +61,8 @@ final class ManiphestPriorityEmailCommand
     }
 
     $xactions[] = $object->getApplicationTransactionTemplate()
-      ->setTransactionType(ManiphestTransaction::TYPE_PRIORITY)
-      ->setNewValue($priority);
+      ->setTransactionType(ManiphestTaskPriorityTransaction::TRANSACTIONTYPE)
+      ->setNewValue($keyword);
 
     return $xactions;
   }

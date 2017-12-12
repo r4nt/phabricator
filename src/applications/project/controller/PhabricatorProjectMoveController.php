@@ -148,15 +148,22 @@ final class PhabricatorProjectMoveController
       list($pri, $sub) = ManiphestTransactionEditor::getAdjacentSubpriority(
         $task,
         $is_after);
+
+      // If we find a priority on the first try, don't keep going.
+      break;
     }
+
+    $keyword_map = ManiphestTaskPriority::getTaskPriorityKeywordsMap();
+    $keyword = head(idx($keyword_map, $pri));
 
     $xactions = array();
     if ($pri !== null) {
       $xactions[] = id(new ManiphestTransaction())
-        ->setTransactionType(ManiphestTransaction::TYPE_PRIORITY)
-        ->setNewValue($pri);
+        ->setTransactionType(ManiphestTaskPriorityTransaction::TRANSACTIONTYPE)
+        ->setNewValue($keyword);
       $xactions[] = id(new ManiphestTransaction())
-        ->setTransactionType(ManiphestTransaction::TYPE_SUBPRIORITY)
+        ->setTransactionType(
+          ManiphestTaskSubpriorityTransaction::TRANSACTIONTYPE)
         ->setNewValue($sub);
     }
 

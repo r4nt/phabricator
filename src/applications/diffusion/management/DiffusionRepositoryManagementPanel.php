@@ -25,6 +25,10 @@ abstract class DiffusionRepositoryManagementPanel
     return $this->repository;
   }
 
+  final public function getRequest() {
+    return $this->controller->getRequest();
+  }
+
   final public function setController(PhabricatorController $controller) {
     $this->controller = $controller;
     return $this;
@@ -51,43 +55,6 @@ abstract class DiffusionRepositoryManagementPanel
     return true;
   }
 
-  final protected function newActions() {
-    $actions = $this->buildManagementPanelActions();
-    if (!$actions) {
-      return null;
-    }
-
-    $viewer = $this->getViewer();
-
-    $action_list = id(new PhabricatorActionListView())
-      ->setViewer($viewer);
-
-    foreach ($actions as $action) {
-      $action_list->addAction($action);
-    }
-
-    return $action_list;
-  }
-
-  public function buildManagementPanelCurtain() {
-    // TODO: Delete or fix this, curtains always render in the left gutter
-    // at the moment.
-    return null;
-
-    $actions = $this->newActions();
-    if (!$actions) {
-      return null;
-    }
-
-    $viewer = $this->getViewer();
-
-    $curtain = id(new PHUICurtainView())
-      ->setViewer($viewer)
-      ->setActionList($actions);
-
-    return $curtain;
-  }
-
   public static function getAllPanels() {
     return id(new PhutilClassMapQuery())
       ->setAncestorClass(__CLASS__)
@@ -96,11 +63,20 @@ abstract class DiffusionRepositoryManagementPanel
       ->execute();
   }
 
-  final protected function newBox($header_text, $body) {
-    return id(new PHUIObjectBoxView())
-      ->setHeaderText($header_text)
-      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+  final protected function newBox($header_text, $body, $button = array()) {
+    $header = id(new PHUIHeaderView())
+      ->setHeader($header_text);
+
+    foreach ($button as $link) {
+      $header->addActionLink($link);
+    }
+
+    $view = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->appendChild($body);
+
+    return $view;
   }
 
   final protected function newTimeline() {

@@ -5,7 +5,7 @@
  */
 final class DifferentialRevisionListView extends AphrontView {
 
-  private $revisions;
+  private $revisions = array();
   private $handles;
   private $header;
   private $noDataString;
@@ -145,8 +145,11 @@ final class DifferentialRevisionListView extends AphrontView {
         $item->setDisabled(true);
       }
 
+      $icon = $revision->getStatusIcon();
+      $color = $revision->getStatusIconColor();
+
       $item->setStatusIcon(
-        $revision->getStatusIcon(),
+        "{$icon} {$color}",
         $revision->getStatusDisplayName());
 
       $list->addItem($item);

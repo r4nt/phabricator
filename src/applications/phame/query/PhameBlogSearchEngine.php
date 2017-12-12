@@ -97,8 +97,9 @@ final class PhameBlogSearchEngine
         $button = id(new PHUIButtonView())
           ->setTag('a')
           ->setText('New Post')
-          ->setHref($this->getApplicationURI('/post/edit/?blog='.$id));
-        $item->setLaunchButton($button);
+          ->setHref($this->getApplicationURI('/post/edit/?blog='.$id))
+          ->setButtonType(PHUIButtonView::BUTTONTYPE_SIMPLE);
+        $item->setSideColumn($button);
       }
 
       $list->addItem($item);

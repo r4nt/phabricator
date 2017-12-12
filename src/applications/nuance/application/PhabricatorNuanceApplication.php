@@ -18,11 +18,6 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
     return true;
   }
 
-  public function isLaunchable() {
-    // Try to hide this even more for now.
-    return false;
-  }
-
   public function getBaseURI() {
     return '/nuance/';
   }
@@ -51,6 +46,9 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
           $this->getQueryRoutePattern() => 'NuanceQueueListController',
           $this->getEditRoutePattern('edit/') => 'NuanceQueueEditController',
           'view/(?P<id>[1-9]\d*)/' => 'NuanceQueueViewController',
+          'work/(?P<id>[1-9]\d*)/' => 'NuanceQueueWorkController',
+          'action/(?P<queueID>[1-9]\d*)/(?P<action>[^/]+)/(?P<id>[1-9]\d*)/'
+            => 'NuanceItemActionController',
         ),
       ),
       '/action/' => array(
