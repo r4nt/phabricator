@@ -9,6 +9,7 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     PhabricatorCustomFieldInterface,
     PhabricatorDestructibleInterface,
     PhabricatorFulltextInterface,
+    PhabricatorFerretInterface,
     PhabricatorConduitResultInterface,
     PhabricatorColumnProxyInterface {
 
@@ -49,6 +50,7 @@ final class PhabricatorProject extends PhabricatorProjectDAO
 
   const TABLE_DATASOURCE_TOKEN = 'project_datasourcetoken';
 
+  const ITEM_PICTURE = 'project.picture';
   const ITEM_PROFILE = 'project.profile';
   const ITEM_POINTS = 'project.points';
   const ITEM_WORKBOARD = 'project.workboard';
@@ -725,6 +727,14 @@ final class PhabricatorProject extends PhabricatorProjectDAO
 
   public function newFulltextEngine() {
     return new PhabricatorProjectFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )--------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhabricatorProjectFerretEngine();
   }
 
 

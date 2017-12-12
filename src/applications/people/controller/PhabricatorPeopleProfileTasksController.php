@@ -13,10 +13,6 @@ final class PhabricatorPeopleProfileTasksController
       ->needProfile(true)
       ->needProfileImage(true)
       ->needAvailability(true)
-      ->requireCapabilities(
-        array(
-          PhabricatorPolicyCapability::CAN_VIEW,
-        ))
       ->executeOne();
     if (!$user) {
       return new Aphront404Response();
@@ -65,6 +61,7 @@ final class PhabricatorPeopleProfileTasksController
       ->withStatuses($open)
       ->needProjectPHIDs(true)
       ->setLimit(100)
+      ->setGroupBy(ManiphestTaskQuery::GROUP_PRIORITY)
       ->execute();
 
     $handles = ManiphestTaskListView::loadTaskHandles($viewer, $tasks);

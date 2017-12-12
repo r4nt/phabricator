@@ -49,6 +49,7 @@ final class DifferentialCreateCommentConduitAPIMethod
       ->withIDs(array($request->getValue('revision_id')))
       ->needReviewers(true)
       ->needReviewerAuthority(true)
+      ->needActiveDiffs(true)
       ->executeOne();
     if (!$revision) {
       throw new ConduitException('ERR_BAD_REVISION');
@@ -62,6 +63,7 @@ final class DifferentialCreateCommentConduitAPIMethod
       'resign' => DifferentialRevisionResignTransaction::TRANSACTIONTYPE,
       'request_review' =>
         DifferentialRevisionRequestReviewTransaction::TRANSACTIONTYPE,
+      'rethink' => DifferentialRevisionPlanChangesTransaction::TRANSACTIONTYPE,
     );
 
     $action = $request->getValue('action');
@@ -75,9 +77,10 @@ final class DifferentialCreateCommentConduitAPIMethod
         case 'none':
           break;
         default:
-          $xactions[] = id(new DifferentialTransaction())
-            ->setTransactionType(DifferentialTransaction::TYPE_ACTION)
-            ->setNewValue($action);
+          throw new Exception(
+            pht(
+              'Unsupported action "%s".',
+              $action));
           break;
       }
     }

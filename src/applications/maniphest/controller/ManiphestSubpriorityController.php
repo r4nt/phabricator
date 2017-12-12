@@ -40,14 +40,17 @@ final class ManiphestSubpriorityController extends ManiphestController {
         $is_end = false);
     }
 
+    $keyword_map = ManiphestTaskPriority::getTaskPriorityKeywordsMap();
+    $keyword = head(idx($keyword_map, $pri));
+
     $xactions = array();
 
     $xactions[] = id(new ManiphestTransaction())
-      ->setTransactionType(ManiphestTransaction::TYPE_PRIORITY)
-      ->setNewValue($pri);
+      ->setTransactionType(ManiphestTaskPriorityTransaction::TRANSACTIONTYPE)
+      ->setNewValue($keyword);
 
     $xactions[] = id(new ManiphestTransaction())
-      ->setTransactionType(ManiphestTransaction::TYPE_SUBPRIORITY)
+      ->setTransactionType(ManiphestTaskSubpriorityTransaction::TRANSACTIONTYPE)
       ->setNewValue($sub);
 
     $editor = id(new ManiphestTransactionEditor())

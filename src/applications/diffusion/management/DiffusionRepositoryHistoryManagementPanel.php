@@ -21,5 +21,4 @@ final class DiffusionRepositoryHistoryManagementPanel
     return $this->newTimeline();
   }
 
-
 }

@@ -19,6 +19,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
   private $showFooter = true;
   private $showDurableColumn = true;
   private $quicksandConfig = array();
+  private $tabs;
   private $crumbs;
   private $navigation;
 
@@ -159,6 +160,17 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
     return $this->crumbs;
   }
 
+  public function setTabs(PHUIListView $tabs) {
+    $tabs->setType(PHUIListView::TABBAR_LIST);
+    $tabs->addClass('phabricator-standard-page-tabs');
+    $this->tabs = $tabs;
+    return $this;
+  }
+
+  public function getTabs() {
+    return $this->tabs;
+  }
+
   public function setNavigation(AphrontSideNavFilterView $navigation) {
     $this->navigation = $navigation;
     return $this;
@@ -260,7 +272,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
               'doc_href' => $doc_href,
               'message' => pht(
                 'Phabricator thinks you are using %s, but your '.
-                'client is conviced that it is using %s. This is a serious '.
+                'client is convinced that it is using %s. This is a serious '.
                 'misconfiguration with subtle, but significant, consequences.',
                 $server_protocol, $client_protocol),
             ));
@@ -268,7 +280,8 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
       }
 
       $icon = id(new PHUIIconView())
-        ->setIcon('fa-download');
+        ->setIcon('fa-download')
+        ->addClass('phui-icon-circle-icon');
       $lightbox_id = celerity_generate_unique_node_id();
       $download_form = phabricator_form(
         $user,
@@ -527,6 +540,7 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
     $footer = $this->renderFooter();
 
     $nav = $this->getNavigation();
+    $tabs = $this->getTabs();
     if ($nav) {
       $crumbs = $this->getCrumbs();
       if ($crumbs) {
@@ -540,7 +554,15 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
 
       $crumbs = $this->getCrumbs();
       if ($crumbs) {
+        if ($this->getTabs()) {
+          $crumbs->setBorder(true);
+        }
         $content[] = $crumbs;
+      }
+
+      $tabs = $this->getTabs();
+      if ($tabs) {
+        $content[] = $tabs;
       }
 
       $content[] = $body;

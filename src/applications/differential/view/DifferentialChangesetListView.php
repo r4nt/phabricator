@@ -14,6 +14,7 @@ final class DifferentialChangesetListView extends AphrontView {
   private $standaloneURI;
   private $leftRawFileURI;
   private $rightRawFileURI;
+  private $inlineListURI;
 
   private $symbolIndexes = array();
   private $repository;
@@ -62,6 +63,15 @@ final class DifferentialChangesetListView extends AphrontView {
   public function setInlineCommentControllerURI($uri) {
     $this->inlineURI = $uri;
     return $this;
+  }
+
+  public function setInlineListURI($uri) {
+    $this->inlineListURI = $uri;
+    return $this;
+  }
+
+  public function getInlineListURI() {
+    return $this->inlineListURI;
   }
 
   public function setRepository(PhabricatorRepository $repository) {
@@ -131,36 +141,6 @@ final class DifferentialChangesetListView extends AphrontView {
 
     $changesets = $this->changesets;
 
-    Javelin::initBehavior('differential-toggle-files', array(
-      'pht' => array(
-        'undo' => pht('Undo'),
-        'collapsed' => pht('This file content has been collapsed.'),
-      ),
-    ));
-
-    Javelin::initBehavior(
-      'differential-dropdown-menus',
-      array(
-        'pht' => array(
-          'Open in Editor' => pht('Open in Editor'),
-          'Show All Context' => pht('Show All Context'),
-          'All Context Shown' => pht('All Context Shown'),
-          "Can't Toggle Unloaded File" => pht("Can't Toggle Unloaded File"),
-          'Expand File' => pht('Expand File'),
-          'Collapse File' => pht('Collapse File'),
-          'Browse in Diffusion' => pht('Browse in Diffusion'),
-          'View Standalone' => pht('View Standalone'),
-          'Show Raw File (Left)' => pht('Show Raw File (Left)'),
-          'Show Raw File (Right)' => pht('Show Raw File (Right)'),
-          'Configure Editor' => pht('Configure Editor'),
-          'Load Changes' => pht('Load Changes'),
-          'View Side-by-Side' => pht('View Side-by-Side'),
-          'View Unified' => pht('View Unified'),
-          'Change Text Encoding...' => pht('Change Text Encoding...'),
-          'Highlight As...' => pht('Highlight As...'),
-        ),
-      ));
-
     $renderer = DifferentialChangesetParser::getDefaultRendererForViewer(
       $viewer);
 
@@ -169,11 +149,6 @@ final class DifferentialChangesetListView extends AphrontView {
     foreach ($changesets as $key => $changeset) {
 
       $file = $changeset->getFilename();
-      $class = 'differential-changeset';
-      if (!$this->inlineURI) {
-        $class .= ' differential-changeset-noneditable';
-      }
-
       $ref = $this->references[$key];
 
       $detail = id(new DifferentialChangesetDetailView())
@@ -209,7 +184,7 @@ final class DifferentialChangesetListView extends AphrontView {
           $load = javelin_tag(
             'a',
             array(
-              'class' => 'button grey',
+              'class' => 'button button-grey',
               'href' => '#'.$uniq_id,
               'sigil' => 'differential-load',
               'meta' => array(
@@ -238,19 +213,99 @@ final class DifferentialChangesetListView extends AphrontView {
 
     $this->requireResource('aphront-tooltip-css');
 
-    $this->initBehavior('differential-populate', array(
+    $this->initBehavior(
+      'differential-populate',
+      array(
       'changesetViewIDs' => $ids,
+      'inlineURI' => $this->inlineURI,
+      'inlineListURI' => $this->inlineListURI,
+      'pht' => array(
+        'Open in Editor' => pht('Open in Editor'),
+        'Show All Context' => pht('Show All Context'),
+        'All Context Shown' => pht('All Context Shown'),
+        "Can't Toggle Unloaded File" => pht("Can't Toggle Unloaded File"),
+        'Expand File' => pht('Expand File'),
+        'Collapse File' => pht('Collapse File'),
+        'Browse in Diffusion' => pht('Browse in Diffusion'),
+        'View Standalone' => pht('View Standalone'),
+        'Show Raw File (Left)' => pht('Show Raw File (Left)'),
+        'Show Raw File (Right)' => pht('Show Raw File (Right)'),
+        'Configure Editor' => pht('Configure Editor'),
+        'Load Changes' => pht('Load Changes'),
+        'View Side-by-Side' => pht('View Side-by-Side'),
+        'View Unified' => pht('View Unified'),
+        'Change Text Encoding...' => pht('Change Text Encoding...'),
+        'Highlight As...' => pht('Highlight As...'),
+
+        'Loading...' => pht('Loading...'),
+
+        'Editing Comment' => pht('Editing Comment'),
+
+        'Jump to next change.' => pht('Jump to next change.'),
+        'Jump to previous change.' => pht('Jump to previous change.'),
+        'Jump to next file.' => pht('Jump to next file.'),
+        'Jump to previous file.' => pht('Jump to previous file.'),
+        'Jump to next inline comment.' => pht('Jump to next inline comment.'),
+        'Jump to previous inline comment.' =>
+          pht('Jump to previous inline comment.'),
+        'Jump to the table of contents.' =>
+          pht('Jump to the table of contents.'),
+
+        'Edit selected inline comment.' =>
+          pht('Edit selected inline comment.'),
+        'You must select a comment to edit.' =>
+          pht('You must select a comment to edit.'),
+
+        'Reply to selected inline comment or change.' =>
+          pht('Reply to selected inline comment or change.'),
+        'You must select a comment or change to reply to.' =>
+          pht('You must select a comment or change to reply to.'),
+        'Reply and quote selected inline comment.' =>
+          pht('Reply and quote selected inline comment.'),
+
+        'Mark or unmark selected inline comment as done.' =>
+          pht('Mark or unmark selected inline comment as done.'),
+        'You must select a comment to mark done.' =>
+          pht('You must select a comment to mark done.'),
+
+        'Collapse or expand inline comment.' =>
+          pht('Collapse or expand inline comment.'),
+        'You must select a comment to hide.' =>
+          pht('You must select a comment to hide.'),
+
+        'Jump to next inline comment, including collapsed comments.' =>
+          pht('Jump to next inline comment, including collapsed comments.'),
+        'Jump to previous inline comment, including collapsed comments.' =>
+          pht('Jump to previous inline comment, including collapsed comments.'),
+
+        'This file content has been collapsed.' =>
+          pht('This file content has been collapsed.'),
+        'Show Content' => pht('Show Content'),
+
+        'Hide or show the current file.' =>
+          pht('Hide or show the current file.'),
+        'You must select a file to hide or show.' =>
+          pht('You must select a file to hide or show.'),
+
+        'Unsaved' => pht('Unsaved'),
+        'Unsubmitted' => pht('Unsubmitted'),
+        'Comments' => pht('Comments'),
+
+        'Hide "Done" Inlines' => pht('Hide "Done" Inlines'),
+        'Hide Collapsed Inlines' => pht('Hide Collapsed Inlines'),
+        'Hide Older Inlines' => pht('Hide Older Inlines'),
+        'Hide All Inlines' => pht('Hide All Inlines'),
+        'Show All Inlines' => pht('Show All Inlines'),
+
+        'List Inline Comments' => pht('List Inline Comments'),
+
+        'Hide or show all inline comments.' =>
+          pht('Hide or show all inline comments.'),
+
+        'Finish editing inline comments before changing display modes.' =>
+          pht('Finish editing inline comments before changing display modes.'),
+      ),
     ));
-
-    $this->initBehavior('differential-comment-jump', array());
-
-    if ($this->inlineURI) {
-      Javelin::initBehavior('differential-edit-inline-comments', array(
-        'uri' => $this->inlineURI,
-        'stage' => 'differential-review-stage',
-        'revealIcon' => hsprintf('%s', new PHUIDiffRevealIconView()),
-      ));
-    }
 
     if ($this->header) {
       $header = $this->header;

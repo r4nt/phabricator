@@ -28,6 +28,7 @@ final class PhabricatorProjectBoardBackgroundController
     $this->setProject($board);
     $id = $board->getID();
 
+    $view_uri = $this->getApplicationURI("board/{$id}/");
     $manage_uri = $this->getApplicationURI("board/{$id}/manage/");
 
     if ($request->isFormPost()) {
@@ -36,7 +37,8 @@ final class PhabricatorProjectBoardBackgroundController
       $xactions = array();
 
       $xactions[] = id(new PhabricatorProjectTransaction())
-        ->setTransactionType(PhabricatorProjectTransaction::TYPE_BACKGROUND)
+        ->setTransactionType(
+            PhabricatorProjectWorkboardBackgroundTransaction::TRANSACTIONTYPE)
         ->setNewValue($background_key);
 
       id(new PhabricatorProjectTransactionEditor())
@@ -47,7 +49,7 @@ final class PhabricatorProjectBoardBackgroundController
         ->applyTransactions($board, $xactions);
 
       return id(new AphrontRedirectResponse())
-        ->setURI($manage_uri);
+        ->setURI($view_uri);
     }
 
     $nav = $this->getProfileMenu();
@@ -136,7 +138,7 @@ final class PhabricatorProjectBoardBackgroundController
     $button = javelin_tag(
       'button',
       array(
-        'class' => 'grey profile-image-button',
+        'class' => 'button-grey profile-image-button',
         'sigil' => 'has-tooltip',
         'meta' => array(
           'tip' => $option['name'],

@@ -20,15 +20,7 @@ final class DiffusionRepositoryStagingManagementPanel
 
 
   public function getManagementPanelIcon() {
-    $repository = $this->getRepository();
-
-    $staging_uri = $repository->getStagingURI();
-
-    if ($staging_uri) {
-      return 'fa-upload';
-    } else {
-      return 'fa-upload grey';
-    }
+    return 'fa-upload';
   }
 
   protected function getEditEngineFieldKeys() {
@@ -37,34 +29,12 @@ final class DiffusionRepositoryStagingManagementPanel
     );
   }
 
-  protected function buildManagementPanelActions() {
-    $repository = $this->getRepository();
-    $viewer = $this->getViewer();
-
-    $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $viewer,
-      $repository,
-      PhabricatorPolicyCapability::CAN_EDIT);
-
-    $staging_uri = $this->getEditPageURI();
-
-    return array(
-      id(new PhabricatorActionView())
-        ->setIcon('fa-pencil')
-        ->setName(pht('Edit Staging'))
-        ->setHref($staging_uri)
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(!$can_edit),
-    );
-  }
-
   public function buildManagementPanelContent() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
-      ->setViewer($viewer)
-      ->setActionList($this->newActions());
+      ->setViewer($viewer);
 
     $staging_uri = $repository->getStagingURI();
     if (!$staging_uri) {
@@ -73,7 +43,22 @@ final class DiffusionRepositoryStagingManagementPanel
 
     $view->addProperty(pht('Staging Area URI'), $staging_uri);
 
-    return $this->newBox(pht('Staging Area'), $view);
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $repository,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $staging_uri = $this->getEditPageURI();
+
+    $button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setIcon('fa-pencil')
+      ->setText(pht('Edit'))
+      ->setHref($staging_uri)
+      ->setDisabled(!$can_edit)
+      ->setWorkflow(!$can_edit);
+
+    return $this->newBox(pht('Staging Area'), $view, array($button));
   }
 
 }

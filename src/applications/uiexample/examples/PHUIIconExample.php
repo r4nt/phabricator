@@ -10,6 +10,10 @@ final class PHUIIconExample extends PhabricatorUIExample {
     return pht('Easily render icons or images with links and sprites.');
   }
 
+  public function getCategory() {
+    return pht('Catalogs');
+  }
+
   private function listTransforms() {
     return array(
       'ph-rotate-90',
@@ -130,6 +134,23 @@ final class PHUIIconExample extends PhabricatorUIExample {
           ->addClass('mmr');
     }
 
+    $circles = array('fa-gear', 'fa-recycle');
+    $colors = array('green', 'pink', 'red', 'sky', 'violet');
+    foreach ($circles as $circle) {
+      $states = PHUIIconCircleView::getStateMap();
+      foreach ($states as $state => $name) {
+        $i = array_rand($colors);
+        $circleview[] =
+          id(new PHUIIconCircleView())
+            ->setIcon($circle)
+            ->setSize(PHUIIconCircleView::SMALL)
+            ->setState($state)
+            ->setColor($colors[$i])
+            ->setHref('#')
+            ->addClass('mmr');
+      }
+    }
+
     $squares = array('fa-briefcase', 'fa-code', 'fa-globe', 'fa-home');
     $squareview = array();
     foreach ($squares as $icon) {
@@ -138,7 +159,8 @@ final class PHUIIconExample extends PhabricatorUIExample {
           ->setIcon($icon)
           ->setBackground('bg-blue')
           ->setHref('#')
-          ->addClass('mmr');
+          ->addClass('mmr')
+          ->setTooltip($icon);
     }
 
     $layout_cicons = id(new PHUIBoxView())

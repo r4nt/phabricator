@@ -19,15 +19,7 @@ final class DiffusionRepositorySubversionManagementPanel
   }
 
   public function getManagementPanelIcon() {
-    $repository = $this->getRepository();
-
-    $has_any = (bool)$repository->getDetail('svn-subpath');
-
-    if ($has_any) {
-      return 'fa-database';
-    } else {
-      return 'fa-database grey';
-    }
+    return 'fa-folder';
   }
 
   protected function getEditEngineFieldKeys() {
@@ -36,9 +28,17 @@ final class DiffusionRepositorySubversionManagementPanel
     );
   }
 
-  protected function buildManagementPanelActions() {
+  public function buildManagementPanelContent() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
+
+    $view = id(new PHUIPropertyListView())
+      ->setViewer($viewer);
+
+    $default_branch = nonempty(
+      $repository->getHumanReadableDetail('svn-subpath'),
+      phutil_tag('em', array(), pht('Import Entire Repository')));
+    $view->addProperty(pht('Import Only'), $default_branch);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
@@ -47,31 +47,15 @@ final class DiffusionRepositorySubversionManagementPanel
 
     $subversion_uri = $this->getEditPageURI();
 
-    return array(
-      id(new PhabricatorActionView())
-        ->setIcon('fa-pencil')
-        ->setName(pht('Edit Properties'))
-        ->setHref($subversion_uri)
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(!$can_edit),
-    );
-  }
+    $button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setIcon('fa-pencil')
+      ->setText(pht('Edit'))
+      ->setHref($subversion_uri)
+      ->setDisabled(!$can_edit)
+      ->setWorkflow(!$can_edit);
 
-  public function buildManagementPanelContent() {
-    $repository = $this->getRepository();
-    $viewer = $this->getViewer();
-
-    $view = id(new PHUIPropertyListView())
-      ->setViewer($viewer)
-      ->setActionList($this->newActions());
-
-    $default_branch = nonempty(
-      $repository->getHumanReadableDetail('svn-subpath'),
-      phutil_tag('em', array(), pht('Import Entire Repository')));
-    $view->addProperty(pht('Import Only'), $default_branch);
-
-
-    return $this->newBox(pht('Subversion'), $view);
+    return $this->newBox(pht('Subversion'), $view, array($button));
   }
 
 }

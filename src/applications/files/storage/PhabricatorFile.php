@@ -134,6 +134,9 @@ final class PhabricatorFile extends PhabricatorFileDAO
           'columns' => array('builtinKey'),
           'unique' => true,
         ),
+        'key_engine' => array(
+          'columns' => array('storageEngine', 'storageHandle(64)'),
+        ),
       ),
     ) + parent::getConfiguration();
   }
@@ -178,9 +181,17 @@ final class PhabricatorFile extends PhabricatorFileDAO
     }
 
     $tmp_name = idx($spec, 'tmp_name');
-    $is_valid = @is_uploaded_file($tmp_name);
-    if (!$is_valid) {
-      throw new Exception(pht('File is not an uploaded file.'));
+
+    // NOTE: If we parsed the request body ourselves, the files we wrote will
+    // not be registered in the `is_uploaded_file()` list. It's fine to skip
+    // this check: it just protects against sloppy code from the long ago era
+    // of "register_globals".
+
+    if (ini_get('enable_post_data_reading')) {
+      $is_valid = @is_uploaded_file($tmp_name);
+      if (!$is_valid) {
+        throw new Exception(pht('File is not an uploaded file.'));
+      }
     }
 
     $file_data = Filesystem::readFile($tmp_name);
@@ -393,6 +404,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $tmp = new TempFile();
       Filesystem::writeFile($tmp, $data);
       $file->setMimeType(Filesystem::getMimeType($tmp));
+      unset($tmp);
     }
 
     try {

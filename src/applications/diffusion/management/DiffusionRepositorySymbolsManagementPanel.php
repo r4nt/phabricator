@@ -14,17 +14,7 @@ final class DiffusionRepositorySymbolsManagementPanel
   }
 
   public function getManagementPanelIcon() {
-    $repository = $this->getRepository();
-
-    $has_any =
-      $repository->getSymbolLanguages() ||
-      $repository->getSymbolSources();
-
-    if ($has_any) {
-      return 'fa-link';
-    } else {
-      return 'fa-link grey';
-    }
+    return 'fa-bullseye';
   }
 
   protected function getEditEngineFieldKeys() {
@@ -34,34 +24,12 @@ final class DiffusionRepositorySymbolsManagementPanel
     );
   }
 
-  protected function buildManagementPanelActions() {
-    $repository = $this->getRepository();
-    $viewer = $this->getViewer();
-
-    $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $viewer,
-      $repository,
-      PhabricatorPolicyCapability::CAN_EDIT);
-
-    $symbols_uri = $this->getEditPageURI();
-
-    return array(
-      id(new PhabricatorActionView())
-        ->setIcon('fa-pencil')
-        ->setName(pht('Edit Symbols'))
-        ->setHref($symbols_uri)
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(!$can_edit),
-    );
-  }
-
   public function buildManagementPanelContent() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
-      ->setViewer($viewer)
-      ->setActionList($this->newActions());
+      ->setViewer($viewer);
 
     $languages = $repository->getSymbolLanguages();
     if ($languages) {
@@ -79,7 +47,22 @@ final class DiffusionRepositorySymbolsManagementPanel
     }
     $view->addProperty(pht('Uses Symbols From'), $sources);
 
-    return $this->newBox(pht('Symbols'), $view);
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $repository,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $symbols_uri = $this->getEditPageURI();
+
+    $button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setIcon('fa-pencil')
+      ->setText(pht('Edit'))
+      ->setHref($symbols_uri)
+      ->setDisabled(!$can_edit)
+      ->setWorkflow(!$can_edit);
+
+    return $this->newBox(pht('Symbols'), $view, array($button));
   }
 
 }

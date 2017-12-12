@@ -79,7 +79,7 @@ final class PhabricatorPeopleSearchEngine
         ->setOptions(
           pht('(Show All)'),
           pht('Show Only Unapproved Users'),
-          pht('Hide Unappproved Users'))
+          pht('Hide Unapproved Users'))
         ->setDescription(
           pht(
             'Pass true to find only users awaiting administrative approval, '.
@@ -265,6 +265,7 @@ final class PhabricatorPeopleSearchEngine
 
       if ($user->getIsDisabled()) {
         $item->addIcon('fa-ban', pht('Disabled'));
+        $item->setDisabled(true);
       }
 
       if (!$is_approval) {

@@ -48,7 +48,8 @@ final class PhabricatorFileComposeController
 
         $xactions = array();
         $xactions[] = id(new PhabricatorProjectTransaction())
-          ->setTransactionType(PhabricatorProjectTransaction::TYPE_IMAGE)
+          ->setTransactionType(
+              PhabricatorProjectImageTransaction::TRANSACTIONTYPE)
           ->setNewValue($file->getPHID());
 
         $editor = id(new PhabricatorProjectTransactionEditor())
@@ -81,7 +82,7 @@ final class PhabricatorFileComposeController
       $buttons[] = javelin_tag(
         'button',
         array(
-          'class' => 'grey profile-image-button',
+          'class' => 'button-grey profile-image-button',
           'sigil' => 'has-tooltip compose-select-color',
           'style' => 'margin: 0 8px 8px 0',
           'meta' => array(
@@ -101,7 +102,7 @@ final class PhabricatorFileComposeController
       $icons[] = javelin_tag(
         'button',
         array(
-          'class' => 'grey profile-image-button',
+          'class' => 'button-grey profile-image-button',
           'sigil' => 'has-tooltip compose-select-icon',
           'style' => 'margin: 0 8px 8px 0',
           'meta' => array(
