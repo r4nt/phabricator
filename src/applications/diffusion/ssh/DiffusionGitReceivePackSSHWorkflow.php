@@ -14,8 +14,10 @@ final class DiffusionGitReceivePackSSHWorkflow extends DiffusionGitSSHWorkflow {
   }
 
   protected function executeRepositoryOperations() {
+    $host_wait_start = microtime(true);
+
     $repository = $this->getRepository();
-    $viewer = $this->getUser();
+    $viewer = $this->getSSHUser();
     $device = AlmanacKeys::getLiveDevice();
 
     // This is a write, and must have write access.
@@ -27,8 +29,8 @@ final class DiffusionGitReceivePackSSHWorkflow extends DiffusionGitSSHWorkflow {
       ->setLog($this);
 
     if ($this->shouldProxy()) {
-      $command = $this->getProxyCommand();
-      $did_synchronize = false;
+      $command = $this->getProxyCommand(true);
+      $did_write = false;
 
       if ($device) {
         $this->writeClusterEngineLogMessage(
@@ -38,7 +40,7 @@ final class DiffusionGitReceivePackSSHWorkflow extends DiffusionGitSSHWorkflow {
       }
     } else {
       $command = csprintf('git-receive-pack %s', $repository->getLocalPath());
-      $did_synchronize = true;
+      $did_write = true;
       $cluster_engine->synchronizeWorkingCopyBeforeWrite();
 
       if ($device) {
@@ -58,7 +60,7 @@ final class DiffusionGitReceivePackSSHWorkflow extends DiffusionGitSSHWorkflow {
 
     // We've committed the write (or rejected it), so we can release the lock
     // without waiting for the client to receive the acknowledgement.
-    if ($did_synchronize) {
+    if ($did_write) {
       $cluster_engine->synchronizeWorkingCopyAfterWrite();
     }
 
@@ -67,10 +69,23 @@ final class DiffusionGitReceivePackSSHWorkflow extends DiffusionGitSSHWorkflow {
     }
 
     if (!$err) {
-      $repository->writeStatusMessage(
-        PhabricatorRepositoryStatusMessage::TYPE_NEEDS_UPDATE,
-        PhabricatorRepositoryStatusMessage::CODE_OKAY);
       $this->waitForGitClient();
+
+      // When a repository is clustered, we reach this cleanup code on both
+      // the proxy and the actual final endpoint node. Don't do more cleanup
+      // or logging than we need to.
+      if ($did_write) {
+        $repository->writeStatusMessage(
+          PhabricatorRepositoryStatusMessage::TYPE_NEEDS_UPDATE,
+          PhabricatorRepositoryStatusMessage::CODE_OKAY);
+
+        $host_wait_end = microtime(true);
+
+        $this->updatePushLogWithTimingInformation(
+          $this->getClusterEngineLogProperty('writeWait'),
+          $this->getClusterEngineLogProperty('readWait'),
+          ($host_wait_end - $host_wait_start));
+      }
     }
 
     return $err;
@@ -87,6 +102,39 @@ final class DiffusionGitReceivePackSSHWorkflow extends DiffusionGitSSHWorkflow {
       ->setIOChannel($this->getIOChannel())
       ->setCommandChannelFromExecFuture($future)
       ->execute();
+  }
+
+  private function updatePushLogWithTimingInformation(
+    $write_wait,
+    $read_wait,
+    $host_wait) {
+
+    if ($write_wait !== null) {
+      $write_wait = (int)(1000000 * $write_wait);
+    }
+
+    if ($read_wait !== null) {
+      $read_wait = (int)(1000000 * $read_wait);
+    }
+
+    if ($host_wait !== null) {
+      $host_wait = (int)(1000000 * $host_wait);
+    }
+
+    $identifier = $this->getRequestIdentifier();
+
+    $event = new PhabricatorRepositoryPushEvent();
+    $conn = $event->establishConnection('w');
+
+    queryfx(
+      $conn,
+      'UPDATE %T SET writeWait = %nd, readWait = %nd, hostWait = %nd
+        WHERE requestIdentifier = %s',
+      $event->getTableName(),
+      $write_wait,
+      $read_wait,
+      $host_wait,
+      $identifier);
   }
 
 }

@@ -22,13 +22,13 @@ final class PhabricatorDifferentialRevisionTestDataGenerator
     $revision->setTestPlan($this->generateDescription());
 
     $diff = $this->generateDiff($author);
+    $type_update = DifferentialRevisionUpdateTransaction::TRANSACTIONTYPE;
 
     $xactions = array();
 
     $xactions[] = id(new DifferentialTransaction())
-      ->setTransactionType(DifferentialTransaction::TYPE_UPDATE)
+      ->setTransactionType($type_update)
       ->setNewValue($diff->getPHID());
-
 
     id(new DifferentialTransactionEditor())
       ->setActor($author)
@@ -48,10 +48,12 @@ final class PhabricatorDifferentialRevisionTestDataGenerator
 
   public function generateDiff($author) {
     $paste_generator = new PhabricatorPasteTestDataGenerator();
-    $languages = $paste_generator->supportedLanguages;
-    $lang = array_rand($languages);
-    $code = $paste_generator->generateContent($lang);
-    $altcode = $paste_generator->generateContent($lang);
+    $languages = $paste_generator->getSupportedLanguages();
+    $language = array_rand($languages);
+    $spec = $languages[$language];
+
+    $code = $paste_generator->generateContent($spec);
+    $altcode = $paste_generator->generateContent($spec);
     $newcode = $this->randomlyModify($code, $altcode);
     $diff = id(new PhabricatorDifferenceEngine())
       ->generateRawDiffFromFileContent($code, $newcode);

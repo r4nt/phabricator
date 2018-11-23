@@ -151,8 +151,8 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
 
     $this->logLine(
       pht(
-        'Waiting up to %s second(s) for a cluster read lock on "%s"...',
-        new PhutilNumber($lock_wait),
+        'Acquiring read lock for repository "%s" on device "%s"...',
+        $repository->getDisplayName(),
         $device->getName()));
 
     try {
@@ -170,12 +170,13 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
           pht(
             'Acquired read lock immediately.'));
       }
-    } catch (Exception $ex) {
+    } catch (PhutilLockException $ex) {
       throw new PhutilProxyException(
         pht(
           'Failed to acquire read lock after waiting %s second(s). You '.
-          'may be able to retry later.',
-          new PhutilNumber($lock_wait)),
+          'may be able to retry later. (%s)',
+          new PhutilNumber($lock_wait),
+          $ex->getHint()),
         $ex);
     }
 
@@ -205,9 +206,12 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
             }
           }
 
-          $this->synchronizeWorkingCopyFromDevices($fetchable);
+          $this->synchronizeWorkingCopyFromDevices(
+            $fetchable,
+            $this_version,
+            $max_version);
         } else {
-          $this->synchornizeWorkingCopyFromRemote();
+          $this->synchronizeWorkingCopyFromRemote();
         }
 
         PhabricatorRepositoryWorkingCopyVersion::updateVersion(
@@ -308,18 +312,37 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
 
     $write_lock->useSpecificConnection($locked_connection);
 
-    $lock_wait = phutil_units('2 minutes in seconds');
-
     $this->logLine(
       pht(
-        'Waiting up to %s second(s) for a cluster write lock...',
-        new PhutilNumber($lock_wait)));
+        'Acquiring write lock for repository "%s"...',
+        $repository->getDisplayName()));
 
+    $lock_wait = phutil_units('2 minutes in seconds');
     try {
-      $start = PhabricatorTime::getNow();
-      $write_lock->lock($lock_wait);
-      $waited = (PhabricatorTime::getNow() - $start);
+      $write_wait_start = microtime(true);
 
+      $start = PhabricatorTime::getNow();
+      $step_wait = 1;
+
+      while (true) {
+        try {
+          $write_lock->lock((int)floor($step_wait));
+          $write_wait_end = microtime(true);
+          break;
+        } catch (PhutilLockException $ex) {
+          $waited = (PhabricatorTime::getNow() - $start);
+          if ($waited > $lock_wait) {
+            throw $ex;
+          }
+          $this->logActiveWriter($viewer, $repository);
+        }
+
+        // Wait a little longer before the next message we print.
+        $step_wait = $step_wait + 0.5;
+        $step_wait = min($step_wait, 3);
+      }
+
+      $waited = (PhabricatorTime::getNow() - $start);
       if ($waited) {
         $this->logLine(
           pht(
@@ -330,12 +353,13 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
           pht(
             'Acquired write lock immediately.'));
       }
-    } catch (Exception $ex) {
+    } catch (PhutilLockException $ex) {
       throw new PhutilProxyException(
         pht(
           'Failed to acquire write lock after waiting %s second(s). You '.
-          'may be able to retry later.',
-          new PhutilNumber($lock_wait)),
+          'may be able to retry later. (%s)',
+          new PhutilNumber($lock_wait),
+          $ex->getHint()),
         $ex);
     }
 
@@ -354,12 +378,14 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
           'documentation for instructions.'));
     }
 
+    $read_wait_start = microtime(true);
     try {
       $max_version = $this->synchronizeWorkingCopyBeforeRead();
     } catch (Exception $ex) {
       $write_lock->unlock();
       throw $ex;
     }
+    $read_wait_end = microtime(true);
 
     $pid = getmypid();
     $hash = Filesystem::readRandomCharacters(12);
@@ -378,6 +404,15 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
 
     $this->clusterWriteVersion = $max_version;
     $this->clusterWriteLock = $write_lock;
+
+    $write_wait = ($write_wait_end - $write_wait_start);
+    $read_wait = ($read_wait_end - $read_wait_start);
+
+    $log = $this->logger;
+    if ($log) {
+      $log->writeClusterEngineLogProperty('writeWait', $write_wait);
+      $log->writeClusterEngineLogProperty('readWait', $read_wait);
+    }
   }
 
 
@@ -577,7 +612,7 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
   /**
    * @task internal
    */
-  private function synchornizeWorkingCopyFromRemote() {
+  private function synchronizeWorkingCopyFromRemote() {
     $repository = $this->getRepository();
     $device = AlmanacKeys::getLiveDevice();
 
@@ -621,7 +656,11 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
   /**
    * @task internal
    */
-  private function synchronizeWorkingCopyFromDevices(array $device_phids) {
+  private function synchronizeWorkingCopyFromDevices(
+    array $device_phids,
+    $local_version,
+    $remote_version) {
+
     $repository = $this->getRepository();
 
     $service = $repository->loadAlmanacService();
@@ -656,10 +695,16 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
           'fetchable.'));
     }
 
+    // If we can synchronize from multiple sources, choose one at random.
+    shuffle($fetchable);
+
     $caught = null;
     foreach ($fetchable as $binding) {
       try {
-        $this->synchronizeWorkingCopyFromBinding($binding);
+        $this->synchronizeWorkingCopyFromBinding(
+          $binding,
+          $local_version,
+          $remote_version);
         $caught = null;
         break;
       } catch (Exception $ex) {
@@ -676,14 +721,17 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
   /**
    * @task internal
    */
-  private function synchronizeWorkingCopyFromBinding($binding) {
+  private function synchronizeWorkingCopyFromBinding(
+    AlmanacBinding $binding,
+    $local_version,
+    $remote_version) {
+
     $repository = $this->getRepository();
     $device = AlmanacKeys::getLiveDevice();
 
     $this->logLine(
       pht(
-        'Synchronizing this device ("%s") from cluster leader ("%s") before '.
-        'read.',
+        'Synchronizing this device ("%s") from cluster leader ("%s").',
         $device->getName(),
         $binding->getDevice()->getName()));
 
@@ -711,17 +759,57 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
 
     $future->setCWD($local_path);
 
+    $log = PhabricatorRepositorySyncEvent::initializeNewEvent()
+      ->setRepositoryPHID($repository->getPHID())
+      ->setEpoch(PhabricatorTime::getNow())
+      ->setDevicePHID($device->getPHID())
+      ->setFromDevicePHID($binding->getDevice()->getPHID())
+      ->setDeviceVersion($local_version)
+      ->setFromDeviceVersion($remote_version);
+
+    $sync_start = microtime(true);
+
     try {
       $future->resolvex();
     } catch (Exception $ex) {
+      $log->setSyncWait(phutil_microseconds_since($sync_start));
+
+      if ($ex instanceof CommandException) {
+        if ($future->getWasKilledByTimeout()) {
+          $result_type = PhabricatorRepositorySyncEvent::RESULT_TIMEOUT;
+        } else {
+          $result_type = PhabricatorRepositorySyncEvent::RESULT_ERROR;
+        }
+
+       $log
+         ->setResultCode($ex->getError())
+         ->setResultType($result_type)
+         ->setProperty('stdout', $ex->getStdout())
+         ->setProperty('stderr', $ex->getStderr());
+      } else {
+        $log
+          ->setResultCode(1)
+          ->setResultType(PhabricatorRepositorySyncEvent::RESULT_EXCEPTION)
+          ->setProperty('message', $ex->getMessage());
+      }
+
+      $log->save();
+
       $this->logLine(
         pht(
           'Synchronization of "%s" from leader "%s" failed: %s',
           $device->getName(),
           $binding->getDevice()->getName(),
           $ex->getMessage()));
+
       throw $ex;
     }
+
+    $log
+      ->setSyncWait(phutil_microseconds_since($sync_start))
+      ->setResultCode(0)
+      ->setResultType(PhabricatorRepositorySyncEvent::RESULT_SYNC)
+      ->save();
   }
 
 
@@ -761,6 +849,34 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
           $repository->getMonogram(),
           $device->getName()));
     }
+  }
+
+  private function logActiveWriter(
+    PhabricatorUser $viewer,
+    PhabricatorRepository $repository) {
+
+    $writer = PhabricatorRepositoryWorkingCopyVersion::loadWriter(
+      $repository->getPHID());
+    if (!$writer) {
+      $this->logLine(pht('Waiting on another user to finish writing...'));
+      return;
+    }
+
+    $user_phid = $writer->getWriteProperty('userPHID');
+    $device_phid = $writer->getWriteProperty('devicePHID');
+    $epoch = $writer->getWriteProperty('epoch');
+
+    $phids = array($user_phid, $device_phid);
+    $handles = $viewer->loadHandles($phids);
+
+    $duration = (PhabricatorTime::getNow() - $epoch) + 1;
+
+    $this->logLine(
+      pht(
+        'Waiting for %s to finish writing (on device "%s" for %ss)...',
+        $handles[$user_phid]->getName(),
+        $handles[$device_phid]->getName(),
+        new PhutilNumber($duration)));
   }
 
 }

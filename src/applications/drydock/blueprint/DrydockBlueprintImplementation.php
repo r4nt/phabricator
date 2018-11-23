@@ -139,6 +139,38 @@ abstract class DrydockBlueprintImplementation extends Phobject {
     DrydockResource $resource,
     DrydockLease $lease);
 
+  /**
+   * Return true to try to allocate a new resource and expand the resource
+   * pool instead of permitting an otherwise valid acquisition on an existing
+   * resource.
+   *
+   * This allows the blueprint to provide a soft hint about when the resource
+   * pool should grow.
+   *
+   * Returning "true" in all cases generally makes sense when a blueprint
+   * controls a fixed pool of resources, like a particular number of physical
+   * hosts: you want to put all the hosts in service, so whenever it is
+   * possible to allocate a new host you want to do this.
+   *
+   * Returning "false" in all cases generally make sense when a blueprint
+   * has a flexible pool of expensive resources and you want to pack leases
+   * onto them as tightly as possible.
+   *
+   * @param DrydockBlueprint The blueprint for an existing resource being
+   *   acquired.
+   * @param DrydockResource The resource being acquired, which we may want to
+   *   build a supplemental resource for.
+   * @param DrydockLease The current lease performing acquisition.
+   * @return bool True to prefer allocating a supplemental resource.
+   *
+   * @task lease
+   */
+  public function shouldAllocateSupplementalResource(
+    DrydockBlueprint $blueprint,
+    DrydockResource $resource,
+    DrydockLease $lease) {
+    return false;
+  }
 
 /* -(  Resource Allocation  )------------------------------------------------ */
 
@@ -396,16 +428,20 @@ abstract class DrydockBlueprintImplementation extends Phobject {
     }
 
     // For reasonable limits, actually check for an available slot.
-    $locks = DrydockSlotLock::loadLocks($blueprint_phid);
-    $locks = mpull($locks, null, 'getLockKey');
-
     $slots = range(0, $limit - 1);
     shuffle($slots);
 
+    $lock_names = array();
     foreach ($slots as $slot) {
-      $slot_lock = "allocator({$blueprint_phid}).limit({$slot})";
-      if (empty($locks[$slot_lock])) {
-        return $slot_lock;
+      $lock_names[] = "allocator({$blueprint_phid}).limit({$slot})";
+    }
+
+    $locks = DrydockSlotLock::loadHeldLocks($lock_names);
+    $locks = mpull($locks, null, 'getLockKey');
+
+    foreach ($lock_names as $lock_name) {
+      if (empty($locks[$lock_name])) {
+        return $lock_name;
       }
     }
 
@@ -414,7 +450,8 @@ abstract class DrydockBlueprintImplementation extends Phobject {
     // lock will be free by the time we try to take it, but usually we'll just
     // fail to grab the lock, throw an appropriate lock exception, and get back
     // on the right path to retry later.
-    return $slot_lock;
+
+    return $lock_name;
   }
 
 

@@ -47,6 +47,14 @@ abstract class PhabricatorModularTransactionType
     return false;
   }
 
+  public function shouldHideForFeed() {
+    return false;
+  }
+
+  public function shouldHideForMail() {
+    return false;
+  }
+
   public function getIcon() {
     return null;
   }
@@ -346,6 +354,42 @@ abstract class PhabricatorModularTransactionType
 
   public function getFieldValuesForConduit($xaction, $data) {
     return array();
+  }
+
+  protected function requireApplicationCapability($capability) {
+    $application_class = $this->getEditor()->getEditorApplicationClass();
+    $application = newv($application_class, array());
+
+    PhabricatorPolicyFilter::requireCapability(
+      $this->getActor(),
+      $application,
+      $capability);
+  }
+
+  /**
+   * Get a list of capabilities the actor must have on the object to apply
+   * a transaction to it.
+   *
+   * Usually, you should use this to reduce capability requirements when a
+   * transaction (like leaving a Conpherence thread) can be applied without
+   * having edit permission on the object. You can override this method to
+   * remove the CAN_EDIT requirement, or to replace it with a different
+   * requirement.
+   *
+   * If you are increasing capability requirements and need to add an
+   * additional capability or policy requirement above and beyond CAN_EDIT, it
+   * is usually better implemented as a validation check.
+   *
+   * @param object Object being edited.
+   * @param PhabricatorApplicationTransaction Transaction being applied.
+   * @return null|const|list<const> A capability constant (or list of
+   *    capability constants) which the actor must have on the object. You can
+   *    return `null` as a shorthand for "no capabilities are required".
+   */
+  public function getRequiredCapabilities(
+    $object,
+    PhabricatorApplicationTransaction $xaction) {
+    return PhabricatorPolicyCapability::CAN_EDIT;
   }
 
 }

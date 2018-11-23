@@ -22,7 +22,21 @@ final class PhabricatorProjectSearchEngine
     return array(
       id(new PhabricatorSearchTextField())
         ->setLabel(pht('Name'))
-        ->setKey('name'),
+        ->setKey('name')
+        ->setDescription(
+          pht(
+            '(Deprecated.) Search for projects with a given name or '.
+            'hashtag using tokenizer/datasource query matching rules. This '.
+            'is deprecated in favor of the more powerful "query" '.
+            'constraint.')),
+      id(new PhabricatorSearchStringListField())
+        ->setLabel(pht('Slugs'))
+        ->setIsHidden(true)
+        ->setKey('slugs')
+        ->setDescription(
+          pht(
+            'Search for projects with particular slugs. (Slugs are the same '.
+            'as project hashtags.)')),
       id(new PhabricatorUsersSearchField())
         ->setLabel(pht('Members'))
         ->setKey('memberPHIDs')
@@ -79,6 +93,10 @@ final class PhabricatorProjectSearchEngine
     if (strlen($map['name'])) {
       $tokens = PhabricatorTypeaheadDatasource::tokenizeString($map['name']);
       $query->withNameTokens($tokens);
+    }
+
+    if ($map['slugs']) {
+      $query->withSlugs($map['slugs']);
     }
 
     if ($map['memberPHIDs']) {

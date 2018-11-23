@@ -43,7 +43,8 @@ final class PeopleMainMenuBarExtension
       ->setIcon($profile_image)
       ->addClass('phabricator-core-user-menu')
       ->setHasCaret(true)
-      ->setNoCSS(true);
+      ->setNoCSS(true)
+      ->setAuralLabel(pht('Account Menu'));
 
     return array(
       $user_menu,
@@ -113,7 +114,6 @@ final class PeopleMainMenuBarExtension
         ->setName(pht('Log Out %s', $viewer->getUsername()))
         ->addSigil('logout-item')
         ->setHref('/logout/')
-        ->setColor(PhabricatorActionView::RED)
         ->setWorkflow(true));
 
     return $view;

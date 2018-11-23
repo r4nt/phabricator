@@ -99,24 +99,6 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     return pht('%s created this room.', $author);
   }
 
-  /**
-   * We really only need a read lock if we have a comment. In that case, we
-   * must update the messagesCount field on the conpherence and
-   * seenMessagesCount(s) for the participant(s).
-   */
-  protected function shouldReadLock(
-    PhabricatorLiskDAO $object,
-    PhabricatorApplicationTransaction $xaction) {
-
-    $lock = false;
-    switch ($xaction->getTransactionType()) {
-      case PhabricatorTransactions::TYPE_COMMENT:
-        $lock =  true;
-        break;
-    }
-
-    return $lock;
-  }
 
   protected function applyBuiltinInternalTransaction(
     PhabricatorLiskDAO $object,
@@ -164,49 +146,6 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     return $xactions;
   }
 
-  protected function requireCapabilities(
-    PhabricatorLiskDAO $object,
-    PhabricatorApplicationTransaction $xaction) {
-
-    parent::requireCapabilities($object, $xaction);
-
-    switch ($xaction->getTransactionType()) {
-      case ConpherenceThreadParticipantsTransaction::TRANSACTIONTYPE:
-        $old_map = array_fuse($xaction->getOldValue());
-        $new_map = array_fuse($xaction->getNewValue());
-
-        $add = array_keys(array_diff_key($new_map, $old_map));
-        $rem = array_keys(array_diff_key($old_map, $new_map));
-
-        $actor_phid = $this->getActingAsPHID();
-
-        $is_join = (($add === array($actor_phid)) && !$rem);
-        $is_leave = (($rem === array($actor_phid)) && !$add);
-
-        if ($is_join) {
-          // Anyone can join a thread they can see.
-        } else if ($is_leave) {
-          // Anyone can leave a thread.
-        } else {
-          // You need CAN_EDIT to add or remove participants. For additional
-          // discussion, see D17696 and T4411.
-          PhabricatorPolicyFilter::requireCapability(
-            $this->requireActor(),
-            $object,
-            PhabricatorPolicyCapability::CAN_EDIT);
-        }
-        break;
-
-      case ConpherenceThreadTitleTransaction::TRANSACTIONTYPE:
-      case ConpherenceThreadTopicTransaction::TRANSACTIONTYPE:
-        PhabricatorPolicyFilter::requireCapability(
-          $this->requireActor(),
-          $object,
-          PhabricatorPolicyCapability::CAN_EDIT);
-        break;
-    }
-  }
-
   protected function shouldSendMail(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -227,11 +166,9 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
         '%s sent you a message.',
         $this->getActor()->getUserName());
     }
-    $phid = $object->getPHID();
 
     return id(new PhabricatorMetaMTAMail())
-      ->setSubject("Z{$id}: {$title}")
-      ->addHeader('Thread-Topic', "Z{$id}: {$phid}");
+      ->setSubject("Z{$id}: {$title}");
   }
 
   protected function getMailTo(PhabricatorLiskDAO $object) {

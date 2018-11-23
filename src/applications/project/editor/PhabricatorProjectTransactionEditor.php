@@ -115,61 +115,6 @@ final class PhabricatorProjectTransactionEditor
     return $errors;
   }
 
-  protected function requireCapabilities(
-    PhabricatorLiskDAO $object,
-    PhabricatorApplicationTransaction $xaction) {
-
-    switch ($xaction->getTransactionType()) {
-      case PhabricatorProjectLockTransaction::TRANSACTIONTYPE:
-        PhabricatorPolicyFilter::requireCapability(
-          $this->requireActor(),
-          newv($this->getEditorApplicationClass(), array()),
-          ProjectCanLockProjectsCapability::CAPABILITY);
-        return;
-      case PhabricatorTransactions::TYPE_EDGE:
-        switch ($xaction->getMetadataValue('edge:type')) {
-          case PhabricatorProjectProjectHasMemberEdgeType::EDGECONST:
-            $old = $xaction->getOldValue();
-            $new = $xaction->getNewValue();
-
-            $add = array_keys(array_diff_key($new, $old));
-            $rem = array_keys(array_diff_key($old, $new));
-
-            $actor_phid = $this->requireActor()->getPHID();
-
-            $is_join = (($add === array($actor_phid)) && !$rem);
-            $is_leave = (($rem === array($actor_phid)) && !$add);
-
-            if ($is_join) {
-              // You need CAN_JOIN to join a project.
-              PhabricatorPolicyFilter::requireCapability(
-                $this->requireActor(),
-                $object,
-                PhabricatorPolicyCapability::CAN_JOIN);
-            } else if ($is_leave) {
-              // You usually don't need any capabilities to leave a project.
-              if ($object->getIsMembershipLocked()) {
-                // you must be able to edit though to leave locked projects
-                PhabricatorPolicyFilter::requireCapability(
-                  $this->requireActor(),
-                  $object,
-                  PhabricatorPolicyCapability::CAN_EDIT);
-              }
-            } else {
-              // You need CAN_EDIT to change members other than yourself.
-              PhabricatorPolicyFilter::requireCapability(
-                $this->requireActor(),
-                $object,
-                PhabricatorPolicyCapability::CAN_EDIT);
-            }
-            return;
-        }
-        break;
-    }
-
-    return parent::requireCapabilities($object, $xaction);
-  }
-
   protected function willPublish(PhabricatorLiskDAO $object, array $xactions) {
     // NOTE: We're using the omnipotent user here because the original actor
     // may no longer have permission to view the object.
@@ -219,12 +164,10 @@ final class PhabricatorProjectTransactionEditor
   }
 
   protected function buildMailTemplate(PhabricatorLiskDAO $object) {
-    $id = $object->getID();
     $name = $object->getName();
 
     return id(new PhabricatorMetaMTAMail())
-      ->setSubject("{$name}")
-      ->addHeader('Thread-Topic', "Project {$id}");
+      ->setSubject("{$name}");
   }
 
   protected function buildMailBody(

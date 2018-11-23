@@ -3,6 +3,10 @@
 final class HarbormasterUnitMessageListController
   extends HarbormasterController {
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function handleRequest(AphrontRequest $request) {
     $viewer = $this->getViewer();
 
@@ -35,6 +39,7 @@ final class HarbormasterUnitMessageListController
     }
 
     $unit = id(new HarbormasterUnitSummaryView())
+      ->setViewer($viewer)
       ->setBuildable($buildable)
       ->setUnitMessages($unit_data);
 

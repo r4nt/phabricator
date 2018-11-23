@@ -206,8 +206,7 @@ final class ManiphestTransactionEditor
     $title = $object->getTitle();
 
     return id(new PhabricatorMetaMTAMail())
-      ->setSubject("T{$id}: {$title}")
-      ->addHeader('Thread-Topic', "T{$id}: ".$object->getOriginalTitle());
+      ->setSubject("T{$id}: {$title}");
   }
 
   protected function buildMailBody(
@@ -280,51 +279,6 @@ final class ManiphestTransactionEditor
       ->setTask($object);
   }
 
-  protected function requireCapabilities(
-    PhabricatorLiskDAO $object,
-    PhabricatorApplicationTransaction $xaction) {
-
-    parent::requireCapabilities($object, $xaction);
-
-    $app_capability_map = array(
-      ManiphestTaskPriorityTransaction::TRANSACTIONTYPE =>
-        ManiphestEditPriorityCapability::CAPABILITY,
-      ManiphestTaskStatusTransaction::TRANSACTIONTYPE =>
-        ManiphestEditStatusCapability::CAPABILITY,
-      ManiphestTaskOwnerTransaction::TRANSACTIONTYPE =>
-        ManiphestEditAssignCapability::CAPABILITY,
-      PhabricatorTransactions::TYPE_EDIT_POLICY =>
-        ManiphestEditPoliciesCapability::CAPABILITY,
-      PhabricatorTransactions::TYPE_VIEW_POLICY =>
-        ManiphestEditPoliciesCapability::CAPABILITY,
-    );
-
-
-    $transaction_type = $xaction->getTransactionType();
-
-    $app_capability = null;
-    if ($transaction_type == PhabricatorTransactions::TYPE_EDGE) {
-      switch ($xaction->getMetadataValue('edge:type')) {
-        case PhabricatorProjectObjectHasProjectEdgeType::EDGECONST:
-          $app_capability = ManiphestEditProjectsCapability::CAPABILITY;
-          break;
-      }
-    } else {
-      $app_capability = idx($app_capability_map, $transaction_type);
-    }
-
-    if ($app_capability) {
-      $app = id(new PhabricatorApplicationQuery())
-        ->setViewer($this->getActor())
-        ->withClasses(array('PhabricatorManiphestApplication'))
-        ->executeOne();
-      PhabricatorPolicyFilter::requireCapability(
-        $this->getActor(),
-        $app,
-        $app_capability);
-    }
-  }
-
   protected function adjustObjectForPolicyChecks(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -336,7 +290,7 @@ final class ManiphestTransactionEditor
           $copy->setOwnerPHID($xaction->getNewValue());
           break;
         default:
-          continue;
+          break;
       }
     }
 
@@ -523,7 +477,6 @@ final class ManiphestTransactionEditor
       'status' => '""',
       'priority' => 0,
       'title' => '""',
-      'originalTitle' => '""',
       'description' => '""',
       'dateCreated' => 0,
       'dateModified' => 0,

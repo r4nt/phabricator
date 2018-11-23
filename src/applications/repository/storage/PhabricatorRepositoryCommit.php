@@ -21,11 +21,12 @@ final class PhabricatorRepositoryCommit
 
   protected $repositoryID;
   protected $phid;
+  protected $authorIdentityPHID;
+  protected $committerIdentityPHID;
   protected $commitIdentifier;
   protected $epoch;
-  protected $mailKey;
   protected $authorPHID;
-  protected $auditStatus = PhabricatorAuditCommitStatusConstants::NONE;
+  protected $auditStatus = DiffusionCommitAuditStatus::NONE;
   protected $summary = '';
   protected $importStatus = 0;
 
@@ -42,6 +43,9 @@ final class PhabricatorRepositoryCommit
   private $audits = self::ATTACHABLE;
   private $repository = self::ATTACHABLE;
   private $customFields = self::ATTACHABLE;
+  private $authorIdentity = self::ATTACHABLE;
+  private $committerIdentity = self::ATTACHABLE;
+
   private $drafts = array();
   private $auditAuthorityPHIDs = array();
 
@@ -111,9 +115,10 @@ final class PhabricatorRepositoryCommit
       self::CONFIG_TIMESTAMPS => false,
       self::CONFIG_COLUMN_SCHEMA => array(
         'commitIdentifier' => 'text40',
-        'mailKey' => 'bytes20',
         'authorPHID' => 'phid?',
-        'auditStatus' => 'uint32',
+        'authorIdentityPHID' => 'phid?',
+        'committerIdentityPHID' => 'phid?',
+        'auditStatus' => 'text32',
         'summary' => 'text255',
         'importStatus' => 'uint32',
       ),
@@ -181,6 +186,28 @@ final class PhabricatorRepositoryCommit
 
   public function getAudits() {
     return $this->assertAttached($this->audits);
+  }
+
+  public function hasAttachedAudits() {
+    return ($this->audits !== self::ATTACHABLE);
+  }
+
+  public function attachIdentities(
+    PhabricatorRepositoryIdentity $author = null,
+    PhabricatorRepositoryIdentity $committer = null) {
+
+    $this->authorIdentity = $author;
+    $this->committerIdentity = $committer;
+
+    return $this;
+  }
+
+  public function getAuthorIdentity() {
+    return $this->assertAttached($this->authorIdentity);
+  }
+
+  public function getCommitterIdentity() {
+    return $this->assertAttached($this->committerIdentity);
   }
 
   public function loadAndAttachAuditAuthority(
@@ -292,13 +319,6 @@ final class PhabricatorRepositoryCommit
     return mpull($audits, 'getAuditorPHID');
   }
 
-  public function save() {
-    if (!$this->mailKey) {
-      $this->mailKey = Filesystem::readRandomCharacters(20);
-    }
-    return parent::save();
-  }
-
   public function delete() {
     $data = $this->loadCommitData();
     $audits = id(new PhabricatorRepositoryAuditRequest())
@@ -352,27 +372,24 @@ final class PhabricatorRepositoryCommit
       }
     }
 
-    $current_status = $this->getAuditStatus();
-    $status_verify = PhabricatorAuditCommitStatusConstants::NEEDS_VERIFICATION;
-
     if ($any_concern) {
-      if ($current_status == $status_verify) {
+      if ($this->isAuditStatusNeedsVerification()) {
         // If the change is in "Needs Verification", we keep it there as
         // long as any auditors still have concerns.
-        $status = $status_verify;
+        $status = DiffusionCommitAuditStatus::NEEDS_VERIFICATION;
       } else {
-        $status = PhabricatorAuditCommitStatusConstants::CONCERN_RAISED;
+        $status = DiffusionCommitAuditStatus::CONCERN_RAISED;
       }
     } else if ($any_accept) {
       if ($any_need) {
-        $status = PhabricatorAuditCommitStatusConstants::PARTIALLY_AUDITED;
+        $status = DiffusionCommitAuditStatus::PARTIALLY_AUDITED;
       } else {
-        $status = PhabricatorAuditCommitStatusConstants::FULLY_AUDITED;
+        $status = DiffusionCommitAuditStatus::AUDITED;
       }
     } else if ($any_need) {
-      $status = PhabricatorAuditCommitStatusConstants::NEEDS_AUDIT;
+      $status = DiffusionCommitAuditStatus::NEEDS_AUDIT;
     } else {
-      $status = PhabricatorAuditCommitStatusConstants::NONE;
+      $status = DiffusionCommitAuditStatus::NONE;
     }
 
     return $this->setAuditStatus($status);
@@ -412,28 +429,123 @@ final class PhabricatorRepositoryCommit
     return $repository->formatCommitName($identifier, $local = true);
   }
 
-  public function renderAuthorLink($handles) {
-    $author_phid = $this->getAuthorPHID();
-    if ($author_phid && isset($handles[$author_phid])) {
-      return $handles[$author_phid]->renderLink();
+  /**
+   * Make a strong effort to find a way to render this commit's committer.
+   * This currently attempts to use @{PhabricatorRepositoryIdentity}, and
+   * falls back to examining the commit detail information. After we force
+   * the migration to using identities, update this method to remove the
+   * fallback. See T12164 for details.
+   */
+  public function renderAnyCommitter(PhabricatorUser $viewer, $handles) {
+    $committer = $this->renderCommitter($viewer, $handles);
+    if ($committer) {
+      return $committer;
     }
 
-    return $this->renderAuthorShortName($handles);
+    return $this->renderAuthor($viewer, $handles);
   }
 
-  public function renderAuthorShortName($handles) {
-    $author_phid = $this->getAuthorPHID();
-    if ($author_phid && isset($handles[$author_phid])) {
-      return $handles[$author_phid]->getName();
+  public function renderCommitter(PhabricatorUser $viewer, $handles) {
+    $committer_phid = $this->getCommitterDisplayPHID();
+    if ($committer_phid) {
+      return $handles[$committer_phid]->renderLink();
     }
 
     $data = $this->getCommitData();
-    $name = $data->getAuthorName();
+    $committer_name = $data->getCommitDetail('committer');
+    if (strlen($committer_name)) {
+      return DiffusionView::renderName($committer_name);
+    }
 
-    $parsed = new PhutilEmailAddress($name);
-    return nonempty($parsed->getDisplayName(), $parsed->getAddress());
+    return null;
   }
 
+  public function renderAuthor(PhabricatorUser $viewer, $handles) {
+    $author_phid = $this->getAuthorDisplayPHID();
+    if ($author_phid) {
+      return $handles[$author_phid]->renderLink();
+    }
+
+    $data = $this->getCommitData();
+    $author_name = $data->getAuthorName();
+    if (strlen($author_name)) {
+      return DiffusionView::renderName($author_name);
+    }
+
+    return null;
+  }
+
+  public function loadIdentities(PhabricatorUser $viewer) {
+    if ($this->authorIdentity !== self::ATTACHABLE) {
+      return $this;
+    }
+
+    $commit = id(new DiffusionCommitQuery())
+      ->setViewer($viewer)
+      ->withIDs(array($this->getID()))
+      ->needIdentities(true)
+      ->executeOne();
+
+    $author_identity = $commit->getAuthorIdentity();
+    $committer_identity = $commit->getCommitterIdentity();
+
+    return $this->attachIdentities($author_identity, $committer_identity);
+  }
+
+  public function hasCommitterIdentity() {
+    return ($this->getCommitterIdentity() !== null);
+  }
+
+  public function hasAuthorIdentity() {
+    return ($this->getAuthorIdentity() !== null);
+  }
+
+  public function getCommitterDisplayPHID() {
+    if ($this->hasCommitterIdentity()) {
+      return $this->getCommitterIdentity()->getIdentityDisplayPHID();
+    }
+
+    $data = $this->getCommitData();
+    return $data->getCommitDetail('committerPHID');
+  }
+
+  public function getAuthorDisplayPHID() {
+    if ($this->hasAuthorIdentity()) {
+      return $this->getAuthorIdentity()->getIdentityDisplayPHID();
+    }
+
+    $data = $this->getCommitData();
+    return $data->getCommitDetail('authorPHID');
+  }
+
+  public function getAuditStatusObject() {
+    $status = $this->getAuditStatus();
+    return DiffusionCommitAuditStatus::newForStatus($status);
+  }
+
+  public function isAuditStatusNoAudit() {
+    return $this->getAuditStatusObject()->isNoAudit();
+  }
+
+  public function isAuditStatusNeedsAudit() {
+    return $this->getAuditStatusObject()->isNeedsAudit();
+  }
+
+  public function isAuditStatusConcernRaised() {
+    return $this->getAuditStatusObject()->isConcernRaised();
+  }
+
+  public function isAuditStatusNeedsVerification() {
+    return $this->getAuditStatusObject()->isNeedsVerification();
+  }
+
+  public function isAuditStatusPartiallyAudited() {
+    return $this->getAuditStatusObject()->isPartiallyAudited();
+  }
+
+  public function isAuditStatusAudited() {
+    return $this->getAuditStatusObject()->isAudited();
+  }
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -484,7 +596,6 @@ final class PhabricatorRepositoryCommit
       'phid' =>  $this->getPHID(),
       'commitIdentifier' =>  $this->getCommitIdentifier(),
       'epoch' => $this->getEpoch(),
-      'mailKey' => $this->getMailKey(),
       'authorPHID' => $this->getAuthorPHID(),
       'auditStatus' => $this->getAuditStatus(),
       'summary' => $this->getSummary(),
@@ -513,10 +624,6 @@ final class PhabricatorRepositoryCommit
     return $this->getRepository()->getPHID();
   }
 
-  public function getHarbormasterPublishablePHID() {
-    return $this->getPHID();
-  }
-
   public function getBuildVariables() {
     $results = array();
 
@@ -543,6 +650,10 @@ final class PhabricatorRepositoryCommit
       'repository.uri' =>
         pht('The URI to clone or checkout the repository from.'),
     );
+  }
+
+  public function newBuildableEngine() {
+    return new DiffusionBuildableEngine();
   }
 
 
@@ -657,7 +768,8 @@ final class PhabricatorRepositoryCommit
   public function isAutomaticallySubscribed($phid) {
 
     // TODO: This should also list auditors, but handling that is a bit messy
-    // right now because we are not guaranteed to have the data.
+    // right now because we are not guaranteed to have the data. (It should not
+    // include resigned auditors.)
 
     return ($phid == $this->getAuthorPHID());
   }
@@ -729,12 +841,110 @@ final class PhabricatorRepositoryCommit
         ->setKey('identifier')
         ->setType('string')
         ->setDescription(pht('The commit identifier.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('repositoryPHID')
+        ->setType('phid')
+        ->setDescription(pht('The repository this commit belongs to.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('author')
+        ->setType('map<string, wild>')
+        ->setDescription(pht('Information about the commit author.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('committer')
+        ->setType('map<string, wild>')
+        ->setDescription(pht('Information about the committer.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('isImported')
+        ->setType('bool')
+        ->setDescription(pht('True if the commit is fully imported.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('isUnreachable')
+        ->setType('bool')
+        ->setDescription(
+          pht(
+            'True if the commit is not the ancestor of any tag, branch, or '.
+            'ref.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('auditStatus')
+        ->setType('map<string, wild>')
+        ->setDescription(pht('Information about the current audit status.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('message')
+        ->setType('string')
+        ->setDescription(pht('The commit message.')),
     );
   }
 
   public function getFieldValuesForConduit() {
+    $data = $this->getCommitData();
+
+    $author_identity = $this->getAuthorIdentity();
+    if ($author_identity) {
+      $author_name = $author_identity->getIdentityDisplayName();
+      $author_email = $author_identity->getIdentityEmailAddress();
+      $author_raw = $author_identity->getIdentityName();
+      $author_identity_phid = $author_identity->getPHID();
+      $author_user_phid = $author_identity->getCurrentEffectiveUserPHID();
+    } else {
+      $author_name = null;
+      $author_email = null;
+      $author_raw = null;
+      $author_identity_phid = null;
+      $author_user_phid = null;
+    }
+
+    $committer_identity = $this->getCommitterIdentity();
+    if ($committer_identity) {
+      $committer_name = $committer_identity->getIdentityDisplayName();
+      $committer_email = $committer_identity->getIdentityEmailAddress();
+      $committer_raw = $committer_identity->getIdentityName();
+      $committer_identity_phid = $committer_identity->getPHID();
+      $committer_user_phid = $committer_identity->getCurrentEffectiveUserPHID();
+    } else {
+      $committer_name = null;
+      $committer_email = null;
+      $committer_raw = null;
+      $committer_identity_phid = null;
+      $committer_user_phid = null;
+    }
+
+    $author_epoch = $data->getCommitDetail('authorEpoch');
+    if ($author_epoch) {
+      $author_epoch = (int)$author_epoch;
+    } else {
+      $author_epoch = null;
+    }
+
+    $audit_status = $this->getAuditStatusObject();
+
     return array(
       'identifier' => $this->getCommitIdentifier(),
+      'repositoryPHID' => $this->getRepository()->getPHID(),
+      'author' => array(
+        'name' => $author_name,
+        'email' => $author_email,
+        'raw' => $author_raw,
+        'epoch' => $author_epoch,
+        'identityPHID' => $author_identity_phid,
+        'userPHID' => $author_user_phid,
+      ),
+      'committer' => array(
+        'name' => $committer_name,
+        'email' => $committer_email,
+        'raw' => $committer_raw,
+        'epoch' => (int)$this->getEpoch(),
+        'identityPHID' => $committer_identity_phid,
+        'userPHID' => $committer_user_phid,
+      ),
+      'isUnreachable' => (bool)$this->isUnreachable(),
+      'isImported' => (bool)$this->isImported(),
+      'auditStatus' => array(
+        'value' => $audit_status->getKey(),
+        'name' => $audit_status->getName(),
+        'closed' => (bool)$audit_status->getIsClosed(),
+        'color.ansi' => $audit_status->getAnsiColor(),
+      ),
+      'message' => $data->getCommitMessage(),
     );
   }
 

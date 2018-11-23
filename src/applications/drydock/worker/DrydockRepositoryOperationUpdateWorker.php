@@ -25,8 +25,6 @@ final class DrydockRepositoryOperationUpdateWorker
 
 
   private function handleUpdate(DrydockRepositoryOperation $operation) {
-    $viewer = $this->getViewer();
-
     $operation_state = $operation->getOperationState();
 
     switch ($operation_state) {
@@ -53,16 +51,17 @@ final class DrydockRepositoryOperationUpdateWorker
     // waiting for a lease we're holding.
 
     try {
-      $operation->getImplementation()
-        ->setViewer($viewer);
-
       $lease = $this->loadWorkingCopyLease($operation);
 
       $interface = $lease->getInterface(
         DrydockCommandInterface::INTERFACE_TYPE);
 
       // No matter what happens here, destroy the lease away once we're done.
-      $lease->releaseOnDestruction(true);
+      $lease->setReleaseOnDestruction(true);
+
+      $operation->attachWorkingCopyLease($lease);
+
+      $operation->logEvent(DrydockOperationWorkLogType::LOGCONST);
 
       $operation->applyOperation($interface);
 

@@ -109,15 +109,13 @@ final class PhabricatorConduitAPIController
       $error_info = $ex->getMessage();
     }
 
-    $time_end = microtime(true);
-
     $log
       ->setCallerPHID(
         isset($conduit_user)
           ? $conduit_user->getPHID()
           : null)
       ->setError((string)$error_code)
-      ->setDuration(1000000 * ($time_end - $time_start));
+      ->setDuration(phutil_microseconds_since($time_start));
 
     if (!PhabricatorEnv::isReadOnly()) {
       $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
@@ -211,9 +209,14 @@ final class PhabricatorConduitAPIController
         ->withIsActive(true)
         ->executeOne();
       if (!$stored_key) {
+        $key_summary = id(new PhutilUTF8StringTruncator())
+          ->setMaximumBytes(64)
+          ->truncateString($raw_key);
         return array(
           'ERR-INVALID-AUTH',
-          pht('No user or device is associated with that public key.'),
+          pht(
+            'No user or device is associated with the public key "%s".',
+            $key_summary),
         );
       }
 

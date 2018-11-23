@@ -66,11 +66,6 @@ final class DifferentialRevisionCommandeerTransaction
           'been closed. You can only commandeer open revisions.'));
     }
 
-    if ($object->isDraft()) {
-      throw new Exception(
-        pht('You can not commandeer a draft revision.'));
-    }
-
     if ($this->isViewerRevisionAuthor($object, $viewer)) {
       throw new Exception(
         pht(
@@ -90,6 +85,14 @@ final class DifferentialRevisionCommandeerTransaction
       '%s commandeered %s.',
       $this->renderAuthor(),
       $this->renderObject());
+  }
+
+  public function getTransactionTypeForConduit($xaction) {
+    return 'commandeer';
+  }
+
+  public function getFieldValuesForConduit($object, $data) {
+    return array();
   }
 
 }

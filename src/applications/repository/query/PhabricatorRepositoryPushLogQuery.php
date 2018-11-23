@@ -10,6 +10,9 @@ final class PhabricatorRepositoryPushLogQuery
   private $refTypes;
   private $newRefs;
   private $pushEventPHIDs;
+  private $epochMin;
+  private $epochMax;
+  private $blockingHeraldRulePHIDs;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -46,19 +49,23 @@ final class PhabricatorRepositoryPushLogQuery
     return $this;
   }
 
+  public function withEpochBetween($min, $max) {
+    $this->epochMin = $min;
+    $this->epochMax = $max;
+    return $this;
+  }
+
+  public function withBlockingHeraldRulePHIDs(array $phids) {
+    $this->blockingHeraldRulePHIDs = $phids;
+    return $this;
+  }
+
+  public function newResultObject() {
+    return new PhabricatorRepositoryPushLog();
+  }
+
   protected function loadPage() {
-    $table = new PhabricatorRepositoryPushLog();
-    $conn_r = $table->establishConnection('r');
-
-    $data = queryfx_all(
-      $conn_r,
-      'SELECT * FROM %T %Q %Q %Q',
-      $table->getTableName(),
-      $this->buildWhereClause($conn_r),
-      $this->buildOrderClause($conn_r),
-      $this->buildLimitClause($conn_r));
-
-    return $table->loadAllFromArray($data);
+    return $this->loadStandardPage($this->newResultObject());
   }
 
   protected function willFilterPage(array $logs) {
@@ -82,65 +89,111 @@ final class PhabricatorRepositoryPushLogQuery
     return $logs;
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
-    $where = array();
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
-    if ($this->ids) {
+    if ($this->ids !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'id IN (%Ld)',
+        $conn,
+        'log.id IN (%Ld)',
         $this->ids);
     }
 
-    if ($this->phids) {
+    if ($this->phids !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'phid IN (%Ls)',
+        $conn,
+        'log.phid IN (%Ls)',
         $this->phids);
     }
 
-    if ($this->repositoryPHIDs) {
+    if ($this->repositoryPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'repositoryPHID IN (%Ls)',
+        $conn,
+        'log.repositoryPHID IN (%Ls)',
         $this->repositoryPHIDs);
     }
 
-    if ($this->pusherPHIDs) {
+    if ($this->pusherPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'pusherPHID in (%Ls)',
+        $conn,
+        'log.pusherPHID in (%Ls)',
         $this->pusherPHIDs);
     }
 
-    if ($this->pushEventPHIDs) {
+    if ($this->pushEventPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'pushEventPHID in (%Ls)',
+        $conn,
+        'log.pushEventPHID in (%Ls)',
         $this->pushEventPHIDs);
     }
 
-    if ($this->refTypes) {
+    if ($this->refTypes !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'refType IN (%Ls)',
+        $conn,
+        'log.refType IN (%Ls)',
         $this->refTypes);
     }
 
-    if ($this->newRefs) {
+    if ($this->newRefs !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'refNew IN (%Ls)',
+        $conn,
+        'log.refNew IN (%Ls)',
         $this->newRefs);
     }
 
-    $where[] = $this->buildPagingClause($conn_r);
+    if ($this->epochMin !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'log.epoch >= %d',
+        $this->epochMin);
+    }
 
-    return $this->formatWhereClause($where);
+    if ($this->epochMax !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'log.epoch <= %d',
+        $this->epochMax);
+    }
+
+    if ($this->blockingHeraldRulePHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        '(event.rejectCode = %d AND event.rejectDetails IN (%Ls))',
+        PhabricatorRepositoryPushLog::REJECT_HERALD,
+        $this->blockingHeraldRulePHIDs);
+    }
+
+    return $where;
+  }
+
+  protected function buildJoinClauseParts(AphrontDatabaseConnection $conn) {
+    $joins = parent::buildJoinClauseParts($conn);
+
+    if ($this->shouldJoinPushEventTable()) {
+      $joins[] = qsprintf(
+        $conn,
+        'JOIN %T event ON event.phid = log.pushEventPHID',
+        id(new PhabricatorRepositoryPushEvent())->getTableName());
+    }
+
+    return $joins;
+  }
+
+  private function shouldJoinPushEventTable() {
+    if ($this->blockingHeraldRulePHIDs !== null) {
+      return true;
+    }
+
+    return false;
   }
 
   public function getQueryApplicationClass() {
     return 'PhabricatorDiffusionApplication';
   }
+
+  protected function getPrimaryTableAlias() {
+    return 'log';
+  }
+
 
 }

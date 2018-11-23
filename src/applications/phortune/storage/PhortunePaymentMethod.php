@@ -83,7 +83,11 @@ final class PhortunePaymentMethod extends PhortuneDAO
 
   public function getDescription() {
     $provider = $this->buildPaymentProvider();
-    return $provider->getPaymentMethodProviderDescription();
+
+    $expires = $this->getDisplayExpires();
+    $description = $provider->getPaymentMethodProviderDescription();
+
+    return pht("Expires %s \xC2\xB7 %s", $expires, $description);
   }
 
   public function getMetadataValue($key, $default = null) {
@@ -126,6 +130,10 @@ final class PhortunePaymentMethod extends PhortuneDAO
     $month = sprintf('%02d', $month);
     $year = substr($year, -2);
     return $month.'/'.$year;
+  }
+
+  public function isActive() {
+    return ($this->getStatus() === self::STATUS_ACTIVE);
   }
 
 
