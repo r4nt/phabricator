@@ -28,6 +28,17 @@ final class PhabricatorRepositoryWorkingCopyVersion
     ) + parent::getConfiguration();
   }
 
+  public function getWriteProperty($key, $default = null) {
+    // The "writeProperties" don't currently get automatically serialized or
+    // deserialized. Perhaps they should.
+    try {
+      $properties = phutil_json_decode($this->writeProperties);
+      return idx($properties, $key, $default);
+    } catch (Exception $ex) {
+      return null;
+    }
+  }
+
   public static function loadVersions($repository_phid) {
     $version = new self();
     $conn_w = $version->establishConnection('w');
@@ -43,19 +54,42 @@ final class PhabricatorRepositoryWorkingCopyVersion
     return $version->loadAllFromArray($rows);
   }
 
-  public static function getReadLock($repository_phid, $device_phid) {
-    $repository_hash = PhabricatorHash::digestForIndex($repository_phid);
-    $device_hash = PhabricatorHash::digestForIndex($device_phid);
-    $lock_key = "repo.read({$repository_hash}, {$device_hash})";
+  public static function loadWriter($repository_phid) {
+    $version = new self();
+    $conn_w = $version->establishConnection('w');
+    $table = $version->getTableName();
 
-    return PhabricatorGlobalLock::newLock($lock_key);
+    // We're forcing this read to go to the master.
+    $row = queryfx_one(
+      $conn_w,
+      'SELECT * FROM %T WHERE repositoryPHID = %s AND isWriting = 1
+        LIMIT 1',
+      $table,
+      $repository_phid);
+
+    if (!$row) {
+      return null;
+    }
+
+    return $version->loadFromArray($row);
+  }
+
+
+  public static function getReadLock($repository_phid, $device_phid) {
+    $parameters = array(
+      'repositoryPHID' => $repository_phid,
+      'devicePHID' => $device_phid,
+    );
+
+    return PhabricatorGlobalLock::newLock('repo.read', $parameters);
   }
 
   public static function getWriteLock($repository_phid) {
-    $repository_hash = PhabricatorHash::digestForIndex($repository_phid);
-    $lock_key = "repo.write({$repository_hash})";
+    $parameters = array(
+      'repositoryPHID' => $repository_phid,
+    );
 
-    return PhabricatorGlobalLock::newLock($lock_key);
+    return PhabricatorGlobalLock::newLock('repo.write', $parameters);
   }
 
 

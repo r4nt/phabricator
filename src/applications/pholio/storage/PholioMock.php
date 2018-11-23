@@ -25,7 +25,6 @@ final class PholioMock extends PholioDAO
   protected $editPolicy;
 
   protected $name;
-  protected $originalName;
   protected $description;
   protected $coverPHID;
   protected $mailKey;
@@ -59,13 +58,16 @@ final class PholioMock extends PholioDAO
     return 'M'.$this->getID();
   }
 
+  public function getURI() {
+    return '/'.$this->getMonogram();
+  }
+
   protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
         'name' => 'text128',
         'description' => 'text',
-        'originalName' => 'text128',
         'mailKey' => 'bytes20',
         'status' => 'text12',
       ),

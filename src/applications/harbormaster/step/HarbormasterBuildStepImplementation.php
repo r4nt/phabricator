@@ -193,7 +193,7 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
    * @return string String with variables replaced safely into it.
    */
   protected function mergeVariables($function, $pattern, array $variables) {
-    $regexp = '@\\$\\{(?P<name>[a-z\\./-]+)\\}@';
+    $regexp = '@\\$\\{(?P<name>[a-z\\./_-]+)\\}@';
 
     $matches = null;
     preg_match_all($regexp, $pattern, $matches);
@@ -295,6 +295,27 @@ abstract class HarbormasterBuildStepImplementation extends Phobject {
       ->append($body);
   }
 
+  protected function logSilencedCall(
+    HarbormasterBuild $build,
+    HarbormasterBuildTarget $build_target,
+    $label) {
+
+    $build_target
+      ->newLog($label, 'silenced')
+      ->append(
+        pht(
+          'Declining to make service call because `phabricator.silent` is '.
+          'enabled in configuration.'));
+  }
+
+  public function willStartBuild(
+    PhabricatorUser $viewer,
+    HarbormasterBuildable $buildable,
+    HarbormasterBuild $build,
+    HarbormasterBuildPlan $plan,
+    HarbormasterBuildStep $step) {
+    return;
+  }
 
 
 /* -(  Automatic Targets  )-------------------------------------------------- */

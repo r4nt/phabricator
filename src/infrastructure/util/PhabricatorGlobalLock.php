@@ -28,8 +28,11 @@
  */
 final class PhabricatorGlobalLock extends PhutilLock {
 
+  private $parameters;
   private $conn;
   private $isExternalConnection = false;
+  private $log;
+  private $disableLogging;
 
   private static $pool = array();
 
@@ -37,27 +40,42 @@ final class PhabricatorGlobalLock extends PhutilLock {
 /* -(  Constructing Locks  )------------------------------------------------- */
 
 
-  public static function newLock($name) {
+  public static function newLock($name, $parameters = array()) {
     $namespace = PhabricatorLiskDAO::getStorageNamespace();
     $namespace = PhabricatorHash::digestToLength($namespace, 20);
 
-    $full_name = 'ph:'.$namespace.':'.$name;
+    $parts = array();
+    ksort($parameters);
+    foreach ($parameters as $key => $parameter) {
+      if (!preg_match('/^[a-zA-Z0-9]+\z/', $key)) {
+        throw new Exception(
+          pht(
+            'Lock parameter key "%s" must be alphanumeric.',
+            $key));
+      }
 
-    $length_limit = 64;
-    if (strlen($full_name) > $length_limit) {
-      throw new Exception(
-        pht(
-          'Lock name "%s" is too long (full lock name is "%s"). The '.
-          'full lock name must not be longer than %s bytes.',
-          $name,
-          $full_name,
-          new PhutilNumber($length_limit)));
+      if (!is_scalar($parameter) && !is_null($parameter)) {
+        throw new Exception(
+          pht(
+            'Lock parameter for key "%s" must be a scalar.',
+            $key));
+      }
+
+      $value = phutil_json_encode($parameter);
+      $parts[] = "{$key}={$value}";
     }
+    $parts = implode(', ', $parts);
 
+    $local = "{$name}({$parts})";
+    $local = PhabricatorHash::digestToLength($local, 20);
+
+    $full_name = "ph:{$namespace}:{$local}";
     $lock = self::getLock($full_name);
     if (!$lock) {
       $lock = new PhabricatorGlobalLock($full_name);
       self::registerLock($lock);
+
+      $lock->parameters = $parameters;
     }
 
     return $lock;
@@ -76,6 +94,11 @@ final class PhabricatorGlobalLock extends PhutilLock {
   public function useSpecificConnection(AphrontDatabaseConnection $conn) {
     $this->conn = $conn;
     $this->isExternalConnection = true;
+    return $this;
+  }
+
+  public function setDisableLogging($disable) {
+    $this->disableLogging = $disable;
     return $this;
   }
 
@@ -121,12 +144,25 @@ final class PhabricatorGlobalLock extends PhutilLock {
 
     $ok = head($result);
     if (!$ok) {
-      throw new PhutilLockException($lock_name);
+      throw id(new PhutilLockException($lock_name))
+        ->setHint($this->newHint($lock_name, $wait));
     }
 
     $conn->rememberLock($lock_name);
 
     $this->conn = $conn;
+
+    if ($this->shouldLogLock()) {
+      $lock_context = $this->newLockContext();
+
+      $log = id(new PhabricatorDaemonLockLog())
+        ->setLockName($lock_name)
+        ->setLockParameters($this->parameters)
+        ->setLockContext($lock_context)
+        ->save();
+
+      $this->log = $log;
+    }
   }
 
   protected function doUnlock() {
@@ -159,6 +195,181 @@ final class PhabricatorGlobalLock extends PhutilLock {
       $conn->close();
       self::$pool[] = $conn;
     }
+
+    if ($this->log) {
+      $log = $this->log;
+      $this->log = null;
+
+      $conn = $log->establishConnection('w');
+      queryfx(
+        $conn,
+        'UPDATE %T SET lockReleased = UNIX_TIMESTAMP() WHERE id = %d',
+        $log->getTableName(),
+        $log->getID());
+    }
+  }
+
+  private function shouldLogLock() {
+    if ($this->disableLogging) {
+      return false;
+    }
+
+    $policy = id(new PhabricatorDaemonLockLogGarbageCollector())
+      ->getRetentionPolicy();
+    if (!$policy) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private function newLockContext() {
+    $context = array(
+      'pid' => getmypid(),
+      'host' => php_uname('n'),
+      'sapi' => php_sapi_name(),
+    );
+
+    global $argv;
+    if ($argv) {
+      $context['argv'] = $argv;
+    }
+
+    $access_log = null;
+
+    // TODO: There's currently no cohesive way to get the parameterized access
+    // log for the current request across different request types. Web requests
+    // have an "AccessLog", SSH requests have an "SSHLog", and other processes
+    // (like scripts) have no log. But there's no method to say "give me any
+    // log you've got". For now, just test if we have a web request and use the
+    // "AccessLog" if we do, since that's the only one we actually read any
+    // parameters from.
+
+    // NOTE: "PhabricatorStartup" is only available from web requests, not
+    // from CLI scripts.
+    if (class_exists('PhabricatorStartup', false)) {
+      $access_log = PhabricatorAccessLog::getLog();
+    }
+
+    if ($access_log) {
+      $controller = $access_log->getData('C');
+      if ($controller) {
+        $context['controller'] = $controller;
+      }
+
+      $method = $access_log->getData('m');
+      if ($method) {
+        $context['method'] = $method;
+      }
+    }
+
+    return $context;
+  }
+
+  private function newHint($lock_name, $wait) {
+    if (!$this->shouldLogLock()) {
+      return pht(
+        'Enable the lock log for more detailed information about '.
+        'which process is holding this lock.');
+    }
+
+    $now = PhabricatorTime::getNow();
+
+    // First, look for recent logs. If other processes have been acquiring and
+    // releasing this lock while we've been waiting, this is more likely to be
+    // a contention/throughput issue than an issue with something hung while
+    // holding the lock.
+    $limit = 100;
+    $logs = id(new PhabricatorDaemonLockLog())->loadAllWhere(
+      'lockName = %s AND dateCreated >= %d ORDER BY id ASC LIMIT %d',
+      $lock_name,
+      ($now - $wait),
+      $limit);
+
+    if ($logs) {
+      if (count($logs) === $limit) {
+        return pht(
+          'During the last %s second(s) spent waiting for the lock, more '.
+          'than %s other process(es) acquired it, so this is likely a '.
+          'bottleneck. Use "bin/lock log --name %s" to review log activity.',
+          new PhutilNumber($wait),
+          new PhutilNumber($limit),
+          $lock_name);
+      } else {
+        return pht(
+          'During the last %s second(s) spent waiting for the lock, %s '.
+          'other process(es) acquired it, so this is likely a '.
+          'bottleneck. Use "bin/lock log --name %s" to review log activity.',
+          new PhutilNumber($wait),
+          phutil_count($logs),
+          $lock_name);
+      }
+    }
+
+    $last_log = id(new PhabricatorDaemonLockLog())->loadOneWhere(
+      'lockName = %s ORDER BY id DESC LIMIT 1',
+      $lock_name);
+
+    if ($last_log) {
+      $info = array();
+
+      $acquired = $last_log->getDateCreated();
+      $context = $last_log->getLockContext();
+
+      $process_info = array();
+
+      $pid = idx($context, 'pid');
+      if ($pid) {
+        $process_info[] = 'pid='.$pid;
+      }
+
+      $host = idx($context, 'host');
+      if ($host) {
+        $process_info[] = 'host='.$host;
+      }
+
+      $sapi = idx($context, 'sapi');
+      if ($sapi) {
+        $process_info[] = 'sapi='.$sapi;
+      }
+
+      $argv = idx($context, 'argv');
+      if ($argv) {
+        $process_info[] = 'argv='.(string)csprintf('%LR', $argv);
+      }
+
+      $controller = idx($context, 'controller');
+      if ($controller) {
+        $process_info[] = 'controller='.$controller;
+      }
+
+      $method = idx($context, 'method');
+      if ($method) {
+        $process_info[] = 'method='.$method;
+      }
+
+      $process_info = implode(', ', $process_info);
+
+      $info[] = pht(
+        'This lock was most recently acquired by a process (%s) '.
+        '%s second(s) ago.',
+        $process_info,
+        new PhutilNumber($now - $acquired));
+
+      $released = $last_log->getLockReleased();
+      if ($released) {
+        $info[] = pht(
+          'This lock was released %s second(s) ago.',
+          new PhutilNumber($now - $released));
+      } else {
+        $info[] = pht('There is no record of this lock being released.');
+      }
+
+      return implode(' ', $info);
+    }
+
+    return pht(
+      'Found no records of processes acquiring or releasing this lock.');
   }
 
 }

@@ -10,15 +10,20 @@ final class PhrictionDocument extends PhrictionDAO
     PhabricatorFulltextInterface,
     PhabricatorFerretInterface,
     PhabricatorProjectInterface,
-    PhabricatorApplicationTransactionInterface {
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorConduitResultInterface,
+    PhabricatorPolicyCodexInterface,
+    PhabricatorSpacesInterface {
 
   protected $slug;
   protected $depth;
-  protected $contentID;
+  protected $contentPHID;
   protected $status;
-  protected $mailKey;
   protected $viewPolicy;
   protected $editPolicy;
+  protected $spacePHID;
+  protected $editedEpoch;
+  protected $maxVersion;
 
   private $contentObject = self::ATTACHABLE;
   private $ancestors = array();
@@ -30,16 +35,11 @@ final class PhrictionDocument extends PhrictionDAO
       self::CONFIG_COLUMN_SCHEMA => array(
         'slug' => 'sort128',
         'depth' => 'uint32',
-        'contentID' => 'id?',
-        'status' => 'uint32',
-        'mailKey' => 'bytes20',
+        'status' => 'text32',
+        'editedEpoch' => 'epoch',
+        'maxVersion' => 'uint32',
       ),
       self::CONFIG_KEY_SCHEMA => array(
-        'key_phid' => null,
-        'phid' => array(
-          'columns' => array('phid'),
-          'unique' => true,
-        ),
         'slug' => array(
           'columns' => array('slug'),
           'unique' => true,
@@ -52,17 +52,16 @@ final class PhrictionDocument extends PhrictionDAO
     ) + parent::getConfiguration();
   }
 
-  public function generatePHID() {
-    return PhabricatorPHID::generateNewPHID(
-      PhrictionDocumentPHIDType::TYPECONST);
+  public function getPHIDType() {
+    return PhrictionDocumentPHIDType::TYPECONST;
   }
 
   public static function initializeNewDocument(PhabricatorUser $actor, $slug) {
-    $document = new PhrictionDocument();
-    $document->setSlug($slug);
+    $document = id(new self())
+      ->setSlug($slug);
 
-    $content  = new PhrictionContent();
-    $content->setSlug($slug);
+    $content = id(new PhrictionContent())
+      ->setSlug($slug);
 
     $default_title = PhabricatorSlug::getDefaultTitle($slug);
     $content->setTitle($default_title);
@@ -79,22 +78,22 @@ final class PhrictionDocument extends PhrictionDAO
     }
 
     if ($parent_doc) {
-      $document->setViewPolicy($parent_doc->getViewPolicy());
-      $document->setEditPolicy($parent_doc->getEditPolicy());
+      $document
+        ->setViewPolicy($parent_doc->getViewPolicy())
+        ->setEditPolicy($parent_doc->getEditPolicy())
+        ->setSpacePHID($parent_doc->getSpacePHID());
     } else {
       $default_view_policy = PhabricatorPolicies::getMostOpenPolicy();
-      $document->setViewPolicy($default_view_policy);
-      $document->setEditPolicy(PhabricatorPolicies::POLICY_USER);
+      $document
+        ->setViewPolicy($default_view_policy)
+        ->setEditPolicy(PhabricatorPolicies::POLICY_USER)
+        ->setSpacePHID($actor->getDefaultSpacePHID());
     }
+
+    $document->setEditedEpoch(PhabricatorTime::getNow());
+    $document->setMaxVersion(0);
 
     return $document;
-  }
-
-  public function save() {
-    if (!$this->getMailKey()) {
-      $this->setMailKey(Filesystem::readRandomCharacters(20));
-    }
-    return parent::save();
   }
 
   public static function getSlugURI($slug, $type = 'document') {
@@ -148,6 +147,33 @@ final class PhrictionDocument extends PhrictionDAO
     return $this;
   }
 
+  public function getURI() {
+    return self::getSlugURI($this->getSlug());
+  }
+
+/* -(  Status  )------------------------------------------------------------- */
+
+
+  public function getStatusObject() {
+    return PhrictionDocumentStatus::newStatusObject($this->getStatus());
+  }
+
+  public function getStatusIcon() {
+    return $this->getStatusObject()->getIcon();
+  }
+
+  public function getStatusColor() {
+    return $this->getStatusObject()->getColor();
+  }
+
+  public function getStatusDisplayName() {
+    return $this->getStatusObject()->getDisplayName();
+  }
+
+  public function isActive() {
+    return $this->getStatusObject()->isActive();
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -172,21 +198,14 @@ final class PhrictionDocument extends PhrictionDAO
     return false;
   }
 
-  public function describeAutomaticCapability($capability) {
 
-    switch ($capability) {
-      case PhabricatorPolicyCapability::CAN_VIEW:
-        return pht(
-          'To view a wiki document, you must also be able to view all '.
-          'of its parents.');
-      case PhabricatorPolicyCapability::CAN_EDIT:
-        return pht(
-          'To edit a wiki document, you must also be able to view all '.
-          'of its parents.');
-    }
+/* -(  PhabricatorSpacesInterface  )----------------------------------------- */
 
-    return null;
+
+  public function getSpacePHID() {
+    return $this->spacePHID;
   }
+
 
 
 /* -(  PhabricatorSubscribableInterface  )----------------------------------- */
@@ -236,14 +255,15 @@ final class PhrictionDocument extends PhrictionDAO
 
     $this->openTransaction();
 
-      $this->delete();
-
-      $contents = id(new PhrictionContent())->loadAllWhere(
-        'documentID = %d',
-        $this->getID());
+      $contents = id(new PhrictionContentQuery())
+        ->setViewer($engine->getViewer())
+        ->withDocumentPHIDs(array($this->getPHID()))
+        ->execute();
       foreach ($contents as $content) {
-        $content->delete();
+        $engine->destroyObject($content);
       }
+
+      $this->delete();
 
     $this->saveTransaction();
   }
@@ -263,5 +283,49 @@ final class PhrictionDocument extends PhrictionDAO
   public function newFerretEngine() {
     return new PhrictionDocumentFerretEngine();
   }
+
+
+/* -(  PhabricatorConduitResultInterface  )---------------------------------- */
+
+
+  public function getFieldSpecificationsForConduit() {
+    return array(
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('path')
+        ->setType('string')
+        ->setDescription(pht('The path to the document.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('status')
+        ->setType('map<string, wild>')
+        ->setDescription(pht('Status information about the document.')),
+    );
+  }
+
+  public function getFieldValuesForConduit() {
+    $status = array(
+      'value' => $this->getStatus(),
+      'name' => $this->getStatusDisplayName(),
+    );
+
+    return array(
+      'path' => $this->getSlug(),
+      'status' => $status,
+    );
+  }
+
+  public function getConduitSearchAttachments() {
+    return array(
+      id(new PhrictionContentSearchEngineAttachment())
+        ->setAttachmentKey('content'),
+    );
+  }
+
+/* -(  PhabricatorPolicyCodexInterface  )------------------------------------ */
+
+
+  public function newPolicyCodex() {
+    return new PhrictionDocumentPolicyCodex();
+  }
+
 
 }

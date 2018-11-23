@@ -29,6 +29,8 @@ final class PHUITimelineEventView extends AphrontView {
   private $authorPHID;
   private $badges = array();
   private $pinboardItems = array();
+  private $isSilent;
+  private $isMFA;
 
   public function setAuthorPHID($author_phid) {
     $this->authorPHID = $author_phid;
@@ -177,6 +179,24 @@ final class PHUITimelineEventView extends AphrontView {
     return $this;
   }
 
+  public function setIsSilent($is_silent) {
+    $this->isSilent = $is_silent;
+    return $this;
+  }
+
+  public function getIsSilent() {
+    return $this->isSilent;
+  }
+
+  public function setIsMFA($is_mfa) {
+    $this->isMFA = $is_mfa;
+    return $this;
+  }
+
+  public function getIsMFA() {
+    return $this->isMFA;
+  }
+
   public function setReallyMajorEvent($me) {
     $this->reallyMajorEvent = $me;
     return $this;
@@ -291,18 +311,14 @@ final class PHUITimelineEventView extends AphrontView {
 
     $menu = null;
     $items = array();
-    $has_menu = false;
     if (!$this->getIsPreview() && !$this->getHideCommentOptions()) {
       foreach ($this->getEventGroup() as $event) {
         $items[] = $event->getMenuItems($this->anchor);
-        if ($event->hasChildren()) {
-          $has_menu = true;
-        }
       }
       $items = array_mergev($items);
     }
 
-    if ($items || $has_menu) {
+    if ($items) {
       $icon = id(new PHUIIconView())
         ->setIcon('fa-caret-down');
       $aural = javelin_tag(
@@ -341,6 +357,8 @@ final class PHUITimelineEventView extends AphrontView {
         ));
 
       $has_menu = true;
+    } else {
+      $has_menu = false;
     }
 
     // Render "extra" information (timestamp, etc).
@@ -384,7 +402,7 @@ final class PHUITimelineEventView extends AphrontView {
     $wedge = phutil_tag(
       'div',
       array(
-        'class' => 'phui-timeline-wedge phui-timeline-border',
+        'class' => 'phui-timeline-wedge',
         'style' => (nonempty($image_uri)) ? '' : 'display: none;',
       ),
       '');
@@ -396,7 +414,7 @@ final class PHUITimelineEventView extends AphrontView {
         ($this->userHandle->getURI()) ? 'a' : 'div',
         array(
           'style' => 'background-image: url('.$image_uri.')',
-          'class' => 'phui-timeline-image',
+          'class' => 'phui-timeline-image visual-only',
           'href' => $this->userHandle->getURI(),
         ),
         '');
@@ -443,7 +461,7 @@ final class PHUITimelineEventView extends AphrontView {
     $content = phutil_tag(
       'div',
       array(
-        'class' => 'phui-timeline-group phui-timeline-border',
+        'class' => 'phui-timeline-group',
       ),
       $content);
 
@@ -573,6 +591,22 @@ final class PHUITimelineEventView extends AphrontView {
           );
         }
         $extra[] = $date;
+      }
+
+      // If this edit was applied silently, give user a hint that they should
+      // not expect to have received any mail or notifications.
+      if ($this->getIsSilent()) {
+        $extra[] = id(new PHUIIconView())
+          ->setIcon('fa-bell-slash', 'red')
+          ->setTooltip(pht('Silent Edit'));
+      }
+
+      // If this edit was applied while the actor was in high-security mode,
+      // provide a hint that it was extra authentic.
+      if ($this->getIsMFA()) {
+        $extra[] = id(new PHUIIconView())
+          ->setIcon('fa-vcard', 'green')
+          ->setTooltip(pht('MFA Authenticated'));
       }
     }
 

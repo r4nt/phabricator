@@ -29,6 +29,11 @@ final class PHUIObjectItemView extends AphrontTagView {
   private $coverImage;
   private $description;
 
+  private $selectableName;
+  private $selectableValue;
+  private $isSelected;
+  private $isForbidden;
+
   public function setDisabled($disabled) {
     $this->disabled = $disabled;
     return $this;
@@ -160,6 +165,20 @@ final class PHUIObjectItemView extends AphrontTagView {
     return $this;
   }
 
+  public function setSelectable(
+    $name,
+    $value,
+    $is_selected,
+    $is_forbidden = false) {
+
+    $this->selectableName = $name;
+    $this->selectableValue = $value;
+    $this->isSelected = $is_selected;
+    $this->isForbidden = $is_forbidden;
+
+    return $this;
+  }
+
   public function setEpoch($epoch) {
     $date = phabricator_datetime($epoch, $this->getUser());
     $this->addIcon('none', $date);
@@ -239,6 +258,8 @@ final class PHUIObjectItemView extends AphrontTagView {
   }
 
   protected function getTagAttributes() {
+    $sigils = array();
+
     $item_classes = array();
     $item_classes[] = 'phui-oi';
 
@@ -286,6 +307,19 @@ final class PHUIObjectItemView extends AphrontTagView {
         throw new Exception(pht('Invalid effect!'));
     }
 
+    if ($this->isForbidden) {
+      $item_classes[] = 'phui-oi-forbidden';
+    } else if ($this->isSelected) {
+      $item_classes[] = 'phui-oi-selected';
+    }
+
+    if ($this->selectableName !== null && !$this->isForbidden) {
+      $item_classes[] = 'phui-oi-selectable';
+      $sigils[] = 'phui-oi-selectable';
+
+      Javelin::initBehavior('phui-selectable-list');
+    }
+
     if ($this->getGrippable()) {
       $item_classes[] = 'phui-oi-grippable';
     }
@@ -300,6 +334,7 @@ final class PHUIObjectItemView extends AphrontTagView {
 
     return array(
       'class' => $item_classes,
+      'sigil' => $sigils,
     );
   }
 
@@ -628,6 +663,28 @@ final class PHUIObjectItemView extends AphrontTagView {
         $countdown);
     }
 
+    if ($this->selectableName !== null) {
+      if (!$this->isForbidden) {
+        $checkbox = phutil_tag(
+          'input',
+          array(
+            'type' => 'checkbox',
+            'name' => $this->selectableName,
+            'value' => $this->selectableValue,
+            'checked' => ($this->isSelected ? 'checked' : null),
+          ));
+      } else {
+        $checkbox = null;
+      }
+
+      $column0 = phutil_tag(
+        'div',
+        array(
+          'class' => 'phui-oi-col0 phui-oi-checkbox',
+        ),
+        $checkbox);
+    }
+
     $column1 = phutil_tag(
       'div',
       array(
@@ -652,8 +709,9 @@ final class PHUIObjectItemView extends AphrontTagView {
     }
 
     /* Fixed width, right column container. */
+    $column3 = null;
     if ($this->sideColumn) {
-      $column2 = phutil_tag(
+      $column3 = phutil_tag(
         'div',
         array(
           'class' => 'phui-oi-col2 phui-oi-side-column',
@@ -674,6 +732,7 @@ final class PHUIObjectItemView extends AphrontTagView {
           $column0,
           $column1,
           $column2,
+          $column3,
         )));
 
     $box = phutil_tag(

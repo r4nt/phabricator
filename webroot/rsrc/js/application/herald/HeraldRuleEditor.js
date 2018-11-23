@@ -217,6 +217,11 @@ JX.install('HeraldRuleEditor', {
           get_fn = function() { return input.value; };
           set_fn = function(v) { input.value = v; };
           break;
+        case 'herald.control.remarkup':
+          input = JX.$N('textarea');
+          get_fn = function() { return input.value; };
+          set_fn = function(v) { input.value = v; };
+          break;
         case 'herald.control.select':
           var options;
 
@@ -278,7 +283,8 @@ JX.install('HeraldRuleEditor', {
       var tokenizerConfig = {
         src: spec.datasourceURI,
         placeholder: spec.placeholder,
-        browseURI: spec.browseURI
+        browseURI: spec.browseURI,
+        limit: spec.limit
       };
 
       var build = JX.Prefab.newTokenizerFromTemplate(

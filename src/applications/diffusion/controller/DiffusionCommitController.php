@@ -39,20 +39,24 @@ final class DiffusionCommitController extends DiffusionController {
       return $this->buildRawDiffResponse($drequest);
     }
 
-    $commit = id(new DiffusionCommitQuery())
+    $commits = id(new DiffusionCommitQuery())
       ->setViewer($viewer)
       ->withRepository($repository)
       ->withIdentifiers(array($commit_identifier))
       ->needCommitData(true)
       ->needAuditRequests(true)
-      ->executeOne();
+      ->setLimit(100)
+      ->needIdentities(true)
+      ->execute();
+
+    $multiple_results = count($commits) > 1;
 
     $crumbs = $this->buildCrumbs(array(
-      'commit' => true,
+      'commit' => !$multiple_results,
     ));
     $crumbs->setBorder(true);
 
-    if (!$commit) {
+    if (!$commits) {
       if (!$this->getCommitExists()) {
         return new Aphront404Response();
       }
@@ -70,7 +74,40 @@ final class DiffusionCommitController extends DiffusionController {
         ->setTitle($title)
         ->setCrumbs($crumbs)
         ->appendChild($error);
+    } else if ($multiple_results) {
 
+      $warning_message =
+        pht(
+          'The identifier %s is ambiguous and matches more than one commit.',
+          phutil_tag(
+            'strong',
+            array(),
+            $commit_identifier));
+
+      $error = id(new PHUIInfoView())
+        ->setTitle(pht('Ambiguous Commit'))
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->appendChild($warning_message);
+
+      $list = id(new DiffusionCommitListView())
+        ->setViewer($viewer)
+        ->setCommits($commits)
+        ->setNoDataString(pht('No recent commits.'));
+
+      $crumbs->addTextCrumb(pht('Ambiguous Commit'));
+
+      $matched_commits = id(new PHUITwoColumnView())
+        ->setFooter(array(
+          $error,
+          $list,
+        ));
+
+      return $this->newPage()
+        ->setTitle(pht('Ambiguous Commit'))
+        ->setCrumbs($crumbs)
+        ->appendChild($matched_commits);
+    } else {
+      $commit = head($commits);
     }
 
     $audit_requests = $commit->getAudits();
@@ -134,13 +171,12 @@ final class DiffusionCommitController extends DiffusionController {
         ->setHeaderIcon('fa-code-fork')
         ->addTag($commit_tag);
 
-      if ($commit->getAuditStatus()) {
-        $icon = PhabricatorAuditCommitStatusConstants::getStatusIcon(
-          $commit->getAuditStatus());
-        $color = PhabricatorAuditCommitStatusConstants::getStatusColor(
-          $commit->getAuditStatus());
-        $status = PhabricatorAuditCommitStatusConstants::getStatusName(
-          $commit->getAuditStatus());
+      if (!$commit->isAuditStatusNoAudit()) {
+        $status = $commit->getAuditStatusObject();
+
+        $icon = $status->getIcon();
+        $color = $status->getColor();
+        $status = $status->getName();
 
         $header->setStatus($icon, $color, $status);
       }
@@ -241,9 +277,9 @@ final class DiffusionCommitController extends DiffusionController {
           'This commit is empty and does not affect any paths.'));
     } else if ($was_limited) {
       $info_panel = $this->renderStatusMessage(
-        pht('Enormous Commit'),
+        pht('Very Large Commit'),
         pht(
-          'This commit is enormous, and affects more than %d files. '.
+          'This commit is very large, and affects more than %d files. '.
           'Changes are not shown.',
           $hard_limit));
     } else if (!$this->getCommitExists()) {
@@ -379,17 +415,21 @@ final class DiffusionCommitController extends DiffusionController {
       PhabricatorShowFiletreeSetting::SETTINGKEY,
       PhabricatorShowFiletreeSetting::VALUE_ENABLE_FILETREE);
 
-    $pref_collapse = PhabricatorFiletreeVisibleSetting::SETTINGKEY;
-    $collapsed = $viewer->getUserSetting($pref_collapse);
-
     $nav = null;
     if ($show_changesets && $filetree_on) {
+      $pref_collapse = PhabricatorFiletreeVisibleSetting::SETTINGKEY;
+      $collapsed = $viewer->getUserSetting($pref_collapse);
+
+      $pref_width = PhabricatorFiletreeWidthSetting::SETTINGKEY;
+      $width = $viewer->getUserSetting($pref_width);
+
       $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
         ->setTitle($commit->getDisplayName())
         ->setBaseURI(new PhutilURI($commit->getURI()))
         ->build($changesets)
         ->setCrumbs($crumbs)
-        ->setCollapsed((bool)$collapsed);
+        ->setCollapsed((bool)$collapsed)
+        ->setWidth((int)$width);
     }
 
     $view = id(new PHUITwoColumnView())
@@ -464,15 +504,13 @@ final class DiffusionCommitController extends DiffusionController {
 
     $phids = $edge_query->getDestinationPHIDs(array($commit_phid));
 
-    if ($data->getCommitDetail('authorPHID')) {
-      $phids[] = $data->getCommitDetail('authorPHID');
-    }
+
     if ($data->getCommitDetail('reviewerPHID')) {
       $phids[] = $data->getCommitDetail('reviewerPHID');
     }
-    if ($data->getCommitDetail('committerPHID')) {
-      $phids[] = $data->getCommitDetail('committerPHID');
-    }
+
+    $phids[] = $commit->getCommitterDisplayPHID();
+    $phids[] = $commit->getAuthorDisplayPHID();
 
     // NOTE: We should never normally have more than a single push log, but
     // it can occur naturally if a commit is pushed, then the branch it was
@@ -533,24 +571,11 @@ final class DiffusionCommitController extends DiffusionController {
       }
     }
 
-    $author_phid = $data->getCommitDetail('authorPHID');
-    $author_name = $data->getAuthorName();
     $author_epoch = $data->getCommitDetail('authorEpoch');
 
     $committed_info = id(new PHUIStatusItemView())
-      ->setNote(phabricator_datetime($commit->getEpoch(), $viewer));
-
-    $committer_phid = $data->getCommitDetail('committerPHID');
-    $committer_name = $data->getCommitDetail('committer');
-    if ($committer_phid) {
-      $committed_info->setTarget($handles[$committer_phid]->renderLink());
-    } else if (strlen($committer_name)) {
-      $committed_info->setTarget($committer_name);
-    } else if ($author_phid) {
-      $committed_info->setTarget($handles[$author_phid]->renderLink());
-    } else if (strlen($author_name)) {
-      $committed_info->setTarget($author_name);
-    }
+      ->setNote(phabricator_datetime($commit->getEpoch(), $viewer))
+      ->setTarget($commit->renderAnyCommitter($viewer, $handles));
 
     $committed_list = new PHUIStatusListView();
     $committed_list->addItem($committed_info);
@@ -676,7 +701,7 @@ final class DiffusionCommitController extends DiffusionController {
       return null;
     }
 
-    $author_phid = $data->getCommitDetail('authorPHID');
+    $author_phid = $commit->getAuthorDisplayPHID();
     $author_name = $data->getAuthorName();
     $author_epoch = $data->getCommitDetail('authorEpoch');
     $date = null;
@@ -708,9 +733,7 @@ final class DiffusionCommitController extends DiffusionController {
       ->setImage($image_uri)
       ->setImageHref($image_href)
       ->setContent($content);
-
   }
-
 
   private function buildComments(PhabricatorRepositoryCommit $commit) {
     $timeline = $this->buildTransactionTimeline(

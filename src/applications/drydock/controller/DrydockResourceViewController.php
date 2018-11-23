@@ -24,10 +24,19 @@ final class DrydockResourceViewController extends DrydockResourceController {
       ->setUser($viewer)
       ->setPolicyObject($resource)
       ->setHeader($title)
-      ->setHeaderIcon('fa-map');
+      ->setHeaderIcon('fa-map')
+      ->setStatus(
+        $resource->getStatusIcon(),
+        $resource->getStatusColor(),
+        $resource->getStatusDisplayName());
 
     if ($resource->isReleasing()) {
-      $header->setStatus('fa-exclamation-triangle', 'red', pht('Releasing'));
+      $header->addTag(
+        id(new PHUITagView())
+          ->setType(PHUITagView::TYPE_SHADE)
+          ->setIcon('fa-exclamation-triangle')
+          ->setColor('red')
+          ->setName('Releasing'));
     }
 
     $curtain = $this->buildCurtain($resource);
@@ -39,8 +48,11 @@ final class DrydockResourceViewController extends DrydockResourceController {
     $log_query = id(new DrydockLogQuery())
       ->withResourcePHIDs(array($resource->getPHID()));
 
-    $log_box = $this->buildLogBox(
-      $log_query,
+    $log_table = $this->buildLogTable($log_query)
+      ->setHideResources(true);
+
+    $logs = $this->buildLogBox(
+      $log_table,
       $this->getApplicationURI("resource/{$id}/logs/query/all/"));
 
     $crumbs = $this->buildApplicationCrumbs();
@@ -77,11 +89,12 @@ final class DrydockResourceViewController extends DrydockResourceController {
     $view = id(new PHUITwoColumnView())
       ->setHeader($header)
       ->setCurtain($curtain)
-      ->setMainColumn(array(
-        $object_box,
-        $lease_box,
-        $log_box,
-      ));
+      ->setMainColumn(
+        array(
+          $object_box,
+          $lease_box,
+          $logs,
+        ));
 
     return $this->newPage()
       ->setTitle($title)
@@ -127,12 +140,6 @@ final class DrydockResourceViewController extends DrydockResourceController {
     $viewer = $this->getViewer();
 
     $view = new PHUIPropertyListView();
-    $status = $resource->getStatus();
-    $status = DrydockResourceStatus::getNameForStatus($status);
-
-    $view->addProperty(
-      pht('Status'),
-      $status);
 
     $until = $resource->getUntil();
     if ($until) {

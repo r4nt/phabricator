@@ -72,6 +72,11 @@ EOTEXT
     HarbormasterBuildTarget $build_target) {
     $viewer = PhabricatorUser::getOmnipotentUser();
 
+    if (PhabricatorEnv::getEnvConfig('phabricator.silent')) {
+      $this->logSilencedCall($build, $build_target, pht('Buildkite'));
+      throw new HarbormasterBuildFailureException();
+    }
+
     $buildable = $build->getBuildable();
 
     $object = $buildable->getBuildableObject();
@@ -101,8 +106,30 @@ EOTEXT
       ),
       'meta_data' => array(
         'buildTargetPHID' => $build_target->getPHID(),
+
+        // See PHI611. These are undocumented secret magic.
+        'phabricator:build:id' => (int)$build->getID(),
+        'phabricator:build:url' =>
+          PhabricatorEnv::getProductionURI($build->getURI()),
+        'phabricator:buildable:id' => (int)$buildable->getID(),
+        'phabricator:buildable:url' =>
+          PhabricatorEnv::getProductionURI($buildable->getURI()),
       ),
     );
+
+    $engine = HarbormasterBuildableEngine::newForObject(
+      $object,
+      $viewer);
+
+    $author_identity = $engine->getAuthorIdentity();
+    if ($author_identity) {
+      $data_structure += array(
+        'author' => array(
+          'name' => $author_identity->getIdentityDisplayName(),
+          'email' => $author_identity->getIdentityEmailAddress(),
+        ),
+      );
+    }
 
     $json_data = phutil_json_encode($data_structure);
 

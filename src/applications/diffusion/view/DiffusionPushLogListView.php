@@ -14,6 +14,8 @@ final class DiffusionPushLogListView extends AphrontView {
     $logs = $this->logs;
     $viewer = $this->getViewer();
 
+    $reject_herald = PhabricatorRepositoryPushLog::REJECT_HERALD;
+
     $handle_phids = array();
     foreach ($logs as $log) {
       $handle_phids[] = $log->getPusherPHID();
@@ -21,35 +23,30 @@ final class DiffusionPushLogListView extends AphrontView {
       if ($device_phid) {
         $handle_phids[] = $device_phid;
       }
+
+      if ($log->getPushEvent()->getRejectCode() == $reject_herald) {
+        $handle_phids[] = $log->getPushEvent()->getRejectDetails();
+      }
     }
 
-    $handles = $viewer->loadHandles($handle_phids);
+    $viewer->loadHandles($handle_phids);
 
-    // Figure out which repositories are editable. We only let you see remote
-    // IPs if you have edit capability on a repository.
-    $editable_repos = array();
-    if ($logs) {
-      $editable_repos = id(new PhabricatorRepositoryQuery())
-        ->setViewer($viewer)
-        ->requireCapabilities(
-          array(
-            PhabricatorPolicyCapability::CAN_VIEW,
-            PhabricatorPolicyCapability::CAN_EDIT,
-          ))
-        ->withPHIDs(mpull($logs, 'getRepositoryPHID'))
-        ->execute();
-      $editable_repos = mpull($editable_repos, null, 'getPHID');
-    }
+    // Only administrators can view remote addresses.
+    $remotes_visible = $viewer->getIsAdmin();
+
+    $flag_map = PhabricatorRepositoryPushLog::getFlagDisplayNames();
+    $reject_map = PhabricatorRepositoryPushLog::getRejectCodeDisplayNames();
 
     $rows = array();
     $any_host = false;
     foreach ($logs as $log) {
       $repository = $log->getRepository();
+      $event = $log->getPushEvent();
 
-      // Reveal this if it's valid and the user can edit the repository.
-      $remote_address = '-';
-      if (isset($editable_repos[$log->getRepositoryPHID()])) {
-        $remote_address = $log->getPushEvent()->getRemoteAddress();
+      if ($remotes_visible) {
+        $remote_address = $event->getRemoteAddress();
+      } else {
+        $remote_address = null;
       }
 
       $event_id = $log->getPushEvent()->getID();
@@ -72,6 +69,35 @@ final class DiffusionPushLogListView extends AphrontView {
         $device = null;
       }
 
+      $flags = $log->getChangeFlags();
+      $flag_names = array();
+      foreach ($flag_map as $flag_key => $flag_name) {
+        if (($flags & $flag_key) === $flag_key) {
+          $flag_names[] = $flag_name;
+        }
+      }
+      $flag_names = phutil_implode_html(
+        phutil_tag('br'),
+        $flag_names);
+
+      $reject_code = $event->getRejectCode();
+
+      if ($reject_code == $reject_herald) {
+        $rule_phid = $event->getRejectDetails();
+        $handle = $viewer->renderHandle($rule_phid);
+        $reject_label = pht('Blocked: %s', $handle);
+      } else {
+        $reject_label = idx(
+          $reject_map,
+          $reject_code,
+          pht('Unknown ("%s")', $reject_code));
+      }
+
+      $host_wait = $this->formatMicroseconds($event->getHostWait());
+      $write_wait = $this->formatMicroseconds($event->getWriteWait());
+      $read_wait = $this->formatMicroseconds($event->getReadWait());
+      $hook_wait = $this->formatMicroseconds($event->getHookWait());
+
       $rows[] = array(
         phutil_tag(
           'a',
@@ -87,7 +113,7 @@ final class DiffusionPushLogListView extends AphrontView {
           $repository->getDisplayName()),
         $viewer->renderHandle($log->getPusherPHID()),
         $remote_address,
-        $log->getPushEvent()->getRemoteProtocol(),
+        $event->getRemoteProtocol(),
         $device,
         $log->getRefType(),
         $log->getRefName(),
@@ -98,11 +124,13 @@ final class DiffusionPushLogListView extends AphrontView {
             'href' => $repository->getCommitURI($log->getRefNew()),
           ),
           $log->getRefNewShort()),
-
-        // TODO: Make these human-readable.
-        $log->getChangeFlags(),
-        $log->getPushEvent()->getRejectCode(),
+        $flag_names,
+        $reject_label,
         $viewer->formatShortDateTime($log->getEpoch()),
+        $host_wait,
+        $write_wait,
+        $read_wait,
+        $hook_wait,
       );
     }
 
@@ -120,8 +148,12 @@ final class DiffusionPushLogListView extends AphrontView {
           pht('Old'),
           pht('New'),
           pht('Flags'),
-          pht('Code'),
+          pht('Result'),
           pht('Date'),
+          pht('Host Wait'),
+          pht('Write Wait'),
+          pht('Read Wait'),
+          pht('Hook Wait'),
         ))
       ->setColumnClasses(
         array(
@@ -135,19 +167,33 @@ final class DiffusionPushLogListView extends AphrontView {
           'wide',
           'n',
           'n',
+          '',
+          '',
           'right',
+          'n right',
+          'n right',
+          'n right',
+          'n right',
         ))
       ->setColumnVisibility(
         array(
           true,
           true,
           true,
-          true,
+          $remotes_visible,
           true,
           $any_host,
         ));
 
     return $table;
+  }
+
+  private function formatMicroseconds($duration) {
+    if ($duration === null) {
+      return null;
+    }
+
+    return pht('%sus', new PhutilNumber($duration));
   }
 
 }

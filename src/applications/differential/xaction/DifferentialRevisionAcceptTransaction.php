@@ -7,7 +7,7 @@ final class DifferentialRevisionAcceptTransaction
   const ACTIONKEY = 'accept';
 
   protected function getRevisionActionLabel() {
-    return pht("Accept Revision \xE2\x9C\x94");
+    return pht('Accept Revision');
   }
 
   protected function getRevisionActionDescription(
@@ -162,7 +162,7 @@ final class DifferentialRevisionAcceptTransaction
           'closed. Only open revisions can be accepted.'));
     }
 
-    if ($object->isDraft()) {
+    if ($object->isDraft() || !$object->getShouldBroadcast()) {
       throw new Exception(
         pht('You can not accept a draft revision.'));
     }
@@ -232,6 +232,14 @@ final class DifferentialRevisionAcceptTransaction
       '%s accepted %s.',
       $this->renderAuthor(),
       $this->renderObject());
+  }
+
+  public function getTransactionTypeForConduit($xaction) {
+    return 'accept';
+  }
+
+  public function getFieldValuesForConduit($object, $data) {
+    return array();
   }
 
 }

@@ -37,7 +37,9 @@ final class DifferentialRevisionRequestReviewTransaction
 
   public function applyInternalEffects($object, $value) {
     $status_review = DifferentialRevisionStatus::NEEDS_REVIEW;
-    $object->setModernRevisionStatus($status_review);
+    $object
+      ->setModernRevisionStatus($status_review)
+      ->setShouldBroadcast(true);
   }
 
   protected function validateAction($object, PhabricatorUser $viewer) {
@@ -57,11 +59,15 @@ final class DifferentialRevisionRequestReviewTransaction
           'revisions.'));
     }
 
-    if (!$this->isViewerRevisionAuthor($object, $viewer)) {
-      throw new Exception(
-        pht(
-          'You can not request review of this revision because you are not '.
-          'the author of the revision.'));
+    // When revisions automatically promote out of "Draft" after builds finish,
+    // the viewer may be acting as the Harbormaster application.
+    if (!$viewer->isOmnipotent()) {
+      if (!$this->isViewerRevisionAuthor($object, $viewer)) {
+        throw new Exception(
+          pht(
+            'You can not request review of this revision because you are not '.
+            'the author of the revision.'));
+      }
     }
   }
 
@@ -76,6 +82,14 @@ final class DifferentialRevisionRequestReviewTransaction
       '%s requested review of %s.',
       $this->renderAuthor(),
       $this->renderObject());
+  }
+
+  public function getTransactionTypeForConduit($xaction) {
+    return 'request-review';
+  }
+
+  public function getFieldValuesForConduit($object, $data) {
+    return array();
   }
 
 }

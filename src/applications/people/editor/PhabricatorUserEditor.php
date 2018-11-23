@@ -132,33 +132,6 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
   /**
    * @task edit
    */
-  public function changePassword(
-    PhabricatorUser $user,
-    PhutilOpaqueEnvelope $envelope) {
-
-    if (!$user->getID()) {
-      throw new Exception(pht('User has not been created yet!'));
-    }
-
-    $user->openTransaction();
-      $user->reload();
-
-      $user->setPassword($envelope);
-      $user->save();
-
-      $log = PhabricatorUserLog::initializeNewLog(
-        $this->requireActor(),
-        $user->getPHID(),
-        PhabricatorUserLog::ACTION_CHANGE_PASSWORD);
-      $log->save();
-
-    $user->saveTransaction();
-  }
-
-
-  /**
-   * @task edit
-   */
   public function changeUsername(PhabricatorUser $user, $username) {
     $actor = $this->requireActor();
 
@@ -323,45 +296,6 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
   /**
    * @task role
    */
-  public function disableUser(PhabricatorUser $user, $disable) {
-    $actor = $this->requireActor();
-
-    if (!$user->getID()) {
-      throw new Exception(pht('User has not been created yet!'));
-    }
-
-    $user->openTransaction();
-      $user->beginWriteLocking();
-
-        $user->reload();
-        if ($user->getIsDisabled() == $disable) {
-          $user->endWriteLocking();
-          $user->killTransaction();
-          return $this;
-        }
-
-        $log = PhabricatorUserLog::initializeNewLog(
-          $actor,
-          $user->getPHID(),
-          PhabricatorUserLog::ACTION_DISABLE);
-        $log->setOldValue($user->getIsDisabled());
-        $log->setNewValue($disable);
-
-        $user->setIsDisabled((int)$disable);
-        $user->save();
-
-        $log->save();
-
-      $user->endWriteLocking();
-    $user->saveTransaction();
-
-    return $this;
-  }
-
-
-  /**
-   * @task role
-   */
   public function approveUser(PhabricatorUser $user, $approve) {
     $actor = $this->requireActor();
 
@@ -446,6 +380,12 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
 
       $user->endWriteLocking();
     $user->saveTransaction();
+
+    // Try and match this new address against unclaimed `RepositoryIdentity`s
+    PhabricatorWorker::scheduleTask(
+      'PhabricatorRepositoryIdentityChangeWorker',
+      array('userPHID' => $user->getPHID()),
+      array('objectPHID' => $user->getPHID()));
 
     return $this;
   }

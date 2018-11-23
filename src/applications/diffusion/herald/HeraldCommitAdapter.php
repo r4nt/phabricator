@@ -135,13 +135,16 @@ final class HeraldCommitAdapter
   }
 
   public function loadAffectedPaths() {
+    $viewer = $this->getViewer();
+
     if ($this->affectedPaths === null) {
       $result = PhabricatorOwnerPathQuery::loadAffectedPaths(
         $this->getRepository(),
         $this->commit,
-        PhabricatorUser::getOmnipotentUser());
+        $viewer);
       $this->affectedPaths = $result;
     }
+
     return $this->affectedPaths;
   }
 
@@ -172,6 +175,8 @@ final class HeraldCommitAdapter
   }
 
   public function loadDifferentialRevision() {
+    $viewer = $this->getViewer();
+
     if ($this->affectedRevision === null) {
       $this->affectedRevision = false;
 
@@ -189,7 +194,7 @@ final class HeraldCommitAdapter
 
         $revision = id(new DifferentialRevisionQuery())
           ->withIDs(array($revision_id))
-          ->setViewer(PhabricatorUser::getOmnipotentUser())
+          ->setViewer($viewer)
           ->needReviewers(true)
           ->executeOne();
         if ($revision) {
@@ -197,11 +202,12 @@ final class HeraldCommitAdapter
         }
       }
     }
+
     return $this->affectedRevision;
   }
 
   public static function getEnormousByteLimit() {
-    return 1024 * 1024 * 1024; // 1GB
+    return 256 * 1024 * 1024; // 256MB. See T13142 and T13143.
   }
 
   public static function getEnormousTimeLimit() {
@@ -209,7 +215,7 @@ final class HeraldCommitAdapter
   }
 
   private function loadCommitDiff() {
-    $viewer = PhabricatorUser::getOmnipotentUser();
+    $viewer = $this->getViewer();
 
     $byte_limit = self::getEnormousByteLimit();
     $time_limit = self::getEnormousTimeLimit();
@@ -323,7 +329,7 @@ final class HeraldCommitAdapter
   }
 
   private function callConduit($method, array $params) {
-    $viewer = PhabricatorUser::getOmnipotentUser();
+    $viewer = $this->getViewer();
 
     $drequest = DiffusionRequest::newFromDictionary(
       array(

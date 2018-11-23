@@ -1,6 +1,7 @@
 <?php
 
-final class PhabricatorDifferentialApplication extends PhabricatorApplication {
+final class PhabricatorDifferentialApplication
+  extends PhabricatorApplication {
 
   public function getBaseURI() {
     return '/differential/';
@@ -8,10 +9,6 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
 
   public function getName() {
     return pht('Differential');
-  }
-
-  public function getMenuName() {
-    return pht('Code Review');
   }
 
   public function getShortDescription() {
@@ -35,12 +32,6 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
     );
   }
 
-  public function getFactObjectsForAnalysis() {
-    return array(
-      new DifferentialRevision(),
-    );
-  }
-
   public function getTitleGlyph() {
     return "\xE2\x9A\x99";
   }
@@ -53,12 +44,20 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
 
   public function getRoutes() {
     return array(
-      '/D(?P<id>[1-9]\d*)' => 'DifferentialRevisionViewController',
+      '/D(?P<id>[1-9]\d*)' => array(
+        '' => 'DifferentialRevisionViewController',
+        '/(?P<filter>new)/' => 'DifferentialRevisionViewController',
+      ),
       '/differential/' => array(
-        '(?:query/(?P<queryKey>[^/]+)/)?'
-          => 'DifferentialRevisionListController',
+        $this->getQueryRoutePattern() => 'DifferentialRevisionListController',
         'diff/' => array(
-          '(?P<id>[1-9]\d*)/' => 'DifferentialDiffViewController',
+          '(?P<id>[1-9]\d*)/' => array(
+            '' => 'DifferentialDiffViewController',
+            'changesets/' => array(
+              $this->getQueryRoutePattern()
+                => 'DifferentialChangesetListController',
+            ),
+          ),
           'create/' => 'DifferentialDiffCreateController',
         ),
         'changeset/' => 'DifferentialChangesetViewController',

@@ -43,6 +43,27 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
   private function handleUpdate(DrydockLease $lease) {
     try {
       $this->updateLease($lease);
+    } catch (DrydockAcquiredBrokenResourceException $ex) {
+      // If this lease acquired a resource but failed to activate, we don't
+      // need to break the lease. We can throw it back in the pool and let
+      // it take another shot at acquiring a new resource.
+
+      // Before we throw it back, release any locks the lease is holding.
+      DrydockSlotLock::releaseLocks($lease->getPHID());
+
+      $lease
+        ->setStatus(DrydockLeaseStatus::STATUS_PENDING)
+        ->setResourcePHID(null)
+        ->save();
+
+      $lease->logEvent(
+        DrydockLeaseReacquireLogType::LOGCONST,
+        array(
+          'class' => get_class($ex),
+          'message' => $ex->getMessage(),
+        ));
+
+      $this->yieldLease($lease, $ex);
     } catch (Exception $ex) {
       if ($this->isTemporaryException($ex)) {
         $this->yieldLease($lease, $ex);
@@ -216,17 +237,51 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
           // this.
           break;
         } catch (Exception $ex) {
+          // This failure is not normally expected, so log it. It can be
+          // caused by something mundane and recoverable, however (see below
+          // for discussion).
+
+          // We log to the blueprint separately from the log to the lease:
+          // the lease is not attached to a blueprint yet so the lease log
+          // will not show up on the blueprint; more than one blueprint may
+          // fail; and the lease is not really impacted (and won't log) if at
+          // least one blueprint actually works.
+
+          $blueprint->logEvent(
+            DrydockResourceAllocationFailureLogType::LOGCONST,
+            array(
+              'class' => get_class($ex),
+              'message' => $ex->getMessage(),
+            ));
+
           $exceptions[] = $ex;
         }
       }
 
       if (!$resources) {
-        throw new PhutilAggregateException(
+        // If one or more blueprints claimed that they would be able to
+        // allocate resources but none are actually able to allocate resources,
+        // log the failure and yield so we try again soon.
+
+        // This can happen if some unexpected issue occurs during allocation
+        // (for example, a call to build a VM fails for some reason) or if we
+        // raced another allocator and the blueprint is now full.
+
+        $ex = new PhutilAggregateException(
           pht(
             'All blueprints failed to allocate a suitable new resource when '.
-            'trying to allocate lease "%s".',
+            'trying to allocate lease ("%s").',
             $lease->getPHID()),
           $exceptions);
+
+        $lease->logEvent(
+          DrydockLeaseAllocationFailureLogType::LOGCONST,
+          array(
+            'class' => get_class($ex),
+            'message' => $ex->getMessage(),
+          ));
+
+        throw new PhabricatorWorkerYieldException(15);
       }
 
       $resources = $this->removeUnacquirableResources($resources, $lease);
@@ -247,23 +302,43 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
     $resources = $this->rankResources($resources, $lease);
 
     $exceptions = array();
+    $yields = array();
     $allocated = false;
     foreach ($resources as $resource) {
       try {
+        $resource = $this->newResourceForAcquisition($resource, $lease);
         $this->acquireLease($resource, $lease);
         $allocated = true;
         break;
+      } catch (DrydockResourceLockException $ex) {
+        // We need to lock the resource to actually acquire it. If we aren't
+        // able to acquire the lock quickly enough, we can yield and try again
+        // later.
+        $yields[] = $ex;
+      } catch (DrydockAcquiredBrokenResourceException $ex) {
+        // If a resource was reclaimed or destroyed by the time we actually
+        // got around to acquiring it, we just got unlucky. We can yield and
+        // try again later.
+        $yields[] = $ex;
+      } catch (PhabricatorWorkerYieldException $ex) {
+        // We can be told to yield, particularly by the supplemental allocator
+        // trying to give us a supplemental resource.
+        $yields[] = $ex;
       } catch (Exception $ex) {
         $exceptions[] = $ex;
       }
     }
 
     if (!$allocated) {
-      throw new PhutilAggregateException(
-        pht(
-          'Unable to acquire lease "%s" on any resource.',
-          $lease->getPHID()),
-        $exceptions);
+      if ($yields) {
+        throw new PhabricatorWorkerYieldException(15);
+      } else {
+        throw new PhutilAggregateException(
+          pht(
+            'Unable to acquire lease "%s" on any resource.',
+            $lease->getPHID()),
+          $exceptions);
+      }
     }
   }
 
@@ -529,6 +604,13 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
         'DrydockResourceUpdateWorker',
         array(
           'resourcePHID' => $resource->getPHID(),
+
+          // This task will generally yield while the resource activates, so
+          // wake it back up once the resource comes online. Most of the time,
+          // we'll be able to lease the newly activated resource.
+          'awakenOnActivation' => array(
+            $this->getCurrentWorkerTaskID(),
+          ),
         ),
         array(
           'objectPHID' => $resource->getPHID(),
@@ -595,6 +677,26 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
     DrydockBlueprint $blueprint,
     DrydockLease $lease) {
     $viewer = $this->getViewer();
+
+    // If this lease is marked as already in the process of reclaiming a
+    // resource, don't let it reclaim another one until the first reclaim
+    // completes. This stops one lease from reclaiming a large number of
+    // resources if the reclaims take a while to complete.
+    $reclaiming_phid = $lease->getAttribute('drydock.reclaimingPHID');
+    if ($reclaiming_phid) {
+      $reclaiming_resource = id(new DrydockResourceQuery())
+        ->setViewer($viewer)
+        ->withPHIDs(array($reclaiming_phid))
+        ->withStatuses(
+          array(
+            DrydockResourceStatus::STATUS_ACTIVE,
+            DrydockResourceStatus::STATUS_RELEASED,
+          ))
+        ->executeOne();
+      if ($reclaiming_resource) {
+        return null;
+      }
+    }
 
     $resources = id(new DrydockResourceQuery())
       ->setViewer($viewer)
@@ -694,6 +796,73 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
     }
   }
 
+  private function newResourceForAcquisition(
+    DrydockResource $resource,
+    DrydockLease $lease) {
+
+    // If the resource has no leases against it, never build a new one. This is
+    // likely already a new resource that just activated.
+    $viewer = $this->getViewer();
+
+    $statuses = array(
+      DrydockLeaseStatus::STATUS_PENDING,
+      DrydockLeaseStatus::STATUS_ACQUIRED,
+      DrydockLeaseStatus::STATUS_ACTIVE,
+    );
+
+    $leases = id(new DrydockLeaseQuery())
+      ->setViewer($viewer)
+      ->withResourcePHIDs(array($resource->getPHID()))
+      ->withStatuses($statuses)
+      ->setLimit(1)
+      ->execute();
+    if (!$leases) {
+      return $resource;
+    }
+
+    // If we're about to get a lease on a resource, check if the blueprint
+    // wants to allocate a supplemental resource. If it does, try to perform a
+    // new allocation instead.
+    $blueprint = $resource->getBlueprint();
+    if (!$blueprint->shouldAllocateSupplementalResource($resource, $lease)) {
+      return $resource;
+    }
+
+    // If the blueprint is already overallocated, we can't allocate a new
+    // resource. Just return the existing resource.
+    $remaining = $this->removeOverallocatedBlueprints(
+      array($blueprint),
+      $lease);
+    if (!$remaining) {
+      return $resource;
+    }
+
+    // Try to build a new resource.
+    try {
+      $new_resource = $this->allocateResource($blueprint, $lease);
+    } catch (Exception $ex) {
+      $blueprint->logEvent(
+        DrydockResourceAllocationFailureLogType::LOGCONST,
+        array(
+          'class' => get_class($ex),
+          'message' => $ex->getMessage(),
+        ));
+
+      return $resource;
+    }
+
+    // If we can't actually acquire the new resource yet, just yield.
+    // (We could try to move forward with the original resource instead.)
+    $acquirable = $this->removeUnacquirableResources(
+      array($new_resource),
+      $lease);
+    if (!$acquirable) {
+      throw new PhabricatorWorkerYieldException(15);
+    }
+
+    return $new_resource;
+  }
+
 
 /* -(  Activating Leases  )-------------------------------------------------- */
 
@@ -715,9 +884,12 @@ final class DrydockLeaseUpdateWorker extends DrydockWorker {
     }
 
     if ($resource_status != DrydockResourceStatus::STATUS_ACTIVE) {
-      throw new Exception(
+      throw new DrydockAcquiredBrokenResourceException(
         pht(
-          'Trying to activate lease on a dead resource (in status "%s").',
+          'Trying to activate lease ("%s") on a resource ("%s") in '.
+          'the wrong status ("%s").',
+          $lease->getPHID(),
+          $resource->getPHID(),
           $resource_status));
     }
 

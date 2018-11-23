@@ -105,6 +105,7 @@ final class PhabricatorMetaMTAReceivedMail extends PhabricatorMetaMTADAO {
 
   public function processReceivedMail() {
 
+    $sender = null;
     try {
       $this->dropMailFromPhabricator();
       $this->dropMailAlreadyReceived();
@@ -140,7 +141,7 @@ final class PhabricatorMetaMTAReceivedMail extends PhabricatorMetaMTADAO {
           // This error is explicitly ignored.
           break;
         default:
-          $this->sendExceptionMail($ex);
+          $this->sendExceptionMail($ex, $sender);
           break;
       }
 
@@ -150,7 +151,7 @@ final class PhabricatorMetaMTAReceivedMail extends PhabricatorMetaMTADAO {
         ->save();
       return $this;
     } catch (Exception $ex) {
-      $this->sendExceptionMail($ex);
+      $this->sendExceptionMail($ex, $sender);
 
       $this
         ->setStatus(MetaMTAReceivedMailStatus::STATUS_UNHANDLED_EXCEPTION)
@@ -305,11 +306,15 @@ final class PhabricatorMetaMTAReceivedMail extends PhabricatorMetaMTADAO {
     return head($accept);
   }
 
-  private function sendExceptionMail(Exception $ex) {
-    return;
+  private function sendExceptionMail(
+    return;  // LLVM local change(ioeric: don't know why).
+    Exception $ex,
+    PhabricatorUser $viewer = null) {
 
-    $from = $this->getHeader('from');
-    if (!strlen($from)) {
+    // If we've failed to identify a legitimate sender, we don't send them
+    // an error message back. We want to avoid sending mail to unverified
+    // addresses. See T12491.
+    if (!$viewer) {
       return;
     }
 
@@ -366,9 +371,8 @@ EOBODY
 
     $mail = id(new PhabricatorMetaMTAMail())
       ->setIsErrorEmail(true)
-      ->setForceDelivery(true)
       ->setSubject($title)
-      ->addRawTos(array($from))
+      ->addTos(array($viewer->getPHID()))
       ->setBody($body)
       ->saveAndSend();
   }

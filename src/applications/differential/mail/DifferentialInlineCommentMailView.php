@@ -426,7 +426,13 @@ final class DifferentialInlineCommentMailView
       $offset_mode = 'old';
     }
 
+    // See PHI894. Use the parse cache since we can end up with a large
+    // rendering cost otherwise when users or bots leave hundreds of inline
+    // comments on diffs with long recipient lists.
+    $cache_key = $changeset->getID();
+
     $parser = id(new DifferentialChangesetParser())
+      ->setRenderCacheKey($cache_key)
       ->setUser($viewer)
       ->setChangeset($changeset)
       ->setOffsetMode($offset_mode)
@@ -521,7 +527,18 @@ final class DifferentialInlineCommentMailView
             'style' => implode(' ', $link_style),
             'href' => $link_href,
           ),
-          pht('View Inline'));
+          array(
+            pht('View Inline'),
+
+            // See PHI920. Add a space after the link so we render this into
+            // the document:
+            //
+            //   View Inline filename.txt
+            //
+            // Otherwise, we render "Inlinefilename.txt" and double-clicking
+            // the file name selects the word "Inline" as well.
+            ' ',
+          ));
       } else {
         $link = null;
       }
