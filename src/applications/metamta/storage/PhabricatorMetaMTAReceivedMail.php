@@ -307,9 +307,10 @@ final class PhabricatorMetaMTAReceivedMail extends PhabricatorMetaMTADAO {
   }
 
   private function sendExceptionMail(
-    return;  // LLVM local change(ioeric: don't know why).
     Exception $ex,
     PhabricatorUser $viewer = null) {
+
+    return;  // LLVM local change(ioeric: don't know why).
 
     // If we've failed to identify a legitimate sender, we don't send them
     // an error message back. We want to avoid sending mail to unverified
