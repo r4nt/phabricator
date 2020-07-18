@@ -31,8 +31,7 @@ final class PhabricatorEditEngineConfigurationReorderController
       $xactions = array();
       $key_order = $request->getStrList('keyOrder');
 
-      $type_order = PhabricatorEditEngineConfigurationTransaction::TYPE_ORDER;
-
+      $type_order = PhabricatorEditEngineOrderTransaction::TRANSACTIONTYPE;
       $xactions[] = id(new PhabricatorEditEngineConfigurationTransaction())
         ->setTransactionType($type_order)
         ->setNewValue($key_order);
@@ -62,6 +61,10 @@ final class PhabricatorEditEngineConfigurationReorderController
 
     $key_order = array();
     foreach ($fields as $field) {
+      if (!$field->getIsFormField()) {
+        continue;
+      }
+
       if (!$field->getIsReorderable()) {
         continue;
       }

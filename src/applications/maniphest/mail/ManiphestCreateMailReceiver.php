@@ -1,28 +1,28 @@
 <?php
 
-final class ManiphestCreateMailReceiver extends PhabricatorMailReceiver {
+final class ManiphestCreateMailReceiver
+  extends PhabricatorApplicationMailReceiver {
 
-  public function isEnabled() {
-    return PhabricatorApplication::isClassInstalled(
-      'PhabricatorManiphestApplication');
-  }
-
-  public function canAcceptMail(PhabricatorMetaMTAReceivedMail $mail) {
-    $maniphest_app = new PhabricatorManiphestApplication();
-    return $this->canAcceptApplicationMail($maniphest_app, $mail);
+  protected function newApplication() {
+    return new PhabricatorManiphestApplication();
   }
 
   protected function processReceivedMail(
     PhabricatorMetaMTAReceivedMail $mail,
-    PhabricatorUser $sender) {
+    PhutilEmailAddress $target) {
 
-    $task = ManiphestTask::initializeNewTask($sender);
-    $task->setOriginalEmailSource($mail->getHeader('From'));
+    $author = $this->getAuthor();
+    $task = ManiphestTask::initializeNewTask($author);
+
+    $from_address = $mail->newFromAddress();
+    if ($from_address) {
+      $task->setOriginalEmailSource((string)$from_address);
+    }
 
     $handler = new ManiphestReplyHandler();
     $handler->setMailReceiver($task);
 
-    $handler->setActor($sender);
+    $handler->setActor($author);
     $handler->setExcludeMailRecipientPHIDs(
       $mail->loadAllRecipientPHIDs());
     if ($this->getApplicationEmail()) {

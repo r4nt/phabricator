@@ -1,27 +1,24 @@
 <?php
 
-final class DifferentialCreateMailReceiver extends PhabricatorMailReceiver {
+final class DifferentialCreateMailReceiver
+  extends PhabricatorApplicationMailReceiver {
 
-  public function isEnabled() {
-    return PhabricatorApplication::isClassInstalled(
-      'PhabricatorDifferentialApplication');
-  }
-
-  public function canAcceptMail(PhabricatorMetaMTAReceivedMail $mail) {
-    $differential_app = new PhabricatorDifferentialApplication();
-    return $this->canAcceptApplicationMail($differential_app, $mail);
+  protected function newApplication() {
+    return new PhabricatorDifferentialApplication();
   }
 
   protected function processReceivedMail(
     PhabricatorMetaMTAReceivedMail $mail,
-    PhabricatorUser $sender) {
+    PhutilEmailAddress $target) {
+
+    $author = $this->getAuthor();
 
     $attachments = $mail->getAttachments();
     $files = array();
     $errors = array();
     if ($attachments) {
       $files = id(new PhabricatorFileQuery())
-        ->setViewer($sender)
+        ->setViewer($author)
         ->withPHIDs($attachments)
         ->execute();
       foreach ($files as $index => $file) {
@@ -42,7 +39,7 @@ final class DifferentialCreateMailReceiver extends PhabricatorMailReceiver {
         array(
           'diff' => $file->loadFileData(),
         ));
-      $call->setUser($sender);
+      $call->setUser($author);
       try {
         $result = $call->execute();
         $diffs[$file->getName()] = $result['uri'];
@@ -61,7 +58,7 @@ final class DifferentialCreateMailReceiver extends PhabricatorMailReceiver {
         array(
           'diff' => $body,
         ));
-      $call->setUser($sender);
+      $call->setUser($author);
       try {
         $result = $call->execute();
         $diffs[pht('Mail Body')] = $result['uri'];
@@ -72,8 +69,7 @@ final class DifferentialCreateMailReceiver extends PhabricatorMailReceiver {
       }
     }
 
-    $subject_prefix =
-      PhabricatorEnv::getEnvConfig('metamta.differential.subject-prefix');
+    $subject_prefix = pht('[Differential]');
     if (count($diffs)) {
       $subject = pht(
         'You successfully created %d diff(s).',
@@ -113,10 +109,10 @@ final class DifferentialCreateMailReceiver extends PhabricatorMailReceiver {
     }
 
     id(new PhabricatorMetaMTAMail())
-      ->addTos(array($sender->getPHID()))
+      ->addTos(array($author->getPHID()))
       ->setSubject($subject)
       ->setSubjectPrefix($subject_prefix)
-      ->setFrom($sender->getPHID())
+      ->setFrom($author->getPHID())
       ->setBody($body->render())
       ->saveAndSend();
   }

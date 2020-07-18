@@ -212,11 +212,9 @@ final class DiffusionRepositoryEditEngine
       ->setObject($object)
       ->execute();
 
-    $track_value = $object->getDetail('branch-filter', array());
-    $track_value = array_keys($track_value);
-
-    $autoclose_value = $object->getDetail('close-commits-filter', array());
-    $autoclose_value = array_keys($autoclose_value);
+    $fetch_value = $object->getFetchRules();
+    $track_value = $object->getTrackOnlyRules();
+    $permanent_value = $object->getPermanentRefRules();
 
     $automation_instructions = pht(
       "Configure **Repository Automation** to allow Phabricator to ".
@@ -239,12 +237,34 @@ final class DiffusionRepositoryEditEngine
       'you can set a path in **Import Only**. Phabricator will ignore '.
       'commits which do not affect this path.');
 
+    $filesize_warning = null;
+    if ($object->isGit()) {
+      $git_binary = PhutilBinaryAnalyzer::getForBinary('git');
+      $git_version = $git_binary->getBinaryVersion();
+      $filesize_version = '1.8.4';
+      if (version_compare($git_version, $filesize_version, '<')) {
+        $filesize_warning = pht(
+          '(WARNING) {icon exclamation-triangle} The version of "git" ("%s") '.
+          'installed on this server does not support '.
+          '"--batch-check=<format>", a feature required to enforce filesize '.
+          'limits. Upgrade to "git" %s or newer to use this feature.',
+          $git_version,
+          $filesize_version);
+      }
+    }
+
+    $track_instructions = pht(
+      'WARNING: The "Track Only" feature is deprecated. Use "Fetch Refs" '.
+      'and "Permanent Refs" instead. This feature will be removed in a '.
+      'future version of Phabricator.');
+
     return array(
       id(new PhabricatorSelectEditField())
         ->setKey('vcs')
         ->setLabel(pht('Version Control System'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_VCS)
-        ->setIsConduitOnly(true)
+        ->setTransactionType(
+          PhabricatorRepositoryVCSTransaction::TRANSACTIONTYPE)
+        ->setIsFormField(false)
         ->setIsCopyable(true)
         ->setOptions(PhabricatorRepositoryType::getAllRepositoryTypes())
         ->setDescription(pht('Underlying repository version control system.'))
@@ -258,7 +278,8 @@ final class DiffusionRepositoryEditEngine
         ->setKey('name')
         ->setLabel(pht('Name'))
         ->setIsRequired(true)
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_NAME)
+        ->setTransactionType(
+          PhabricatorRepositoryNameTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('The repository name.'))
         ->setConduitDescription(pht('Rename the repository.'))
         ->setConduitTypeDescription(pht('New repository name.'))
@@ -266,7 +287,8 @@ final class DiffusionRepositoryEditEngine
       id(new PhabricatorTextEditField())
         ->setKey('callsign')
         ->setLabel(pht('Callsign'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_CALLSIGN)
+        ->setTransactionType(
+          PhabricatorRepositoryCallsignTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('The repository callsign.'))
         ->setConduitDescription(pht('Change the repository callsign.'))
         ->setConduitTypeDescription(pht('New repository callsign.'))
@@ -274,7 +296,8 @@ final class DiffusionRepositoryEditEngine
       id(new PhabricatorTextEditField())
         ->setKey('shortName')
         ->setLabel(pht('Short Name'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_SLUG)
+        ->setTransactionType(
+          PhabricatorRepositorySlugTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('Short, unique repository name.'))
         ->setConduitDescription(pht('Change the repository short name.'))
         ->setConduitTypeDescription(pht('New short name for the repository.'))
@@ -282,7 +305,8 @@ final class DiffusionRepositoryEditEngine
       id(new PhabricatorRemarkupEditField())
         ->setKey('description')
         ->setLabel(pht('Description'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_DESCRIPTION)
+        ->setTransactionType(
+          PhabricatorRepositoryDescriptionTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('Repository description.'))
         ->setConduitDescription(pht('Change the repository description.'))
         ->setConduitTypeDescription(pht('New repository description.'))
@@ -291,7 +315,8 @@ final class DiffusionRepositoryEditEngine
         ->setKey('encoding')
         ->setLabel(pht('Text Encoding'))
         ->setIsCopyable(true)
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_ENCODING)
+        ->setTransactionType(
+          PhabricatorRepositoryEncodingTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('Default text encoding.'))
         ->setConduitDescription(pht('Change the default text encoding.'))
         ->setConduitTypeDescription(pht('New text encoding.'))
@@ -300,11 +325,12 @@ final class DiffusionRepositoryEditEngine
         ->setKey('allowDangerousChanges')
         ->setLabel(pht('Allow Dangerous Changes'))
         ->setIsCopyable(true)
-        ->setIsConduitOnly(true)
+        ->setIsFormField(false)
         ->setOptions(
           pht('Prevent Dangerous Changes'),
           pht('Allow Dangerous Changes'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_DANGEROUS)
+        ->setTransactionType(
+          PhabricatorRepositoryDangerousTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('Permit dangerous changes to be made.'))
         ->setConduitDescription(pht('Allow or prevent dangerous changes.'))
         ->setConduitTypeDescription(pht('New protection setting.'))
@@ -313,11 +339,12 @@ final class DiffusionRepositoryEditEngine
         ->setKey('allowEnormousChanges')
         ->setLabel(pht('Allow Enormous Changes'))
         ->setIsCopyable(true)
-        ->setIsConduitOnly(true)
+        ->setIsFormField(false)
         ->setOptions(
           pht('Prevent Enormous Changes'),
           pht('Allow Enormous Changes'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_ENORMOUS)
+        ->setTransactionType(
+          PhabricatorRepositoryEnormousTransaction::TRANSACTIONTYPE)
         ->setDescription(pht('Permit enormous changes to be made.'))
         ->setConduitDescription(pht('Allow or prevent enormous changes.'))
         ->setConduitTypeDescription(pht('New protection setting.'))
@@ -325,8 +352,9 @@ final class DiffusionRepositoryEditEngine
       id(new PhabricatorSelectEditField())
         ->setKey('status')
         ->setLabel(pht('Status'))
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_ACTIVATE)
-        ->setIsConduitOnly(true)
+        ->setTransactionType(
+          PhabricatorRepositoryActivateTransaction::TRANSACTIONTYPE)
+        ->setIsFormField(false)
         ->setOptions(PhabricatorRepository::getStatusNameMap())
         ->setDescription(pht('Active or inactive status.'))
         ->setConduitDescription(pht('Active or deactivate the repository.'))
@@ -336,7 +364,7 @@ final class DiffusionRepositoryEditEngine
         ->setKey('defaultBranch')
         ->setLabel(pht('Default Branch'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_DEFAULT_BRANCH)
+          PhabricatorRepositoryDefaultBranchTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setDescription(pht('Default branch name.'))
         ->setConduitDescription(pht('Set the default branch name.'))
@@ -344,31 +372,43 @@ final class DiffusionRepositoryEditEngine
         ->setValue($object->getDetail('default-branch')),
       id(new PhabricatorTextAreaEditField())
         ->setIsStringList(true)
+        ->setKey('fetchRefs')
+        ->setLabel(pht('Fetch Refs'))
+        ->setTransactionType(
+          PhabricatorRepositoryFetchRefsTransaction::TRANSACTIONTYPE)
+        ->setIsCopyable(true)
+        ->setDescription(pht('Fetch only these refs.'))
+        ->setConduitDescription(pht('Set the fetched refs.'))
+        ->setConduitTypeDescription(pht('New fetched refs.'))
+        ->setValue($fetch_value),
+      id(new PhabricatorTextAreaEditField())
+        ->setIsStringList(true)
+        ->setKey('permanentRefs')
+        ->setLabel(pht('Permanent Refs'))
+        ->setTransactionType(
+          PhabricatorRepositoryPermanentRefsTransaction::TRANSACTIONTYPE)
+        ->setIsCopyable(true)
+        ->setDescription(pht('Only these refs are considered permanent.'))
+        ->setConduitDescription(pht('Set the permanent refs.'))
+        ->setConduitTypeDescription(pht('New permanent ref rules.'))
+        ->setValue($permanent_value),
+      id(new PhabricatorTextAreaEditField())
+        ->setIsStringList(true)
         ->setKey('trackOnly')
         ->setLabel(pht('Track Only'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_TRACK_ONLY)
+          PhabricatorRepositoryTrackOnlyTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
+        ->setControlInstructions($track_instructions)
         ->setDescription(pht('Track only these branches.'))
         ->setConduitDescription(pht('Set the tracked branches.'))
         ->setConduitTypeDescription(pht('New tracked branches.'))
         ->setValue($track_value),
-      id(new PhabricatorTextAreaEditField())
-        ->setIsStringList(true)
-        ->setKey('autocloseOnly')
-        ->setLabel(pht('Autoclose Only'))
-        ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_AUTOCLOSE_ONLY)
-        ->setIsCopyable(true)
-        ->setDescription(pht('Autoclose commits on only these branches.'))
-        ->setConduitDescription(pht('Set the autoclose branches.'))
-        ->setConduitTypeDescription(pht('New default tracked branches.'))
-        ->setValue($autoclose_value),
       id(new PhabricatorTextEditField())
         ->setKey('importOnly')
         ->setLabel(pht('Import Only'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_SVN_SUBPATH)
+          PhabricatorRepositorySVNSubpathTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setDescription(pht('Subpath to selectively import.'))
         ->setConduitDescription(pht('Set the subpath to import.'))
@@ -379,7 +419,7 @@ final class DiffusionRepositoryEditEngine
         ->setKey('stagingAreaURI')
         ->setLabel(pht('Staging Area URI'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_STAGING_URI)
+          PhabricatorRepositoryStagingURITransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setDescription(pht('Staging area URI.'))
         ->setConduitDescription(pht('Set the staging area URI.'))
@@ -390,7 +430,7 @@ final class DiffusionRepositoryEditEngine
         ->setKey('automationBlueprintPHIDs')
         ->setLabel(pht('Use Blueprints'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_AUTOMATION_BLUEPRINTS)
+          PhabricatorRepositoryBlueprintsTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setDatasource(new DrydockBlueprintDatasource())
         ->setDescription(pht('Automation blueprints.'))
@@ -402,7 +442,7 @@ final class DiffusionRepositoryEditEngine
         ->setKey('symbolLanguages')
         ->setLabel(pht('Languages'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_SYMBOLS_LANGUAGE)
+          PhabricatorRepositorySymbolLanguagesTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setDescription(
           pht('Languages which define symbols in this repository.'))
@@ -415,7 +455,7 @@ final class DiffusionRepositoryEditEngine
         ->setKey('symbolRepositoryPHIDs')
         ->setLabel(pht('Uses Symbols From'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES)
+          PhabricatorRepositorySymbolSourcesTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setDatasource(new DiffusionRepositoryDatasource())
         ->setDescription(pht('Repositories to link symbols from.'))
@@ -426,7 +466,7 @@ final class DiffusionRepositoryEditEngine
         ->setKey('publish')
         ->setLabel(pht('Publish/Notify'))
         ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_NOTIFY)
+          PhabricatorRepositoryNotifyTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
         ->setOptions(
           pht('Disable Notifications, Feed, and Herald'),
@@ -434,20 +474,7 @@ final class DiffusionRepositoryEditEngine
         ->setDescription(pht('Configure how changes are published.'))
         ->setConduitDescription(pht('Change publishing options.'))
         ->setConduitTypeDescription(pht('New notification setting.'))
-        ->setValue(!$object->getDetail('herald-disabled')),
-      id(new PhabricatorBoolEditField())
-        ->setKey('autoclose')
-        ->setLabel(pht('Autoclose'))
-        ->setTransactionType(
-          PhabricatorRepositoryTransaction::TYPE_AUTOCLOSE)
-        ->setIsCopyable(true)
-        ->setOptions(
-          pht('Disable Autoclose'),
-          pht('Enable Autoclose'))
-        ->setDescription(pht('Stop or resume autoclosing in this repository.'))
-        ->setConduitDescription(pht('Change autoclose setting.'))
-        ->setConduitTypeDescription(pht('New autoclose setting.'))
-        ->setValue(!$object->getDetail('disable-autoclose')),
+        ->setValue(!$object->isPublishingDisabled()),
       id(new PhabricatorPolicyEditField())
         ->setKey('policy.push')
         ->setLabel(pht('Push Policy'))
@@ -455,13 +482,43 @@ final class DiffusionRepositoryEditEngine
         ->setIsCopyable(true)
         ->setCapability(DiffusionPushCapability::CAPABILITY)
         ->setPolicies($policies)
-        ->setTransactionType(PhabricatorRepositoryTransaction::TYPE_PUSH_POLICY)
+        ->setTransactionType(
+          PhabricatorRepositoryPushPolicyTransaction::TRANSACTIONTYPE)
         ->setDescription(
           pht('Controls who can push changes to the repository.'))
         ->setConduitDescription(
           pht('Change the push policy of the repository.'))
         ->setConduitTypeDescription(pht('New policy PHID or constant.'))
         ->setValue($object->getPolicy(DiffusionPushCapability::CAPABILITY)),
+      id(new PhabricatorTextEditField())
+        ->setKey('filesizeLimit')
+        ->setLabel(pht('Filesize Limit'))
+        ->setTransactionType(
+          PhabricatorRepositoryFilesizeLimitTransaction::TRANSACTIONTYPE)
+        ->setDescription(pht('Maximum permitted file size.'))
+        ->setConduitDescription(pht('Change the filesize limit.'))
+        ->setConduitTypeDescription(pht('New repository filesize limit.'))
+        ->setControlInstructions($filesize_warning)
+        ->setValue($object->getFilesizeLimit()),
+      id(new PhabricatorTextEditField())
+        ->setKey('copyTimeLimit')
+        ->setLabel(pht('Clone/Fetch Timeout'))
+        ->setTransactionType(
+          PhabricatorRepositoryCopyTimeLimitTransaction::TRANSACTIONTYPE)
+        ->setDescription(
+          pht('Maximum permitted duration of internal clone/fetch.'))
+        ->setConduitDescription(pht('Change the copy time limit.'))
+        ->setConduitTypeDescription(pht('New repository copy time limit.'))
+        ->setValue($object->getCopyTimeLimit()),
+      id(new PhabricatorTextEditField())
+        ->setKey('touchLimit')
+        ->setLabel(pht('Touched Paths Limit'))
+        ->setTransactionType(
+          PhabricatorRepositoryTouchLimitTransaction::TRANSACTIONTYPE)
+        ->setDescription(pht('Maximum permitted paths touched per commit.'))
+        ->setConduitDescription(pht('Change the touch limit.'))
+        ->setConduitTypeDescription(pht('New repository touch limit.'))
+        ->setValue($object->getTouchLimit()),
     );
   }
 

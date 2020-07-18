@@ -2,12 +2,23 @@
 
 final class LegalpadDocumentSignController extends LegalpadController {
 
+  private $isSessionGate;
+
   public function shouldAllowPublic() {
     return true;
   }
 
   public function shouldAllowLegallyNonCompliantUsers() {
     return true;
+  }
+
+  public function setIsSessionGate($is_session_gate) {
+    $this->isSessionGate = $is_session_gate;
+    return $this;
+  }
+
+  public function getIsSessionGate() {
+    return $this->isSessionGate;
   }
 
   public function handleRequest(AphrontRequest $request) {
@@ -149,17 +160,8 @@ final class LegalpadDocumentSignController extends LegalpadController {
     }
 
     $errors = array();
+    $hisec_token = null;
     if ($request->isFormOrHisecPost() && !$has_signed) {
-
-      // Require two-factor auth to sign legal documents.
-      if ($viewer->isLoggedIn()) {
-        $engine = new PhabricatorAuthSessionEngine();
-        $engine->requireHighSecuritySession(
-          $viewer,
-          $request,
-          '/'.$document->getMonogram());
-      }
-
       list($form_data, $errors, $field_errors) = $this->readSignatureForm(
         $document,
         $request);
@@ -186,6 +188,20 @@ final class LegalpadDocumentSignController extends LegalpadController {
       $signature->setVerified($verified);
 
       if (!$errors) {
+        // Require MFA to sign legal documents.
+        if ($viewer->isLoggedIn()) {
+          $workflow_key = sprintf(
+            'legalpad.sign(%s)',
+            $document->getPHID());
+
+          $hisec_token = id(new PhabricatorAuthSessionEngine())
+            ->setWorkflowKey($workflow_key)
+            ->requireHighSecurityToken(
+              $viewer,
+              $request,
+              $document->getURI());
+        }
+
         $signature->save();
 
         // If the viewer is logged in, signing for themselves, send them to
@@ -246,8 +262,14 @@ final class LegalpadDocumentSignController extends LegalpadController {
     $header = id(new PHUIHeaderView())
       ->setHeader($title)
       ->setUser($viewer)
-      ->setEpoch($content_updated)
-      ->addActionLink(
+      ->setEpoch($content_updated);
+
+    // If we're showing the user this document because it's required to use
+    // Phabricator and they haven't signed it, don't show the "Manage" button,
+    // since it won't work.
+    $is_gate = $this->getIsSessionGate();
+    if (!$is_gate) {
+      $header->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
           ->setIcon('fa-pencil')
@@ -255,6 +277,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
           ->setHref($manage_uri)
           ->setDisabled(!$can_edit)
           ->setWorkflow(!$can_edit));
+    }
 
     $preamble_box = null;
     if (strlen($document->getPreamble())) {
@@ -359,16 +382,6 @@ final class LegalpadDocumentSignController extends LegalpadController {
             if ($email_obj) {
               return $this->signInResponse();
             }
-            $external_account = id(new PhabricatorExternalAccountQuery())
-              ->setViewer($viewer)
-              ->withAccountTypes(array('email'))
-              ->withAccountDomains(array($email->getDomainName()))
-              ->withAccountIDs(array($email->getAddress()))
-              ->loadOneOrCreate();
-            if ($external_account->getUserPHID()) {
-              return $this->signInResponse();
-            }
-            $signer_phid = $external_account->getPHID();
           }
         }
         break;

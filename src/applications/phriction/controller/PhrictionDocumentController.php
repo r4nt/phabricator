@@ -9,6 +9,7 @@ final class PhrictionDocumentController
     return true;
   }
 
+
   public function handleRequest(AphrontRequest $request) {
     $viewer = $request->getViewer();
     $this->slug = $request->getURIData('slug');
@@ -35,15 +36,15 @@ final class PhrictionDocumentController
       ->needContent(true)
       ->executeOne();
     if (!$document) {
-
       $document = PhrictionDocument::initializeNewDocument($viewer, $slug);
-
       if ($slug == '/') {
         $title = pht('Welcome to Phriction');
         $subtitle = pht('Phriction is a simple and easy to use wiki for '.
           'keeping track of documents and their changes.');
         $page_title = pht('Welcome');
         $create_text = pht('Edit this Document');
+        $this->setShowingWelcomeDocument(true);
+
 
       } else {
         $title = pht('No Document Here');
@@ -291,37 +292,6 @@ final class PhrictionDocumentController
         $core_content = $notice->render();
       } else {
         throw new Exception(pht("Unknown document status '%s'!", $doc_status));
-      }
-
-      $move_notice = null;
-      if ($current_status == PhrictionChangeType::CHANGE_MOVE_HERE) {
-        $from_doc_id = $content->getChangeRef();
-
-        $slug_uri = null;
-
-        // If the old document exists and is visible, provide a link to it.
-        $from_docs = id(new PhrictionDocumentQuery())
-          ->setViewer($viewer)
-          ->withIDs(array($from_doc_id))
-          ->execute();
-        if ($from_docs) {
-          $from_doc = head($from_docs);
-          $slug_uri = PhrictionDocument::getSlugURI($from_doc->getSlug());
-        }
-
-        $move_notice = id(new PHUIInfoView())
-          ->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
-
-        if ($slug_uri) {
-          $move_notice->appendChild(
-            pht(
-              'This document was moved from %s.',
-              phutil_tag('a', array('href' => $slug_uri), $slug_uri)));
-        } else {
-          // Render this for consistency, even though it's a bit silly.
-          $move_notice->appendChild(
-            pht('This document was moved from elsewhere.'));
-        }
       }
     }
 

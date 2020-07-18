@@ -99,9 +99,6 @@ final class PhabricatorConduitAPIController
         list($error_code, $error_info) = $auth_error;
       }
     } catch (Exception $ex) {
-      if (!($ex instanceof ConduitMethodNotFoundException)) {
-        phlog($ex);
-      }
       $result = null;
       $error_code = ($ex instanceof ConduitException
         ? 'ERR-CONDUIT-CALL'
@@ -137,9 +134,17 @@ final class PhabricatorConduitAPIController
           $method_implementation);
       case 'json':
       default:
-        return id(new AphrontJSONResponse())
+        $response = id(new AphrontJSONResponse())
           ->setAddJSONShield(false)
           ->setContent($response->toDictionary());
+
+        $capabilities = $this->getConduitCapabilities();
+        if ($capabilities) {
+          $capabilities = implode(' ', $capabilities);
+          $response->addHeader('X-Conduit-Capabilities', $capabilities);
+        }
+
+        return $response;
     }
   }
 
@@ -605,6 +610,15 @@ final class PhabricatorConduitAPIController
     AphrontRequest $request,
     $method) {
 
+    $content_type = $request->getHTTPHeader('Content-Type');
+
+    if ($content_type == 'application/json') {
+      throw new Exception(
+        pht('Use form-encoded data to submit parameters to Conduit endpoints. '.
+            'Sending a JSON-encoded body and setting \'Content-Type\': '.
+            '\'application/json\' is not currently supported.'));
+    }
+
     // Look for parameters from the Conduit API Console, which are encoded
     // as HTTP POST parameters in an array, e.g.:
     //
@@ -710,5 +724,14 @@ final class PhabricatorConduitAPIController
     return false;
   }
 
+  private function getConduitCapabilities() {
+    $capabilities = array();
+
+    if (AphrontRequestStream::supportsGzip()) {
+      $capabilities[] = 'gzip';
+    }
+
+    return $capabilities;
+  }
 
 }

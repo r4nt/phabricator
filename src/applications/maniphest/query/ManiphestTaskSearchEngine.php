@@ -47,7 +47,7 @@ final class ManiphestTaskSearchEngine
     // Hide the "Subtypes" constraint from the web UI if the install only
     // defines one task subtype, since it isn't of any use in this case.
     $subtype_map = id(new ManiphestTask())->newEditEngineSubtypeMap();
-    $hide_subtypes = (count($subtype_map) == 1);
+    $hide_subtypes = ($subtype_map->getCount() == 1);
 
     return array(
       id(new PhabricatorOwnersSearchField())
@@ -366,10 +366,8 @@ final class ManiphestTaskSearchEngine
     $viewer = $this->requireViewer();
 
     if ($this->isPanelContext()) {
-      $can_edit_priority = false;
       $can_bulk_edit = false;
     } else {
-      $can_edit_priority = true;
       $can_bulk_edit = PhabricatorPolicyFilter::hasCapability(
         $viewer,
         $this->getApplication(),
@@ -380,7 +378,6 @@ final class ManiphestTaskSearchEngine
       ->setUser($viewer)
       ->setTasks($tasks)
       ->setSavedQuery($saved)
-      ->setCanEditPriority($can_edit_priority)
       ->setCanBatchEdit($can_bulk_edit)
       ->setShowBatchControls($this->showBatchControls);
 

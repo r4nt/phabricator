@@ -112,6 +112,13 @@ final class DifferentialTransactionEditor
 
     switch ($xaction->getTransactionType()) {
       case DifferentialTransaction::TYPE_INLINE:
+        $comment = $xaction->getComment();
+
+        $comment->setAttribute('editing', false);
+
+        PhabricatorVersionedDraft::purgeDrafts(
+          $comment->getPHID(),
+          $this->getActingAsPHID());
         return;
     }
 
@@ -247,50 +254,16 @@ final class DifferentialTransactionEditor
         case DifferentialTransaction::TYPE_INLINE:
           $this->didExpandInlineState = true;
 
-          $actor_phid = $this->getActingAsPHID();
-          $author_phid = $object->getAuthorPHID();
-          $actor_is_author = ($actor_phid == $author_phid);
+          $query_template = id(new DifferentialDiffInlineCommentQuery())
+            ->withRevisionPHIDs(array($object->getPHID()));
 
-          $state_map = PhabricatorTransactions::getInlineStateMap();
+          $state_xaction = $this->newInlineStateTransaction(
+            $object,
+            $query_template);
 
-          $query = id(new DifferentialDiffInlineCommentQuery())
-            ->setViewer($this->getActor())
-            ->withRevisionPHIDs(array($object->getPHID()))
-            ->withFixedStates(array_keys($state_map));
-
-          $inlines = array();
-
-          // We're going to undraft any "done" marks on your own inlines.
-          $inlines[] = id(clone $query)
-            ->withAuthorPHIDs(array($actor_phid))
-            ->withHasTransaction(false)
-            ->execute();
-
-          // If you're the author, we also undraft any "done" marks on other
-          // inlines.
-          if ($actor_is_author) {
-            $inlines[] = id(clone $query)
-              ->withHasTransaction(true)
-              ->execute();
+          if ($state_xaction) {
+            $results[] = $state_xaction;
           }
-
-          $inlines = array_mergev($inlines);
-
-          if (!$inlines) {
-            break;
-          }
-
-          $old_value = mpull($inlines, 'getFixedState', 'getPHID');
-          $new_value = array();
-          foreach ($old_value as $key => $state) {
-            $new_value[$key] = $state_map[$state];
-          }
-
-          $results[] = id(new DifferentialTransaction())
-            ->setTransactionType(PhabricatorTransactions::TYPE_INLINESTATE)
-            ->setIgnoreOnNoEffect(true)
-            ->setOldValue($old_value)
-            ->setNewValue($new_value);
           break;
       }
     }
@@ -451,6 +424,11 @@ final class DifferentialTransactionEditor
       // conditions for acceptance. This usually happens after an accepting
       // reviewer resigns or is removed.
       $new_status = DifferentialRevisionStatus::NEEDS_REVIEW;
+    } else if ($was_revision) {
+      // This revision was "Needs Revision", but no longer has any rejecting
+      // reviewers. This usually happens after the last rejecting reviewer
+      // resigns or is removed. Put the revision back in "Needs Review".
+      $new_status = DifferentialRevisionStatus::NEEDS_REVIEW;
     }
 
     if ($new_status === null) {
@@ -592,7 +570,7 @@ final class DifferentialTransactionEditor
   }
 
   protected function getMailSubjectPrefix() {
-    return PhabricatorEnv::getEnvConfig('metamta.differential.subject-prefix');
+    return pht('[Differential]');
   }
 
   protected function getMailThreadID(PhabricatorLiskDAO $object) {
@@ -630,6 +608,11 @@ final class DifferentialTransactionEditor
     return $xactions;
   }
 
+  protected function getObjectLinkButtonLabelForMail(
+    PhabricatorLiskDAO $object) {
+    return pht('View Revision');
+  }
+
   protected function buildMailBody(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -639,14 +622,13 @@ final class DifferentialTransactionEditor
     $body = id(new PhabricatorMetaMTAMailBody())
       ->setViewer($viewer);
 
-    $revision_uri = $object->getURI();
-    $revision_uri = PhabricatorEnv::getProductionURI($revision_uri);
+    $revision_uri = $this->getObjectLinkButtonURIForMail($object);
     $new_uri = $revision_uri.'/new/';
 
     $this->addHeadersAndCommentsToMailBody(
       $body,
       $xactions,
-      pht('View Revision'),
+      $this->getObjectLinkButtonLabelForMail($object),
       $revision_uri);
 
     $type_inline = DifferentialTransaction::TYPE_INLINE;
@@ -744,7 +726,7 @@ final class DifferentialTransactionEditor
             $name = pht('D%s.%s.patch', $object->getID(), $diff->getID());
             $mime_type = 'text/x-patch; charset=utf-8';
             $body->addAttachment(
-              new PhabricatorMetaMTAAttachment($patch, $name, $mime_type));
+              new PhabricatorMailAttachment($patch, $name, $mime_type));
           }
         }
       }
@@ -861,21 +843,13 @@ final class DifferentialTransactionEditor
     }
 
     if ($revert_monograms) {
-      $revert_objects = id(new PhabricatorObjectQuery())
-        ->setViewer($this->getActor())
-        ->withNames($revert_monograms)
-        ->withTypes(
-          array(
-            DifferentialRevisionPHIDType::TYPECONST,
-            PhabricatorRepositoryCommitPHIDType::TYPECONST,
-          ))
-        ->execute();
+      $revert_objects = DiffusionCommitRevisionQuery::loadRevertedObjects(
+        $this->getActor(),
+        $object,
+        $revert_monograms,
+        null);
 
       $revert_phids = mpull($revert_objects, 'getPHID', 'getPHID');
-
-      // Don't let an object revert itself, although other silly stuff like
-      // cycles of objects reverting each other is not prevented.
-      unset($revert_phids[$object->getPHID()]);
 
       $revert_type = DiffusionCommitRevertsCommitEdgeType::EDGECONST;
       $edges[$revert_type] = $revert_phids;
@@ -883,13 +857,9 @@ final class DifferentialTransactionEditor
       $revert_phids = array();
     }
 
-    // See PHI574. Respect any unmentionable PHIDs which were set on the
-    // Editor by the caller.
-    $unmentionable_map = $this->getUnmentionablePHIDMap();
-    $unmentionable_map += $task_phids;
-    $unmentionable_map += $rev_phids;
-    $unmentionable_map += $revert_phids;
-    $this->setUnmentionablePHIDMap($unmentionable_map);
+    $this->addUnmentionablePHIDs($task_phids);
+    $this->addUnmentionablePHIDs($rev_phids);
+    $this->addUnmentionablePHIDs($revert_phids);
 
     $result = array();
     foreach ($edges as $type => $specs) {
@@ -1362,9 +1332,9 @@ final class DifferentialTransactionEditor
     foreach (array_chunk($sql, 256) as $chunk) {
       queryfx(
         $conn_w,
-        'INSERT INTO %T (repositoryID, pathID, epoch, revisionID) VALUES %Q',
+        'INSERT INTO %T (repositoryID, pathID, epoch, revisionID) VALUES %LQ',
         $table->getTableName(),
-        implode(', ', $chunk));
+        $chunk);
     }
   }
 
@@ -1439,9 +1409,9 @@ final class DifferentialTransactionEditor
     if ($sql) {
       queryfx(
         $conn_w,
-        'INSERT INTO %T (revisionID, type, hash) VALUES %Q',
+        'INSERT INTO %T (revisionID, type, hash) VALUES %LQ',
         ArcanistDifferentialRevisionHash::TABLE_NAME,
-        implode(', ', $sql));
+        $sql);
     }
   }
 

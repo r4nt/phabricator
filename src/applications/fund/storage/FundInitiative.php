@@ -136,12 +136,12 @@ final class FundInitiative extends FundDAO
     }
 
     if ($capability == PhabricatorPolicyCapability::CAN_VIEW) {
-      foreach ($viewer->getAuthorities() as $authority) {
-        if ($authority instanceof PhortuneMerchant) {
-          if ($authority->getPHID() == $this->getMerchantPHID()) {
-            return true;
-          }
-        }
+      $can_merchant = PhortuneMerchantQuery::canViewersEditMerchants(
+        array($viewer->getPHID()),
+        array($this->getMerchantPHID()));
+
+      if ($can_merchant) {
+        return true;
       }
     }
 
@@ -160,19 +160,8 @@ final class FundInitiative extends FundDAO
     return new FundInitiativeEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new FundInitiativeTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 

@@ -8,6 +8,9 @@ final class PhabricatorProjectColumnQuery
   private $projectPHIDs;
   private $proxyPHIDs;
   private $statuses;
+  private $isProxyColumn;
+  private $triggerPHIDs;
+  private $needTriggers;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -31,6 +34,21 @@ final class PhabricatorProjectColumnQuery
 
   public function withStatuses(array $status) {
     $this->statuses = $status;
+    return $this;
+  }
+
+  public function withIsProxyColumn($is_proxy) {
+    $this->isProxyColumn = $is_proxy;
+    return $this;
+  }
+
+  public function withTriggerPHIDs(array $trigger_phids) {
+    $this->triggerPHIDs = $trigger_phids;
+    return $this;
+  }
+
+  public function needTriggers($need_triggers) {
+    $this->needTriggers = true;
     return $this;
   }
 
@@ -115,6 +133,42 @@ final class PhabricatorProjectColumnQuery
       $column->attachProxy($proxy);
     }
 
+    if ($this->needTriggers) {
+      $trigger_phids = array();
+      foreach ($page as $column) {
+        if ($column->canHaveTrigger()) {
+          $trigger_phid = $column->getTriggerPHID();
+          if ($trigger_phid) {
+            $trigger_phids[] = $trigger_phid;
+          }
+        }
+      }
+
+      if ($trigger_phids) {
+        $triggers = id(new PhabricatorProjectTriggerQuery())
+          ->setViewer($this->getViewer())
+          ->setParentQuery($this)
+          ->withPHIDs($trigger_phids)
+          ->execute();
+        $triggers = mpull($triggers, null, 'getPHID');
+      } else {
+        $triggers = array();
+      }
+
+      foreach ($page as $column) {
+        $trigger = null;
+
+        if ($column->canHaveTrigger()) {
+          $trigger_phid = $column->getTriggerPHID();
+          if ($trigger_phid) {
+            $trigger = idx($triggers, $trigger_phid);
+          }
+        }
+
+        $column->attachTrigger($trigger);
+      }
+    }
+
     return $page;
   }
 
@@ -154,6 +208,21 @@ final class PhabricatorProjectColumnQuery
         $conn,
         'status IN (%Ld)',
         $this->statuses);
+    }
+
+    if ($this->triggerPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'triggerPHID IN (%Ls)',
+        $this->triggerPHIDs);
+    }
+
+    if ($this->isProxyColumn !== null) {
+      if ($this->isProxyColumn) {
+        $where[] = qsprintf($conn, 'proxyPHID IS NOT NULL');
+      } else {
+        $where[] = qsprintf($conn, 'proxyPHID IS NULL');
+      }
     }
 
     return $where;

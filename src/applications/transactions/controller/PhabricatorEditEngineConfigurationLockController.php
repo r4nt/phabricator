@@ -30,8 +30,7 @@ final class PhabricatorEditEngineConfigurationLockController
       $xactions = array();
 
       $locks = $request->getArr('locks');
-      $type_locks = PhabricatorEditEngineConfigurationTransaction::TYPE_LOCKS;
-
+      $type_locks = PhabricatorEditEngineLocksTransaction::TRANSACTIONTYPE;
       $xactions[] = id(new PhabricatorEditEngineConfigurationTransaction())
         ->setTransactionType($type_locks)
         ->setNewValue($locks);
@@ -79,6 +78,10 @@ EOTEXT
     );
 
     foreach ($fields as $field) {
+      if (!$field->getIsFormField()) {
+        continue;
+      }
+
       if (!$field->getIsLockable()) {
         continue;
       }

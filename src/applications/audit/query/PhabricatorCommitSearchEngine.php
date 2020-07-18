@@ -54,8 +54,16 @@ final class PhabricatorCommitSearchEngine
       $query->withUnreachable($map['unreachable']);
     }
 
+    if ($map['unpublished'] !== null) {
+      $query->withUnpublished($map['unpublished']);
+    }
+
     if ($map['ancestorsOf']) {
       $query->withAncestorsOf($map['ancestorsOf']);
+    }
+
+    if ($map['identifiers']) {
+      $query->withIdentifiers($map['identifiers']);
     }
 
     return $query;
@@ -123,6 +131,17 @@ final class PhabricatorCommitSearchEngine
           pht(
             'Find or exclude unreachable commits which are not ancestors of '.
             'any branch, tag, or ref.')),
+      id(new PhabricatorSearchThreeStateField())
+        ->setLabel(pht('Unpublished'))
+        ->setKey('unpublished')
+        ->setOptions(
+          pht('(Show All)'),
+          pht('Show Only Unpublished Commits'),
+          pht('Hide Unpublished Commits'))
+        ->setDescription(
+          pht(
+            'Find or exclude unpublished commits which are not ancestors of '.
+            'any permanent branch, tag, or ref.')),
       id(new PhabricatorSearchStringListField())
         ->setLabel(pht('Ancestors Of'))
         ->setKey('ancestorsOf')
@@ -130,6 +149,15 @@ final class PhabricatorCommitSearchEngine
           pht(
             'Find commits which are ancestors of a particular ref, '.
             'like "master".')),
+      id(new PhabricatorSearchStringListField())
+        ->setLabel(pht('Identifiers'))
+        ->setKey('identifiers')
+        ->setDescription(
+          pht(
+            'Find commits with particular identifiers (usually, hashes). '.
+            'Supports full or partial identifiers (like "abcd12340987..." or '.
+            '"abcd1234") and qualified or unqualified identifiers (like '.
+            '"rXabcd1234" or "abcd1234").')),
     );
   }
 

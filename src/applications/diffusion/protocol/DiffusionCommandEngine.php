@@ -120,6 +120,7 @@ abstract class DiffusionCommandEngine extends Phobject {
   public function newFuture() {
     $argv = $this->newCommandArgv();
     $env = $this->newCommandEnvironment();
+    $is_passthru = $this->getPassthru();
 
     if ($this->getSudoAsDaemon()) {
       $command = call_user_func_array('csprintf', $argv);
@@ -127,7 +128,7 @@ abstract class DiffusionCommandEngine extends Phobject {
       $argv = array('%C', $command);
     }
 
-    if ($this->getPassthru()) {
+    if ($is_passthru) {
       $future = newv('PhutilExecPassthru', $argv);
     } else {
       $future = newv('ExecFuture', $argv);
@@ -138,7 +139,10 @@ abstract class DiffusionCommandEngine extends Phobject {
     // See T13108. By default, don't let any cluster command run indefinitely
     // to try to avoid cases where `git fetch` hangs for some reason and we're
     // left sitting with a held lock forever.
-    $future->setTimeout(phutil_units('15 minutes in seconds'));
+    $repository = $this->getRepository();
+    if (!$is_passthru) {
+      $future->setTimeout($repository->getEffectiveCopyTimeLimit());
+    }
 
     return $future;
   }

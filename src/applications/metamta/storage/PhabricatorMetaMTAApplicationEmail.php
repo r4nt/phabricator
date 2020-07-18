@@ -67,6 +67,9 @@ final class PhabricatorMetaMTAApplicationEmail
     return idx($this->configData, $key, $default);
   }
 
+  public function getDefaultAuthorPHID() {
+    return $this->getConfigValue(self::CONFIG_DEFAULT_AUTHOR);
+  }
 
   public function getInUseMessage() {
     $applications = PhabricatorApplication::getAllApplications();
@@ -86,6 +89,10 @@ final class PhabricatorMetaMTAApplicationEmail
     }
 
     return $message;
+  }
+
+  public function newAddress() {
+    return new PhutilEmailAddress($this->getAddress());
   }
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
@@ -123,18 +130,8 @@ final class PhabricatorMetaMTAApplicationEmail
     return new PhabricatorMetaMTAApplicationEmailEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorMetaMTAApplicationEmailTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-    return $timeline;
   }
 
 

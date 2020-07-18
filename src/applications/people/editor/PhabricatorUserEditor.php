@@ -74,18 +74,11 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
         throw $ex;
       }
 
-      $log = PhabricatorUserLog::initializeNewLog(
-        $this->requireActor(),
-        $user->getPHID(),
-        PhabricatorUserLog::ACTION_CREATE);
-      $log->setNewValue($email->getAddress());
-      $log->save();
-
       if ($is_reassign) {
         $log = PhabricatorUserLog::initializeNewLog(
           $this->requireActor(),
           $user->getPHID(),
-          PhabricatorUserLog::ACTION_EMAIL_REASSIGN);
+          PhabricatorReassignEmailUserLogType::LOGTYPE);
         $log->setNewValue($email->getAddress());
         $log->save();
       }
@@ -96,126 +89,14 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
       $this->didVerifyEmail($user, $email);
     }
 
-    return $this;
-  }
-
-
-  /**
-   * @task edit
-   */
-  public function updateUser(
-    PhabricatorUser $user,
-    PhabricatorUserEmail $email = null) {
-
-    if (!$user->getID()) {
-      throw new Exception(pht('User has not been created yet!'));
-    }
-
-    $user->openTransaction();
-      $user->save();
-      if ($email) {
-        $email->save();
-      }
-
-      $log = PhabricatorUserLog::initializeNewLog(
-        $this->requireActor(),
-        $user->getPHID(),
-        PhabricatorUserLog::ACTION_EDIT);
-      $log->save();
-
-    $user->saveTransaction();
+    id(new DiffusionRepositoryIdentityEngine())
+      ->didUpdateEmailAddress($email->getAddress());
 
     return $this;
-  }
-
-
-  /**
-   * @task edit
-   */
-  public function changeUsername(PhabricatorUser $user, $username) {
-    $actor = $this->requireActor();
-
-    if (!$user->getID()) {
-      throw new Exception(pht('User has not been created yet!'));
-    }
-
-    if (!PhabricatorUser::validateUsername($username)) {
-      $valid = PhabricatorUser::describeValidUsername();
-      throw new Exception(pht('Username is invalid! %s', $valid));
-    }
-
-    $old_username = $user->getUsername();
-
-    $user->openTransaction();
-      $user->reload();
-      $user->setUsername($username);
-
-      try {
-        $user->save();
-      } catch (AphrontDuplicateKeyQueryException $ex) {
-        $user->setUsername($old_username);
-        $user->killTransaction();
-        throw $ex;
-      }
-
-      $log = PhabricatorUserLog::initializeNewLog(
-        $actor,
-        $user->getPHID(),
-        PhabricatorUserLog::ACTION_CHANGE_USERNAME);
-      $log->setOldValue($old_username);
-      $log->setNewValue($username);
-      $log->save();
-
-    $user->saveTransaction();
-
-    // The SSH key cache currently includes usernames, so dirty it. See T12554
-    // for discussion.
-    PhabricatorAuthSSHKeyQuery::deleteSSHKeyCache();
-
-    $user->sendUsernameChangeEmail($actor, $old_username);
   }
 
 
 /* -(  Editing Roles  )------------------------------------------------------ */
-
-
-  /**
-   * @task role
-   */
-  public function makeAdminUser(PhabricatorUser $user, $admin) {
-    $actor = $this->requireActor();
-
-    if (!$user->getID()) {
-      throw new Exception(pht('User has not been created yet!'));
-    }
-
-    $user->openTransaction();
-      $user->beginWriteLocking();
-
-        $user->reload();
-        if ($user->getIsAdmin() == $admin) {
-          $user->endWriteLocking();
-          $user->killTransaction();
-          return $this;
-        }
-
-        $log = PhabricatorUserLog::initializeNewLog(
-          $actor,
-          $user->getPHID(),
-          PhabricatorUserLog::ACTION_ADMIN);
-        $log->setOldValue($user->getIsAdmin());
-        $log->setNewValue($admin);
-
-        $user->setIsAdmin((int)$admin);
-        $user->save();
-
-        $log->save();
-
-      $user->endWriteLocking();
-    $user->saveTransaction();
-
-    return $this;
-  }
 
   /**
    * @task role
@@ -237,17 +118,8 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
           return $this;
         }
 
-        $log = PhabricatorUserLog::initializeNewLog(
-          $actor,
-          $user->getPHID(),
-          PhabricatorUserLog::ACTION_SYSTEM_AGENT);
-        $log->setOldValue($user->getIsSystemAgent());
-        $log->setNewValue($system_agent);
-
         $user->setIsSystemAgent((int)$system_agent);
         $user->save();
-
-        $log->save();
 
       $user->endWriteLocking();
     $user->saveTransaction();
@@ -275,62 +147,14 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
           return $this;
         }
 
-        $log = PhabricatorUserLog::initializeNewLog(
-          $actor,
-          $user->getPHID(),
-          PhabricatorUserLog::ACTION_MAILING_LIST);
-        $log->setOldValue($user->getIsMailingList());
-        $log->setNewValue($mailing_list);
-
         $user->setIsMailingList((int)$mailing_list);
         $user->save();
 
-        $log->save();
-
       $user->endWriteLocking();
     $user->saveTransaction();
 
     return $this;
   }
-
-  /**
-   * @task role
-   */
-  public function approveUser(PhabricatorUser $user, $approve) {
-    $actor = $this->requireActor();
-
-    if (!$user->getID()) {
-      throw new Exception(pht('User has not been created yet!'));
-    }
-
-    $user->openTransaction();
-      $user->beginWriteLocking();
-
-        $user->reload();
-        if ($user->getIsApproved() == $approve) {
-          $user->endWriteLocking();
-          $user->killTransaction();
-          return $this;
-        }
-
-        $log = PhabricatorUserLog::initializeNewLog(
-          $actor,
-          $user->getPHID(),
-          PhabricatorUserLog::ACTION_APPROVE);
-        $log->setOldValue($user->getIsApproved());
-        $log->setNewValue($approve);
-
-        $user->setIsApproved($approve);
-        $user->save();
-
-        $log->save();
-
-      $user->endWriteLocking();
-    $user->saveTransaction();
-
-    return $this;
-  }
-
 
 /* -(  Adding, Removing and Changing Email  )-------------------------------- */
 
@@ -374,18 +198,15 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
         $log = PhabricatorUserLog::initializeNewLog(
           $actor,
           $user->getPHID(),
-          PhabricatorUserLog::ACTION_EMAIL_ADD);
+          PhabricatorAddEmailUserLogType::LOGTYPE);
         $log->setNewValue($email->getAddress());
         $log->save();
 
       $user->endWriteLocking();
     $user->saveTransaction();
 
-    // Try and match this new address against unclaimed `RepositoryIdentity`s
-    PhabricatorWorker::scheduleTask(
-      'PhabricatorRepositoryIdentityChangeWorker',
-      array('userPHID' => $user->getPHID()),
-      array('objectPHID' => $user->getPHID()));
+    id(new DiffusionRepositoryIdentityEngine())
+      ->didUpdateEmailAddress($email->getAddress());
 
     return $this;
   }
@@ -420,12 +241,14 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
           throw new Exception(pht('Email not owned by user!'));
         }
 
-        $email->delete();
+        $destruction_engine = id(new PhabricatorDestructionEngine())
+          ->setWaitToFinalizeDestruction(true)
+          ->destroyObject($email);
 
         $log = PhabricatorUserLog::initializeNewLog(
           $actor,
           $user->getPHID(),
-          PhabricatorUserLog::ACTION_EMAIL_REMOVE);
+          PhabricatorRemoveEmailUserLogType::LOGTYPE);
         $log->setOldValue($email->getAddress());
         $log->save();
 
@@ -433,6 +256,7 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
     $user->saveTransaction();
 
     $this->revokePasswordResetLinks($user);
+    $destruction_engine->finalizeDestruction();
 
     return $this;
   }
@@ -491,7 +315,7 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
         $log = PhabricatorUserLog::initializeNewLog(
           $actor,
           $user->getPHID(),
-          PhabricatorUserLog::ACTION_EMAIL_PRIMARY);
+          PhabricatorPrimaryEmailUserLogType::LOGTYPE);
         $log->setOldValue($old_primary ? $old_primary->getAddress() : null);
         $log->setNewValue($email->getAddress());
 
@@ -504,7 +328,6 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
       $old_primary->sendOldPrimaryEmail($user, $email);
     }
     $email->sendNewPrimaryEmail($user);
-
 
     $this->revokePasswordResetLinks($user);
 
@@ -550,7 +373,7 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
           $log = PhabricatorUserLog::initializeNewLog(
             $actor,
             $user->getPHID(),
-            PhabricatorUserLog::ACTION_EMAIL_VERIFY);
+            PhabricatorVerifyEmailUserLogType::LOGTYPE);
           $log->setNewValue($email->getAddress());
           $log->save();
         }
@@ -612,13 +435,16 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
           $log = PhabricatorUserLog::initializeNewLog(
             $actor,
             $user->getPHID(),
-            PhabricatorUserLog::ACTION_EMAIL_REASSIGN);
+            PhabricatorReassignEmailUserLogType::LOGTYPE);
           $log->setNewValue($email->getAddress());
           $log->save();
         }
 
       $user->endWriteLocking();
     $user->saveTransaction();
+
+    id(new DiffusionRepositoryIdentityEngine())
+      ->didUpdateEmailAddress($email->getAddress());
   }
 
 

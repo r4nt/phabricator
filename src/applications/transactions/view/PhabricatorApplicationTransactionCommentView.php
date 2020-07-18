@@ -1,9 +1,7 @@
 <?php
 
-/**
- * @concrete-extensible
- */
-class PhabricatorApplicationTransactionCommentView extends AphrontView {
+final class PhabricatorApplicationTransactionCommentView
+  extends AphrontView {
 
   private $submitButtonName;
   private $action;
@@ -24,6 +22,7 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
   private $infoView;
   private $editEngineLock;
   private $noBorder;
+  private $requiresMFA;
 
   private $currentVersion;
   private $versionedDraft;
@@ -160,6 +159,15 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
     return $this->editEngineLock;
   }
 
+  public function setRequiresMFA($requires_mfa) {
+    $this->requiresMFA = $requires_mfa;
+    return $this;
+  }
+
+  public function getRequiresMFA() {
+    return $this->requiresMFA;
+  }
+
   public function setTransactionTimeline(
     PhabricatorApplicationTransactionView $timeline) {
 
@@ -187,10 +195,10 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
           ));
     }
 
-    $user = $this->getUser();
-    if (!$user->isLoggedIn()) {
+    $viewer = $this->getViewer();
+    if (!$viewer->isLoggedIn()) {
       $uri = id(new PhutilURI('/login/'))
-        ->setQueryParam('next', (string)$this->getRequestURI());
+        ->replaceQueryParam('next', (string)$this->getRequestURI());
       return id(new PHUIObjectBoxView())
         ->setFlush(true)
         ->appendChild(
@@ -201,6 +209,25 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
               'href' => $uri,
             ),
             pht('Log In to Comment')));
+    }
+
+    if ($this->getRequiresMFA()) {
+      if (!$viewer->getIsEnrolledInMultiFactor()) {
+        $viewer->updateMultiFactorEnrollment();
+        if (!$viewer->getIsEnrolledInMultiFactor()) {
+          $messages = array();
+          $messages[] = pht(
+            'You must provide multi-factor credentials to comment or make '.
+            'changes, but you do not have multi-factor authentication '.
+            'configured on your account.');
+          $messages[] = pht(
+            'To continue, configure multi-factor authentication in Settings.');
+
+          return id(new PHUIInfoView())
+            ->setSeverity(PHUIInfoView::SEVERITY_MFA)
+            ->setErrors($messages);
+        }
+      }
     }
 
     $data = array();
@@ -226,12 +253,13 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
     }
 
     require_celerity_resource('phui-comment-form-css');
-    $image_uri = $user->getProfileImageURI();
-    $image = phutil_tag(
+    $image_uri = $viewer->getProfileImageURI();
+    $image = javelin_tag(
       'div',
       array(
         'style' => 'background-image: url('.$image_uri.')',
-        'class' => 'phui-comment-image visual-only',
+        'class' => 'phui-comment-image',
+        'aural' => false,
       ));
     $wedge = phutil_tag(
       'div',
@@ -242,10 +270,14 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
 
     $badge_view = $this->renderBadgeView();
 
+    $anchor = id(new PhabricatorAnchorView())
+      ->setAnchorName('reply');
+
     $comment_box = id(new PHUIObjectBoxView())
       ->setFlush(true)
       ->addClass('phui-comment-form-view')
       ->addSigil('phui-comment-form')
+      ->appendChild($anchor)
       ->appendChild(
         phutil_tag(
           'h3',
@@ -329,7 +361,6 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
         $key = $comment_action->getKey();
         $label = $comment_action->getLabel();
 
-
         $action_map[$key] = array(
           'key' => $key,
           'label' => $label,
@@ -339,6 +370,7 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
           'groupKey' => $comment_action->getGroupKey(),
           'conflictKey' => $comment_action->getConflictKey(),
           'auralLabel' => pht('Remove Action: %s', $label),
+          'buttonText' => $comment_action->getSubmitButtonText(),
         );
 
         $type_map[$key] = $comment_action;
@@ -388,8 +420,26 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
         $form->appendChild($info_view);
       }
 
+      if ($this->getRequiresMFA()) {
+        $message = pht(
+          'You will be required to provide multi-factor credentials to '.
+          'comment or make changes.');
+
+        $form->appendChild(
+          id(new PHUIInfoView())
+            ->setSeverity(PHUIInfoView::SEVERITY_MFA)
+            ->setErrors(array($message)));
+      }
+
       $form->appendChild($invisi_bar);
       $form->addClass('phui-comment-has-actions');
+
+      $timeline = $this->transactionTimeline;
+
+      $view_data = array();
+      if ($timeline) {
+        $view_data = $timeline->getViewData();
+      }
 
       Javelin::initBehavior(
         'comment-actions',
@@ -404,6 +454,8 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
           'showPreview' => $this->getShowPreview(),
           'actionURI' => $this->getAction(),
           'drafts' => $draft_keys,
+          'defaultButtonText' => $this->getSubmitButtonName(),
+          'viewData' => $view_data,
         ));
     }
 
@@ -426,6 +478,7 @@ class PhabricatorApplicationTransactionCommentView extends AphrontView {
         id(new AphrontFormSubmitControl())
           ->addClass('phui-comment-fullwidth-control')
           ->addClass('phui-comment-submit-control')
+          ->addSigil('submit-transactions')
           ->setValue($this->getSubmitButtonName()));
 
     return $form;

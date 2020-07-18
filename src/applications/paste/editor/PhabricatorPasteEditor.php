@@ -3,6 +3,12 @@
 final class PhabricatorPasteEditor
   extends PhabricatorApplicationTransactionEditor {
 
+  private $newPasteTitle;
+
+  public function getNewPasteTitle() {
+    return $this->newPasteTitle;
+  }
+
   public function getEditorApplicationClass() {
     return 'PhabricatorPasteApplication';
   }
@@ -29,6 +35,22 @@ final class PhabricatorPasteEditor
     return $types;
   }
 
+  protected function expandTransactions(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    $new_title = $object->getTitle();
+    foreach ($xactions as $xaction) {
+      $type = $xaction->getTransactionType();
+      if ($type === PhabricatorPasteTitleTransaction::TRANSACTIONTYPE) {
+        $new_title = $xaction->getNewValue();
+      }
+    }
+    $this->newPasteTitle = $new_title;
+
+    return parent::expandTransactions($object, $xactions);
+  }
+
   protected function shouldSendMail(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -41,7 +63,7 @@ final class PhabricatorPasteEditor
   }
 
   protected function getMailSubjectPrefix() {
-    return PhabricatorEnv::getEnvConfig('metamta.paste.subject-prefix');
+    return pht('[Paste]');
   }
 
   protected function getMailTo(PhabricatorLiskDAO $object) {
@@ -91,6 +113,10 @@ final class PhabricatorPasteEditor
   protected function shouldPublishFeedStory(
     PhabricatorLiskDAO $object,
     array $xactions) {
+    return true;
+  }
+
+  protected function supportsSearch() {
     return true;
   }
 

@@ -111,7 +111,7 @@ final class PhabricatorNotificationSearchEngine
         ->setUser($viewer);
 
       $view = $builder->buildView();
-      $clear_uri->setQueryParam(
+      $clear_uri->replaceQueryParam(
         'chronoKey',
         head($notifications)->getChronologicalKey());
     } else {
@@ -132,10 +132,6 @@ final class PhabricatorNotificationSearchEngine
     $result->setContent($view);
 
     return $result;
-  }
-
-  public function shouldUseOffsetPaging() {
-    return true;
   }
 
 }

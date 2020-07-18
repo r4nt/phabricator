@@ -52,8 +52,6 @@ final class MultimeterSampleController extends MultimeterController {
       }
     }
 
-    $where = '('.implode(') AND (', $where).')';
-
     $data = queryfx_all(
       $conn,
       'SELECT *,
@@ -61,13 +59,13 @@ final class MultimeterSampleController extends MultimeterController {
           SUM(sampleRate * resourceCost) AS totalCost,
           SUM(sampleRate * resourceCost) / SUM(sampleRate) AS averageCost
         FROM %T
-        WHERE %Q
-        GROUP BY %Q
+        WHERE %LA
+        GROUP BY %LC
         ORDER BY totalCost DESC, MAX(id) DESC
         LIMIT 100',
       $table->getTableName(),
       $where,
-      implode(', ', array_select_keys($group_map, $group)));
+      array_select_keys($group_map, $group));
 
     $this->loadDimensions($data);
     $phids = array();
@@ -302,13 +300,14 @@ final class MultimeterSampleController extends MultimeterController {
 
     $group = implode('.', $group);
     if (!strlen($group)) {
-      $group = null;
+      $uri->removeQueryParam('group');
+    } else {
+      $uri->replaceQueryParam('group', $group);
     }
-    $uri->setQueryParam('group', $group);
 
     if ($wipe) {
       foreach ($this->getColumnMap() as $key => $column) {
-        $uri->setQueryParam($key, null);
+        $uri->removeQueryParam($key);
       }
     }
 
@@ -319,7 +318,7 @@ final class MultimeterSampleController extends MultimeterController {
     $value = (array)$value;
 
     $uri = clone $this->getRequest()->getRequestURI();
-    $uri->setQueryParam($key, implode(',', $value));
+    $uri->replaceQueryParam($key, implode(',', $value));
 
     return phutil_tag(
       'a',

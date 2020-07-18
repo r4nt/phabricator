@@ -23,15 +23,15 @@ abstract class PhabricatorModularTransactionType
     return array();
   }
 
-  public function willApplyTransactions($object, array $xactions) {
-    return;
-  }
-
   public function applyInternalEffects($object, $value) {
     return;
   }
 
   public function applyExternalEffects($object, $value) {
+    return;
+  }
+
+  public function didCommitTransaction($object, $value) {
     return;
   }
 
@@ -53,6 +53,10 @@ abstract class PhabricatorModularTransactionType
 
   public function shouldHideForMail() {
     return false;
+  }
+
+  public function shouldHideForNotifications() {
+    return null;
   }
 
   public function getIcon() {
@@ -193,6 +197,34 @@ abstract class PhabricatorModularTransactionType
 
   final protected function renderNewHandle() {
     return $this->renderHandle($this->getNewValue());
+  }
+
+  final protected function renderOldPolicy() {
+    return $this->renderPolicy($this->getOldValue(), 'old');
+  }
+
+  final protected function renderNewPolicy() {
+    return $this->renderPolicy($this->getNewValue(), 'new');
+  }
+
+  final protected function renderPolicy($phid, $mode) {
+    $viewer = $this->getViewer();
+    $handles = $viewer->loadHandles(array($phid));
+
+    $policy = PhabricatorPolicy::newFromPolicyAndHandle(
+      $phid,
+      $handles[$phid]);
+
+    $ref = $policy->newRef($viewer);
+
+    if ($this->isTextMode()) {
+      $name = $ref->getPolicyDisplayName();
+    } else {
+      $storage = $this->getStorage();
+      $name = $ref->newTransactionLink($mode, $storage);
+    }
+
+    return $this->renderValue($name);
   }
 
   final protected function renderHandleList(array $phids) {
@@ -390,6 +422,76 @@ abstract class PhabricatorModularTransactionType
     $object,
     PhabricatorApplicationTransaction $xaction) {
     return PhabricatorPolicyCapability::CAN_EDIT;
+  }
+
+  public function shouldTryMFA(
+    $object,
+    PhabricatorApplicationTransaction $xaction) {
+    return false;
+  }
+
+  // NOTE: See T12921. These APIs are somewhat aspirational. For now, all of
+  // these use "TARGET_TEXT" (even the HTML methods!) and the body methods
+  // actually return Remarkup, not text or HTML.
+
+  final public function getTitleForTextMail() {
+    return $this->getTitleForMailWithRenderingTarget(
+      PhabricatorApplicationTransaction::TARGET_TEXT);
+  }
+
+  final public function getTitleForHTMLMail() {
+    return $this->getTitleForMailWithRenderingTarget(
+      PhabricatorApplicationTransaction::TARGET_TEXT);
+  }
+
+  final public function getBodyForTextMail() {
+    return $this->getBodyForMailWithRenderingTarget(
+      PhabricatorApplicationTransaction::TARGET_TEXT);
+  }
+
+  final public function getBodyForHTMLMail() {
+    return $this->getBodyForMailWithRenderingTarget(
+      PhabricatorApplicationTransaction::TARGET_TEXT);
+  }
+
+  private function getTitleForMailWithRenderingTarget($target) {
+    $storage = $this->getStorage();
+
+    $old_target = $storage->getRenderingTarget();
+    try {
+      $storage->setRenderingTarget($target);
+      $result = $this->getTitleForMail();
+    } catch (Exception $ex) {
+      $storage->setRenderingTarget($old_target);
+      throw $ex;
+    }
+    $storage->setRenderingTarget($old_target);
+
+    return $result;
+  }
+
+  private function getBodyForMailWithRenderingTarget($target) {
+    $storage = $this->getStorage();
+
+    $old_target = $storage->getRenderingTarget();
+    try {
+      $storage->setRenderingTarget($target);
+      $result = $this->getBodyForMail();
+    } catch (Exception $ex) {
+      $storage->setRenderingTarget($old_target);
+      throw $ex;
+    }
+    $storage->setRenderingTarget($old_target);
+
+    return $result;
+  }
+
+  protected function getTitleForMail() {
+    return false;
+  }
+
+  protected function getBodyForMail() {
+    return false;
   }
 
 }

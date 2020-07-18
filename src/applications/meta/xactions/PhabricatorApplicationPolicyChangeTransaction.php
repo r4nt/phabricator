@@ -35,36 +35,39 @@ final class PhabricatorApplicationPolicyChangeTransaction
 
     $editor = $this->getEditor();
     $content_source = $editor->getContentSource();
+
+    // NOTE: We allow applications to have custom edit policies, but they are
+    // currently stored in the Config application. The ability to edit Config
+    // values is always restricted to administrators, today. Empower this
+    // particular edit to punch through possible stricter policies, so normal
+    // users can change application configuration if the application allows
+    // them to do so.
+
     PhabricatorConfigEditor::storeNewValue(
-      $user,
+      PhabricatorUser::getOmnipotentUser(),
       $config_entry,
       $current_value,
-      $content_source);
+      $content_source,
+      $user->getPHID());
   }
 
   public function getTitle() {
-    $old = $this->renderPolicy($this->getOldValue());
-    $new = $this->renderPolicy($this->getNewValue());
-
     return pht(
-      '%s changed the "%s" policy from "%s" to "%s".',
+      '%s changed the %s policy from %s to %s.',
       $this->renderAuthor(),
       $this->renderCapability(),
-      $old,
-      $new);
+      $this->renderOldPolicy(),
+      $this->renderNewPolicy());
   }
 
   public function getTitleForFeed() {
-    $old = $this->renderPolicy($this->getOldValue());
-    $new = $this->renderPolicy($this->getNewValue());
-
     return pht(
-      '%s changed the "%s" policy for application %s from "%s" to "%s".',
+      '%s changed the %s policy for application %s from %s to %s.',
       $this->renderAuthor(),
       $this->renderCapability(),
       $this->renderObject(),
-      $old,
-      $new);
+      $this->renderOldPolicy(),
+      $this->renderNewPolicy());
   }
 
   public function validateTransactions($object, array $xactions) {
@@ -156,38 +159,11 @@ final class PhabricatorApplicationPolicyChangeTransaction
     return $errors;
   }
 
-  private function renderPolicy($name) {
-    $policies = $this->getAllPolicies();
-    if (empty($policies[$name])) {
-      // Not a standard policy, check for a custom policy.
-      $policy = id(new PhabricatorPolicyQuery())
-        ->setViewer($this->getViewer())
-        ->withPHIDs(array($name))
-        ->executeOne();
-      $policies[$name] = $policy;
-    }
-
-    $policy = idx($policies, $name);
-    return $this->renderValue($policy->getFullName());
-  }
-
-  private function getAllPolicies() {
-    if (!$this->policies) {
-      $viewer = $this->getViewer();
-      $application = $this->getObject();
-      $this->policies = id(new PhabricatorPolicyQuery())
-        ->setViewer($viewer)
-        ->setObject($application)
-        ->execute();
-    }
-
-    return $this->policies;
-  }
-
   private function renderCapability() {
     $application = $this->getObject();
     $capability = $this->getCapabilityName();
-    return $application->getCapabilityLabel($capability);
+    $label = $application->getCapabilityLabel($capability);
+    return $this->renderValue($label);
   }
 
   private function getCapabilityName() {

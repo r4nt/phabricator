@@ -4,7 +4,8 @@ final class PhabricatorAuthProviderConfig
   extends PhabricatorAuthDAO
   implements
     PhabricatorApplicationTransactionInterface,
-    PhabricatorPolicyInterface {
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface {
 
   protected $providerClass;
   protected $providerType;
@@ -83,6 +84,27 @@ final class PhabricatorAuthProviderConfig
     return $this->provider;
   }
 
+  public function getURI() {
+    return '/auth/config/view/'.$this->getID().'/';
+  }
+
+  public function getObjectName() {
+    return pht('Auth Provider %d', $this->getID());
+  }
+
+  public function getDisplayName() {
+    return $this->getProvider()->getProviderName();
+  }
+
+  public function getSortVector() {
+    return id(new PhutilSortVector())
+      ->addString($this->getDisplayName());
+  }
+
+  public function newIconView() {
+    return $this->getProvider()->newIconView();
+  }
+
 
 /* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
 
@@ -91,19 +113,8 @@ final class PhabricatorAuthProviderConfig
     return new PhabricatorAuthProviderConfigEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorAuthProviderConfigTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -128,6 +139,35 @@ final class PhabricatorAuthProviderConfig
 
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return false;
+  }
+
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $viewer = $engine->getViewer();
+    $config_phid = $this->getPHID();
+
+    $accounts = id(new PhabricatorExternalAccountQuery())
+      ->setViewer($viewer)
+      ->withProviderConfigPHIDs(array($config_phid))
+      ->newIterator();
+    foreach ($accounts as $account) {
+      $engine->destroyObject($account);
+    }
+
+    $identifiers = id(new PhabricatorExternalAccountIdentifierQuery())
+      ->setViewer($viewer)
+      ->withProviderConfigPHIDs(array($config_phid))
+      ->newIterator();
+    foreach ($identifiers as $identifier) {
+      $engine->destroyObject($identifier);
+    }
+
+    $this->delete();
   }
 
 }

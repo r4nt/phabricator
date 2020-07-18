@@ -7,6 +7,7 @@ abstract class PhabricatorSearchNgrams
   protected $ngram;
 
   private $value;
+  private $ngramEngine;
 
   abstract public function getNgramKey();
   abstract public function getColumnName();
@@ -44,44 +45,10 @@ abstract class PhabricatorSearchNgrams
     return "{$application}_{$key}_ngrams";
   }
 
-  final public function tokenizeString($value) {
-    $value = trim($value, ' ');
-    $value = preg_split('/ +/', $value);
-    return $value;
-  }
-
-  final public function getNgramsFromString($value, $mode) {
-    $tokens = $this->tokenizeString($value);
-
-    $ngrams = array();
-    foreach ($tokens as $token) {
-      $token = phutil_utf8_strtolower($token);
-
-      switch ($mode) {
-        case 'query':
-          break;
-        case 'index':
-          $token = ' '.$token.' ';
-          break;
-        case 'prefix':
-          $token = ' '.$token;
-          break;
-      }
-
-      $len = (strlen($token) - 2);
-      for ($ii = 0; $ii < $len; $ii++) {
-        $ngram = substr($token, $ii, 3);
-        $ngrams[$ngram] = $ngram;
-      }
-    }
-
-    ksort($ngrams);
-
-    return array_keys($ngrams);
-  }
-
   final public function writeNgram($object_id) {
-    $ngrams = $this->getNgramsFromString($this->getValue(), 'index');
+    $ngram_engine = $this->getNgramEngine();
+    $ngrams = $ngram_engine->getTermNgramsFromString($this->getValue());
+
     $conn_w = $this->establishConnection('w');
 
     $sql = array();
@@ -102,12 +69,20 @@ abstract class PhabricatorSearchNgrams
     if ($sql) {
       queryfx(
         $conn_w,
-        'INSERT INTO %T (objectID, ngram) VALUES %Q',
+        'INSERT INTO %T (objectID, ngram) VALUES %LQ',
         $this->getTableName(),
-        implode(', ', $sql));
+        $sql);
     }
 
     return $this;
+  }
+
+  private function getNgramEngine() {
+    if (!$this->ngramEngine) {
+      $this->ngramEngine = new PhabricatorSearchNgramEngine();
+    }
+
+    return $this->ngramEngine;
   }
 
 }

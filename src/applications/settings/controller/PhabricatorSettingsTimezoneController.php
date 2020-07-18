@@ -20,7 +20,8 @@ final class PhabricatorSettingsTimezoneController
       $zone = new DateTimeZone($identifier);
       $offset = -($zone->getOffset($now) / 60);
       if ($offset == $client_offset) {
-        $options[$identifier] = $identifier;
+        $name = PhabricatorTime::getTimezoneDisplayName($identifier);
+        $options[$identifier] = $name;
       }
     }
 
@@ -63,7 +64,7 @@ final class PhabricatorSettingsTimezoneController
 
     $server_offset = $viewer->getTimeZoneOffset();
 
-    if ($client_offset == $server_offset || $did_calibrate) {
+    if (($client_offset == $server_offset) || $did_calibrate) {
       return $this->newDialog()
         ->setTitle(pht('Timezone Calibrated'))
         ->appendParagraph(
@@ -113,12 +114,18 @@ final class PhabricatorSettingsTimezoneController
   }
 
   private function formatOffset($offset) {
-    $offset = $offset / 60;
+    // This controller works with client-side (Javascript) offsets, which have
+    // the opposite sign we might expect -- for example "UTC-3" is a positive
+    // offset. Invert the sign before rendering the offset.
+    $offset = -1 * $offset;
 
-    if ($offset >= 0) {
-      return pht('UTC-%d', $offset);
+    $hours = $offset / 60;
+    // Non-integer number of hours off UTC?
+    if ($offset % 60) {
+      $minutes = abs($offset % 60);
+      return pht('UTC%+d:%02d', $hours, $minutes);
     } else {
-      return pht('UTC+%d', -$offset);
+      return pht('UTC%+d', $hours);
     }
   }
 

@@ -45,45 +45,39 @@ abstract class PhabricatorAuthController extends PhabricatorController {
    * event and do something else if they prefer.
    *
    * @param   PhabricatorUser   User to log the viewer in as.
+   * @param bool True to issue a full session immediately, bypassing MFA.
    * @return  AphrontResponse   Response which continues the login process.
    */
-  protected function loginUser(PhabricatorUser $user) {
+  protected function loginUser(
+    PhabricatorUser $user,
+    $force_full_session = false) {
 
     $response = $this->buildLoginValidateResponse($user);
     $session_type = PhabricatorAuthSession::TYPE_WEB;
 
-    $event_type = PhabricatorEventType::TYPE_AUTH_WILLLOGINUSER;
-    $event_data = array(
-      'user'        => $user,
-      'type'        => $session_type,
-      'response'    => $response,
-      'shouldLogin' => true,
-    );
-
-    $event = id(new PhabricatorEvent($event_type, $event_data))
-      ->setUser($user);
-    PhutilEventEngine::dispatchEvent($event);
-
-    $should_login = $event->getValue('shouldLogin');
-    if ($should_login) {
-      $session_key = id(new PhabricatorAuthSessionEngine())
-        ->establishSession($session_type, $user->getPHID(), $partial = true);
-
-      // NOTE: We allow disabled users to login and roadblock them later, so
-      // there's no check for users being disabled here.
-
-      $request = $this->getRequest();
-      $request->setCookie(
-        PhabricatorCookies::COOKIE_USERNAME,
-        $user->getUsername());
-      $request->setCookie(
-        PhabricatorCookies::COOKIE_SESSION,
-        $session_key);
-
-      $this->clearRegistrationCookies();
+    if ($force_full_session) {
+      $partial_session = false;
+    } else {
+      $partial_session = true;
     }
 
-    return $event->getValue('response');
+    $session_key = id(new PhabricatorAuthSessionEngine())
+      ->establishSession($session_type, $user->getPHID(), $partial_session);
+
+    // NOTE: We allow disabled users to login and roadblock them later, so
+    // there's no check for users being disabled here.
+
+    $request = $this->getRequest();
+    $request->setCookie(
+      PhabricatorCookies::COOKIE_USERNAME,
+      $user->getUsername());
+    $request->setCookie(
+      PhabricatorCookies::COOKIE_SESSION,
+      $session_key);
+
+    $this->clearRegistrationCookies();
+
+    return $response;
   }
 
   protected function clearRegistrationCookies() {
@@ -101,7 +95,7 @@ abstract class PhabricatorAuthController extends PhabricatorController {
 
   private function buildLoginValidateResponse(PhabricatorUser $user) {
     $validate_uri = new PhutilURI($this->getApplicationURI('validate/'));
-    $validate_uri->setQueryParam('expect', $user->getUsername());
+    $validate_uri->replaceQueryParam('expect', $user->getUsername());
 
     return id(new AphrontRedirectResponse())->setURI((string)$validate_uri);
   }
@@ -203,34 +197,18 @@ abstract class PhabricatorAuthController extends PhabricatorController {
       return array($account, $provider, $response);
     }
 
-    $other_account = id(new PhabricatorExternalAccount())->loadAllWhere(
-      'accountType = %s AND accountDomain = %s AND accountID = %s
-        AND id != %d',
-      $account->getAccountType(),
-      $account->getAccountDomain(),
-      $account->getAccountID(),
-      $account->getID());
-
-    if ($other_account) {
+    $config = $account->getProviderConfig();
+    if (!$config->getIsEnabled()) {
       $response = $this->renderError(
         pht(
-          'The account you are attempting to register with already belongs '.
-          'to another user.'));
+          'The account you are attempting to register with uses a disabled '.
+          'authentication provider ("%s"). An administrator may have '.
+          'recently disabled this provider.',
+          $config->getDisplayName()));
       return array($account, $provider, $response);
     }
 
-    $provider = PhabricatorAuthProvider::getEnabledProviderByKey(
-      $account->getProviderKey());
-
-    if (!$provider) {
-      $response = $this->renderError(
-        pht(
-          'The account you are attempting to register with uses a nonexistent '.
-          'or disabled authentication provider (with key "%s"). An '.
-          'administrator may have recently disabled this provider.',
-          $account->getProviderKey()));
-      return array($account, $provider, $response);
-    }
+    $provider = $config->getProvider();
 
     return array($account, $provider, null);
   }
@@ -290,6 +268,28 @@ abstract class PhabricatorAuthController extends PhabricatorController {
     return id(new PHUIBoxView())
       ->addMargin(PHUI::MARGIN_LARGE)
       ->appendChild($invite_list);
+  }
+
+
+  final protected function newCustomStartMessage() {
+    $viewer = $this->getViewer();
+
+    $text = PhabricatorAuthMessage::loadMessageText(
+      $viewer,
+      PhabricatorAuthLoginMessageType::MESSAGEKEY);
+
+    if (!strlen($text)) {
+      return null;
+    }
+
+    $remarkup_view = new PHUIRemarkupView($viewer, $text);
+
+    return phutil_tag(
+      'div',
+      array(
+        'class' => 'auth-custom-message',
+      ),
+      $remarkup_view);
   }
 
 }

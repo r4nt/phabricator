@@ -112,6 +112,7 @@ final class PhabricatorLDAPAuthProvider extends PhabricatorAuthProvider {
         id(new AphrontFormTextControl())
           ->setLabel(pht('LDAP Username'))
           ->setName('ldap_username')
+          ->setAutofocus(true)
           ->setValue($v_user)
           ->setError($e_user))
       ->appendChild(
@@ -163,7 +164,7 @@ final class PhabricatorLDAPAuthProvider extends PhabricatorAuthProvider {
           // See T3351.
 
           DarkConsoleErrorLogPluginAPI::enableDiscardMode();
-            $account_id = $adapter->getAccountID();
+            $identifiers = $adapter->getAccountIdentifiers();
           DarkConsoleErrorLogPluginAPI::disableDiscardMode();
         } else {
           throw new Exception(pht('Username and password are required!'));
@@ -179,7 +180,9 @@ final class PhabricatorLDAPAuthProvider extends PhabricatorAuthProvider {
       }
     }
 
-    return array($this->loadOrCreateAccount($account_id), $response);
+    $account = $this->newExternalAccountForIdentifiers($identifiers);
+
+    return array($account, $response);
   }
 
 

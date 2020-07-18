@@ -62,7 +62,11 @@ final class PhortuneAccountEditEngine
   }
 
   protected function getObjectViewURI($object) {
-    return $object->getURI();
+    if ($this->getIsCreate()) {
+      return $object->getURI();
+    } else {
+      return $object->getDetailsURI();
+    }
   }
 
   protected function buildCustomEditFields($object) {
@@ -99,6 +103,25 @@ final class PhortuneAccountEditEngine
         ->setConduitTypeDescription(pht('New list of managers.'))
         ->setInitialValue($object->getMemberPHIDs())
         ->setValue($member_phids),
+
+      id(new PhabricatorTextEditField())
+        ->setKey('billingName')
+        ->setLabel(pht('Billing Name'))
+        ->setDescription(pht('Account name for billing purposes.'))
+        ->setConduitTypeDescription(pht('New account billing name.'))
+        ->setTransactionType(
+          PhortuneAccountBillingNameTransaction::TRANSACTIONTYPE)
+        ->setValue($object->getBillingName()),
+
+      id(new PhabricatorTextAreaEditField())
+        ->setKey('billingAddress')
+        ->setLabel(pht('Billing Address'))
+        ->setDescription(pht('Account billing address.'))
+        ->setConduitTypeDescription(pht('New account billing address.'))
+        ->setTransactionType(
+          PhortuneAccountBillingAddressTransaction::TRANSACTIONTYPE)
+        ->setValue($object->getBillingAddress()),
+
     );
 
     return $fields;

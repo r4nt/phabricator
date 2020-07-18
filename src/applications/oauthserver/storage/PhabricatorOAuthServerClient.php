@@ -59,6 +59,12 @@ final class PhabricatorOAuthServerClient
       PhabricatorOAuthServerClientPHIDType::TYPECONST);
   }
 
+  public function getURI() {
+    return urisprintf(
+      '/oauthserver/client/view/%d/',
+      $this->getID());
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -91,18 +97,8 @@ final class PhabricatorOAuthServerClient
     return new PhabricatorOAuthServerEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorOAuthServerTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-    return $timeline;
   }
 
 

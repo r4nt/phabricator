@@ -81,12 +81,12 @@ abstract class DiffusionView extends AphrontView {
     }
 
     if (isset($details['external'])) {
-      $href = id(new PhutilURI('/diffusion/external/'))
-        ->setQueryParams(
-          array(
-            'uri' => idx($details, 'external'),
-            'id'  => idx($details, 'hash'),
-          ));
+      $params = array(
+        'uri' => idx($details, 'external'),
+        'id'  => idx($details, 'hash'),
+      );
+
+      $href = new PhutilURI('/diffusion/external/', $params);
       $tip = pht('Browse External');
     } else {
       $href = $this->getDiffusionRequest()->generateURI(
@@ -167,19 +167,6 @@ abstract class DiffusionView extends AphrontView {
         'href' => $repository->getCommitURI($commit),
       ),
       $detail);
-  }
-
-  final public static function linkRevision($id) {
-    if (!$id) {
-      return null;
-    }
-
-    return phutil_tag(
-      'a',
-      array(
-        'href' => "/D{$id}",
-      ),
-      "D{$id}");
   }
 
   final public static function renderName($name) {

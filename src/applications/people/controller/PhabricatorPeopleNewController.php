@@ -50,9 +50,12 @@ final class PhabricatorPeopleNewController
       if (!strlen($new_email)) {
         $errors[] = pht('Email is required.');
         $e_email = pht('Required');
-      } else if (!PhabricatorUserEmail::isAllowedAddress($new_email)) {
+      } else if (!PhabricatorUserEmail::isValidAddress($new_email)) {
+        $errors[] = PhabricatorUserEmail::describeValidAddresses();
         $e_email = pht('Invalid');
+      } else if (!PhabricatorUserEmail::isAllowedAddress($new_email)) {
         $errors[] = PhabricatorUserEmail::describeAllowedAddresses();
+        $e_email = pht('Not Allowed');
       } else {
         $e_email = null;
       }
@@ -107,8 +110,13 @@ final class PhabricatorPeopleNewController
               ->makeMailingListUser($user, true);
           }
 
-          if ($welcome_checked && !$is_bot && !$is_list) {
-            $user->sendWelcomeEmail($admin);
+          if ($welcome_checked) {
+            $welcome_engine = id(new PhabricatorPeopleWelcomeMailEngine())
+              ->setSender($admin)
+              ->setRecipient($user);
+            if ($welcome_engine->canSendMail()) {
+              $welcome_engine->sendMail();
+            }
           }
 
           $response = id(new AphrontRedirectResponse())

@@ -76,11 +76,7 @@ abstract class PhabricatorApplicationTransaction
   }
 
   public function getApplicationTransactionCommentObject() {
-    throw new PhutilMethodNotImplementedException();
-  }
-
-  public function getApplicationTransactionViewObject() {
-    return new PhabricatorApplicationTransactionView();
+    return null;
   }
 
   public function getMetadataValue($key, $default = null) {
@@ -131,7 +127,16 @@ abstract class PhabricatorApplicationTransaction
   }
 
   public function hasComment() {
-    return $this->getComment() && strlen($this->getComment()->getContent());
+    $comment = $this->getComment();
+    if (!$comment) {
+      return false;
+    }
+
+    if ($comment->isEmptyComment()) {
+      return false;
+    }
+
+    return true;
   }
 
   public function getComment() {
@@ -171,6 +176,22 @@ abstract class PhabricatorApplicationTransaction
 
   public function getIsMFATransaction() {
     return (bool)$this->getMetadataValue('core.mfa', false);
+  }
+
+  public function setIsLockOverrideTransaction($override) {
+    return $this->setMetadataValue('core.lock-override', $override);
+  }
+
+  public function getIsLockOverrideTransaction() {
+    return (bool)$this->getMetadataValue('core.lock-override', false);
+  }
+
+  public function setTransactionGroupID($group_id) {
+    return $this->setMetadataValue('core.groupID', $group_id);
+  }
+
+  public function getTransactionGroupID() {
+    return $this->getMetadataValue('core.groupID', null);
   }
 
   public function attachComment(
@@ -421,19 +442,15 @@ abstract class PhabricatorApplicationTransaction
     $policy = PhabricatorPolicy::newFromPolicyAndHandle(
       $phid,
       $this->getHandleIfExists($phid));
+
+    $ref = $policy->newRef($this->getViewer());
+
     if ($this->renderingTarget == self::TARGET_HTML) {
-      switch ($policy->getType()) {
-        case PhabricatorPolicyType::TYPE_CUSTOM:
-          $policy->setHref('/transactions/'.$state.'/'.$this->getPHID().'/');
-          $policy->setWorkflow(true);
-          break;
-        default:
-          break;
-      }
-      $output = $policy->renderDescription();
+      $output = $ref->newTransactionLink($state, $this);
     } else {
-      $output = hsprintf('%s', $policy->getFullName());
+      $output = $ref->getPolicyDisplayName();
     }
+
     return $output;
   }
 
@@ -477,6 +494,8 @@ abstract class PhabricatorApplicationTransaction
         return 'fa-th-large';
       case PhabricatorTransactions::TYPE_COLUMNS:
         return 'fa-columns';
+      case PhabricatorTransactions::TYPE_MFA:
+        return 'fa-vcard';
     }
 
     return 'fa-pencil';
@@ -514,6 +533,8 @@ abstract class PhabricatorApplicationTransaction
             return 'sky';
         }
         break;
+      case PhabricatorTransactions::TYPE_MFA;
+        return 'pink';
     }
     return null;
   }
@@ -649,7 +670,6 @@ abstract class PhabricatorApplicationTransaction
           case PhabricatorMutedEdgeType::EDGECONST:
           case PhabricatorMutedByEdgeType::EDGECONST:
             return true;
-            break;
           case PhabricatorObjectMentionedByObjectEdgeType::EDGECONST:
             $record = PhabricatorEdgeChangeRecord::newFromTransaction($this);
             $add = $record->getAddedPHIDs();
@@ -664,6 +684,16 @@ abstract class PhabricatorApplicationTransaction
             break;
         }
         break;
+
+      case PhabricatorTransactions::TYPE_INLINESTATE:
+        list($done, $undone) = $this->getInterestingInlineStateChangeCounts();
+
+        if (!$done && !$undone) {
+          return true;
+        }
+
+        break;
+
     }
 
     return false;
@@ -682,6 +712,12 @@ abstract class PhabricatorApplicationTransaction
         switch ($edge_type) {
           case PhabricatorObjectMentionsObjectEdgeType::EDGECONST:
           case PhabricatorObjectMentionedByObjectEdgeType::EDGECONST:
+          case DifferentialRevisionDependsOnRevisionEdgeType::EDGECONST:
+          case DifferentialRevisionDependedOnByRevisionEdgeType::EDGECONST:
+          case ManiphestTaskHasCommitEdgeType::EDGECONST:
+          case DiffusionCommitHasTaskEdgeType::EDGECONST:
+          case DiffusionCommitHasRevisionEdgeType::EDGECONST:
+          case DifferentialRevisionHasCommitEdgeType::EDGECONST:
             return true;
           case PhabricatorProjectObjectHasProjectEdgeType::EDGECONST:
             // When an object is first created, we hide any corresponding
@@ -730,14 +766,27 @@ abstract class PhabricatorApplicationTransaction
 
     switch ($this->getTransactionType()) {
       case PhabricatorTransactions::TYPE_TOKEN:
+      case PhabricatorTransactions::TYPE_MFA:
         return true;
-     case PhabricatorTransactions::TYPE_EDGE:
+      case PhabricatorTransactions::TYPE_SUBSCRIBERS:
+        // See T8952. When an application (usually Herald) modifies
+        // subscribers, this tends to be very uninteresting.
+        if ($this->isApplicationAuthor()) {
+          return true;
+        }
+        break;
+      case PhabricatorTransactions::TYPE_EDGE:
         $edge_type = $this->getMetadataValue('edge:type');
         switch ($edge_type) {
           case PhabricatorObjectMentionsObjectEdgeType::EDGECONST:
           case PhabricatorObjectMentionedByObjectEdgeType::EDGECONST:
+          case DifferentialRevisionDependsOnRevisionEdgeType::EDGECONST:
+          case DifferentialRevisionDependedOnByRevisionEdgeType::EDGECONST:
+          case ManiphestTaskHasCommitEdgeType::EDGECONST:
+          case DiffusionCommitHasTaskEdgeType::EDGECONST:
+          case DiffusionCommitHasRevisionEdgeType::EDGECONST:
+          case DifferentialRevisionHasCommitEdgeType::EDGECONST:
             return true;
-            break;
           default:
             break;
         }
@@ -749,12 +798,37 @@ abstract class PhabricatorApplicationTransaction
     return $this->shouldHide();
   }
 
+  public function shouldHideForNotifications() {
+    return $this->shouldHideForFeed();
+  }
+
+  private function getTitleForMailWithRenderingTarget($new_target) {
+    $old_target = $this->getRenderingTarget();
+    try {
+      $this->setRenderingTarget($new_target);
+      $result = $this->getTitleForMail();
+    } catch (Exception $ex) {
+      $this->setRenderingTarget($old_target);
+      throw $ex;
+    }
+    $this->setRenderingTarget($old_target);
+    return $result;
+  }
+
   public function getTitleForMail() {
-    return id(clone $this)->setRenderingTarget('text')->getTitle();
+    return $this->getTitle();
+  }
+
+  public function getTitleForTextMail() {
+    return $this->getTitleForMailWithRenderingTarget(self::TARGET_TEXT);
   }
 
   public function getTitleForHTMLMail() {
-    $title = $this->getTitleForMail();
+    // TODO: For now, rendering this with TARGET_HTML generates links with
+    // bad targets ("/x/y/" instead of "https://dev.example.com/x/y/"). Throw
+    // a rug over the issue for the moment. See T12921.
+
+    $title = $this->getTitleForMailWithRenderingTarget(self::TARGET_TEXT);
     if ($title === null) {
       return null;
     }
@@ -825,6 +899,10 @@ abstract class PhabricatorApplicationTransaction
         return pht(
           'You have not moved this object to any columns it is not '.
           'already in.');
+      case PhabricatorTransactions::TYPE_MFA:
+        return pht(
+          'You can not sign a transaction group that has no other '.
+          'effects.');
     }
 
     return pht(
@@ -1007,15 +1085,7 @@ abstract class PhabricatorApplicationTransaction
         }
 
       case PhabricatorTransactions::TYPE_INLINESTATE:
-        $done = 0;
-        $undone = 0;
-        foreach ($new as $phid => $state) {
-          if ($state == PhabricatorInlineCommentInterface::STATE_DONE) {
-            $done++;
-          } else {
-            $undone++;
-          }
-        }
+        list($done, $undone) = $this->getInterestingInlineStateChangeCounts();
         if ($done && $undone) {
           return pht(
             '%s marked %s inline comment(s) as done and %s inline comment(s) '.
@@ -1060,6 +1130,8 @@ abstract class PhabricatorApplicationTransaction
         } else {
           $fragments = array();
           foreach ($moves as $move) {
+            $to_column = $move['columnPHID'];
+            $board_phid = $move['boardPHID'];
             $fragments[] = pht(
               '%s (%s)',
               $this->renderHandleLink($board_phid),
@@ -1073,6 +1145,12 @@ abstract class PhabricatorApplicationTransaction
             phutil_implode_html(', ', $fragments));
         }
         break;
+
+
+      case PhabricatorTransactions::TYPE_MFA:
+        return pht(
+          '%s signed these changes with MFA.',
+          $this->renderHandleLink($author_phid));
 
       default:
         // In developer mode, provide a better hint here about which string
@@ -1236,6 +1314,9 @@ abstract class PhabricatorApplicationTransaction
         }
         break;
 
+      case PhabricatorTransactions::TYPE_MFA:
+        return null;
+
     }
 
     return $this->getTitle();
@@ -1296,31 +1377,29 @@ abstract class PhabricatorApplicationTransaction
 
   public function getActionStrength() {
     if ($this->isInlineCommentTransaction()) {
-      return 0.25;
+      return 25;
     }
 
     switch ($this->getTransactionType()) {
       case PhabricatorTransactions::TYPE_COMMENT:
-        return 0.5;
+        return 50;
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
         if ($this->isSelfSubscription()) {
           // Make this weaker than TYPE_COMMENT.
-          return 0.25;
-        }
-
-        if ($this->isApplicationAuthor()) {
-          // When applications (most often: Herald) change subscriptions it
-          // is very uninteresting.
-          return 0.000000001;
+          return 25;
         }
 
         // In other cases, subscriptions are more interesting than comments
         // (which are shown anyway) but less interesting than any other type of
         // transaction.
-        return 0.75;
+        return 75;
+      case PhabricatorTransactions::TYPE_MFA:
+        // We want MFA signatures to render at the top of transaction groups,
+        // on top of the things they signed.
+        return 1000;
     }
 
-    return 1.0;
+    return 100;
   }
 
   public function isCommentTransaction() {
@@ -1432,6 +1511,8 @@ abstract class PhabricatorApplicationTransaction
       $this_source = $this->getContentSource()->getSource();
     }
 
+    $type_mfa = PhabricatorTransactions::TYPE_MFA;
+
     foreach ($group as $xaction) {
       // Don't group transactions by different authors.
       if ($xaction->getAuthorPHID() != $this->getAuthorPHID()) {
@@ -1473,6 +1554,19 @@ abstract class PhabricatorApplicationTransaction
       // Don't group MFA and non-MFA transactions together.
       $is_mfa = $this->getIsMFATransaction();
       if ($is_mfa != $xaction->getIsMFATransaction()) {
+        return false;
+      }
+
+      // Don't group two "Sign with MFA" transactions together.
+      if ($this->getTransactionType() === $type_mfa) {
+        if ($xaction->getTransactionType() === $type_mfa) {
+          return false;
+        }
+      }
+
+      // Don't group lock override and non-override transactions together.
+      $is_override = $this->getIsLockOverrideTransaction();
+      if ($is_override != $xaction->getIsLockOverrideTransaction()) {
         return false;
       }
     }
@@ -1582,6 +1676,60 @@ abstract class PhabricatorApplicationTransaction
     return $moves;
   }
 
+  private function getInterestingInlineStateChangeCounts() {
+    // See PHI995. Newer inline state transactions have additional details
+    // which we use to tailor the rendering behavior. These details are not
+    // present on older transactions.
+    $details = $this->getMetadataValue('inline.details', array());
+
+    $new = $this->getNewValue();
+
+    $done = 0;
+    $undone = 0;
+    foreach ($new as $phid => $state) {
+      $is_done = ($state == PhabricatorInlineComment::STATE_DONE);
+
+      // See PHI995. If you're marking your own inline comments as "Done",
+      // don't count them when rendering a timeline story. In the case where
+      // you're only affecting your own comments, this will hide the
+      // "alice marked X comments as done" story entirely.
+
+      // Usually, this happens when you pre-mark inlines as "done" and submit
+      // them yourself. We'll still generate an "alice added inline comments"
+      // story (in most cases/contexts), but the state change story is largely
+      // just clutter and slightly confusing/misleading.
+
+      $inline_details = idx($details, $phid, array());
+      $inline_author_phid = idx($inline_details, 'authorPHID');
+      if ($inline_author_phid) {
+        if ($inline_author_phid == $this->getAuthorPHID()) {
+          if ($is_done) {
+            continue;
+          }
+        }
+      }
+
+      if ($is_done) {
+        $done++;
+      } else {
+        $undone++;
+      }
+    }
+
+    return array($done, $undone);
+  }
+
+  public function newGlobalSortVector() {
+    return id(new PhutilSortVector())
+      ->addInt(-$this->getDateCreated())
+      ->addString($this->getPHID());
+  }
+
+  public function newActionStrengthSortVector() {
+    return id(new PhutilSortVector())
+      ->addInt(-$this->getActionStrength());
+  }
+
 
 /* -(  PhabricatorPolicyInterface Implementation  )-------------------------- */
 
@@ -1617,6 +1765,15 @@ abstract class PhabricatorApplicationTransaction
     return null;
   }
 
+  public function setForceNotifyPHIDs(array $phids) {
+    $this->setMetadataValue('notify.force', $phids);
+    return $this;
+  }
+
+  public function getForceNotifyPHIDs() {
+    return $this->getMetadataValue('notify.force', array());
+  }
+
 
 /* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
@@ -1625,12 +1782,7 @@ abstract class PhabricatorApplicationTransaction
     PhabricatorDestructionEngine $engine) {
 
     $this->openTransaction();
-      $comment_template = null;
-      try {
-        $comment_template = $this->getApplicationTransactionCommentObject();
-      } catch (Exception $ex) {
-        // Continue; no comments for these transactions.
-      }
+      $comment_template = $this->getApplicationTransactionCommentObject();
 
       if ($comment_template) {
         $comments = $comment_template->loadAllWhere(
