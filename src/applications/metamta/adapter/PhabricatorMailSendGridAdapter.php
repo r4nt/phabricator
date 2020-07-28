@@ -105,7 +105,7 @@ final class PhabricatorMailSendGridAdapter
       foreach ($attachments as $attachment) {
         $files[] = array(
           'content' => base64_encode($attachment->getData()),
-          'type' => $attachment->getMimeType(),
+          'type' => explode(";", $attachment->getMimeType())[0], // LLVM: https://discourse.phabricator-community.org/t/sendgrid-mailer-metamta-differential-attach-patches-true-errors-with-the-attachment-type-cannot-contain-or-crlf-characters/4098/
           'filename' => $attachment->getFilename(),
           'disposition' => 'attachment',
         );
