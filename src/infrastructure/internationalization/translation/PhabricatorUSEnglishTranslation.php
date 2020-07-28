@@ -1069,29 +1069,54 @@ final class PhabricatorUSEnglishTranslation
         ),
       ),
 
-      'Show First %d Line(s)' => array(
+      'Show First %s Line(s)' => array(
         'Show First Line',
-        'Show First %d Lines',
+        'Show First %s Lines',
       ),
 
-      "\xE2\x96\xB2 Show %d Line(s)" => array(
+      'Show First %s Block(s)' => array(
+        'Show First Block',
+        'Show First %s Blocks',
+      ),
+
+      "\xE2\x96\xB2 Show %s Line(s)" => array(
         "\xE2\x96\xB2 Show Line",
-        "\xE2\x96\xB2 Show %d Lines",
+        "\xE2\x96\xB2 Show %s Lines",
       ),
 
-      'Show All %d Line(s)' => array(
+      "\xE2\x96\xB2 Show %s Block(s)" => array(
+        "\xE2\x96\xB2 Show Block",
+        "\xE2\x96\xB2 Show %s Blocks",
+      ),
+
+      'Show All %s Line(s)' => array(
         'Show Line',
-        'Show All %d Lines',
+        'Show All %s Lines',
       ),
 
-      "\xE2\x96\xBC Show %d Line(s)" => array(
+      'Show All %s Block(s)' => array(
+        'Show Block',
+        'Show All %s Blocks',
+      ),
+
+      "\xE2\x96\xBC Show %s Line(s)" => array(
         "\xE2\x96\xBC Show Line",
-        "\xE2\x96\xBC Show %d Lines",
+        "\xE2\x96\xBC Show %s Lines",
       ),
 
-      'Show Last %d Line(s)' => array(
+      "\xE2\x96\xBC Show %s Block(s)" => array(
+        "\xE2\x96\xBC Show Block",
+        "\xE2\x96\xBC Show %s Blocks",
+      ),
+
+      'Show Last %s Line(s)' => array(
         'Show Last Line',
-        'Show Last %d Lines',
+        'Show Last %s Lines',
+      ),
+
+      'Show Last %s Block(s)' => array(
+        'Show Last Block',
+        'Show Last %s Blocks',
       ),
 
       '%s marked %s inline comment(s) as done and %s inline comment(s) as '.
@@ -1671,6 +1696,67 @@ final class PhabricatorUSEnglishTranslation
         'passes: %2$s.',
         'This draft revision will be sent for review once these builds '.
         'pass: %2$s.',
+      ),
+
+      'This factor recently issued a challenge to a different login '.
+      'session. Wait %s second(s) for the code to cycle, then try '.
+      'again.' => array(
+        'This factor recently issued a challenge to a different login '.
+        'session. Wait %s second for the code to cycle, then try '.
+        'again.',
+        'This factor recently issued a challenge to a different login '.
+        'session. Wait %s seconds for the code to cycle, then try '.
+        'again.',
+      ),
+
+      'This factor recently issued a challenge for a different '.
+      'workflow. Wait %s second(s) for the code to cycle, then try '.
+      'again.' => array(
+        'This factor recently issued a challenge for a different '.
+        'workflow. Wait %s second for the code to cycle, then try '.
+        'again.',
+        'This factor recently issued a challenge for a different '.
+        'workflow. Wait %s seconds for the code to cycle, then try '.
+        'again.',
+      ),
+
+
+      'This factor recently issued a challenge which has expired. '.
+      'A new challenge can not be issued yet. Wait %s second(s) for '.
+      'the code to cycle, then try again.' => array(
+        'This factor recently issued a challenge which has expired. '.
+        'A new challenge can not be issued yet. Wait %s second for '.
+        'the code to cycle, then try again.',
+        'This factor recently issued a challenge which has expired. '.
+        'A new challenge can not be issued yet. Wait %s seconds for '.
+        'the code to cycle, then try again.',
+      ),
+
+      'You recently provided a response to this factor. Responses '.
+      'may not be reused. Wait %s second(s) for the code to cycle, '.
+      'then try again.' => array(
+        'You recently provided a response to this factor. Responses '.
+        'may not be reused. Wait %s second for the code to cycle, '.
+        'then try again.',
+        'You recently provided a response to this factor. Responses '.
+        'may not be reused. Wait %s seconds for the code to cycle, '.
+        'then try again.',
+      ),
+
+      'View All %d Subscriber(s)' => array(
+        'View Subscriber',
+        'View All %d Subscribers',
+      ),
+
+      'You are currently editing %s inline comment(s) on this '.
+      'revision.' => array(
+        'You are currently editing an inline comment on this revision.',
+        'You are currently editing %s inline comments on this revision.',
+      ),
+
+      'These %s inline comment(s) will be saved and published.' => array(
+        'This inline comment will be saved and published.',
+        'These inline comments will be saved and published.',
       ),
 
     );

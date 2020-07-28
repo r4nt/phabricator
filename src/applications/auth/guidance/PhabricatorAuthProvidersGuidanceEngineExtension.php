@@ -10,6 +10,26 @@ final class PhabricatorAuthProvidersGuidanceEngineExtension
   }
 
   public function generateGuidance(PhabricatorGuidanceContext $context) {
+    $configs = id(new PhabricatorAuthProviderConfigQuery())
+      ->setViewer(PhabricatorUser::getOmnipotentUser())
+      ->withIsEnabled(true)
+      ->execute();
+
+    $allows_registration = false;
+    foreach ($configs as $config) {
+      $provider = $config->getProvider();
+      if ($provider->shouldAllowRegistration()) {
+        $allows_registration = true;
+        break;
+      }
+    }
+
+    // If no provider allows registration, we don't need provide any warnings
+    // about registration being too open.
+    if (!$allows_registration) {
+      return array();
+    }
+
     $domains_key = 'auth.email-domains';
     $domains_link = $this->renderConfigLink($domains_key);
     $domains_value = PhabricatorEnv::getEnvConfig($domains_key);
@@ -69,6 +89,25 @@ final class PhabricatorAuthProvidersGuidanceEngineExtension
         'all private LDAP or OAuth servers).');
 
       $results[] = $this->newWarning('core.auth.warning')
+        ->setMessage($message);
+    }
+
+    $locked_config_key = 'auth.lock-config';
+    $is_locked = PhabricatorEnv::getEnvConfig($locked_config_key);
+    if ($is_locked) {
+      $message = pht(
+        'Authentication provider configuration is locked, and can not be '.
+        'changed without being unlocked. See the configuration setting %s '.
+        'for details.',
+        phutil_tag(
+          'a',
+          array(
+            'href' => '/config/edit/'.$locked_config_key,
+          ),
+          $locked_config_key));
+
+      $results[] = $this->newWarning('auth.locked-config')
+        ->setPriority(500)
         ->setMessage($message);
     }
 

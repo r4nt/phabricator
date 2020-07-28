@@ -193,8 +193,6 @@ abstract class LiskDAO extends Phobject
 
   private static $connections       = array();
 
-  private $inSet = null;
-
   protected $id;
   protected $phid;
   protected $dateCreated;
@@ -517,13 +515,14 @@ abstract class LiskDAO extends Phobject
 
 
   protected function loadRawDataWhere($pattern /* , $args... */) {
-    $connection = $this->establishConnection('r');
+    $conn = $this->establishConnection('r');
 
-    $lock_clause = '';
-    if ($connection->isReadLocking()) {
-      $lock_clause = 'FOR UPDATE';
-    } else if ($connection->isWriteLocking()) {
-      $lock_clause = 'LOCK IN SHARE MODE';
+    if ($conn->isReadLocking()) {
+      $lock_clause = qsprintf($conn, 'FOR UPDATE');
+    } else if ($conn->isWriteLocking()) {
+      $lock_clause = qsprintf($conn, 'LOCK IN SHARE MODE');
+    } else {
+      $lock_clause = qsprintf($conn, '');
     }
 
     $args = func_get_args();
@@ -534,9 +533,7 @@ abstract class LiskDAO extends Phobject
     array_push($args, $lock_clause);
     array_unshift($args, $pattern);
 
-    return call_user_func_array(
-      array($connection, 'queryData'),
-      $args);
+    return call_user_func_array(array($conn, 'queryData'), $args);
   }
 
 
@@ -660,177 +657,9 @@ abstract class LiskDAO extends Phobject
       } else {
         $result[] = $obj->loadFromArray($row);
       }
-      if ($this->inSet) {
-        $this->inSet->addToSet($obj);
-      }
     }
 
     return $result;
-  }
-
-  /**
-   * This method helps to prevent the 1+N queries problem. It happens when you
-   * execute a query for each row in a result set. Like in this code:
-   *
-   *   COUNTEREXAMPLE, name=Easy to write but expensive to execute
-   *   $diffs = id(new DifferentialDiff())->loadAllWhere(
-   *     'revisionID = %d',
-   *     $revision->getID());
-   *   foreach ($diffs as $diff) {
-   *     $changesets = id(new DifferentialChangeset())->loadAllWhere(
-   *       'diffID = %d',
-   *       $diff->getID());
-   *     // Do something with $changesets.
-   *   }
-   *
-   * One can solve this problem by reading all the dependent objects at once and
-   * assigning them later:
-   *
-   *   COUNTEREXAMPLE, name=Cheaper to execute but harder to write and maintain
-   *   $diffs = id(new DifferentialDiff())->loadAllWhere(
-   *     'revisionID = %d',
-   *     $revision->getID());
-   *   $all_changesets = id(new DifferentialChangeset())->loadAllWhere(
-   *     'diffID IN (%Ld)',
-   *     mpull($diffs, 'getID'));
-   *   $all_changesets = mgroup($all_changesets, 'getDiffID');
-   *   foreach ($diffs as $diff) {
-   *     $changesets = idx($all_changesets, $diff->getID(), array());
-   *     // Do something with $changesets.
-   *   }
-   *
-   * The method @{method:loadRelatives} abstracts this approach which allows
-   * writing a code which is simple and efficient at the same time:
-   *
-   *   name=Easy to write and cheap to execute
-   *   $diffs = $revision->loadRelatives(new DifferentialDiff(), 'revisionID');
-   *   foreach ($diffs as $diff) {
-   *     $changesets = $diff->loadRelatives(
-   *       new DifferentialChangeset(),
-   *       'diffID');
-   *     // Do something with $changesets.
-   *   }
-   *
-   * This will load dependent objects for all diffs in the first call of
-   * @{method:loadRelatives} and use this result for all following calls.
-   *
-   * The method supports working with set of sets, like in this code:
-   *
-   *   $diffs = $revision->loadRelatives(new DifferentialDiff(), 'revisionID');
-   *   foreach ($diffs as $diff) {
-   *     $changesets = $diff->loadRelatives(
-   *       new DifferentialChangeset(),
-   *       'diffID');
-   *     foreach ($changesets as $changeset) {
-   *       $hunks = $changeset->loadRelatives(
-   *         new DifferentialHunk(),
-   *         'changesetID');
-   *       // Do something with hunks.
-   *     }
-   *   }
-   *
-   * This code will execute just three queries - one to load all diffs, one to
-   * load all their related changesets and one to load all their related hunks.
-   * You can try to write an equivalent code without using this method as
-   * a homework.
-   *
-   * The method also supports retrieving referenced objects, for example authors
-   * of all diffs (using shortcut @{method:loadOneRelative}):
-   *
-   *   foreach ($diffs as $diff) {
-   *     $author = $diff->loadOneRelative(
-   *       new PhabricatorUser(),
-   *       'phid',
-   *       'getAuthorPHID');
-   *     // Do something with author.
-   *   }
-   *
-   * It is also possible to specify additional conditions for the `WHERE`
-   * clause. Similarly to @{method:loadAllWhere}, you can specify everything
-   * after `WHERE` (except `LIMIT`). Contrary to @{method:loadAllWhere}, it is
-   * allowed to pass only a constant string (`%` doesn't have a special
-   * meaning). This is intentional to avoid mistakes with using data from one
-   * row in retrieving other rows. Example of a correct usage:
-   *
-   *   $status = $author->loadOneRelative(
-   *     new PhabricatorCalendarEvent(),
-   *     'userPHID',
-   *     'getPHID',
-   *     '(UNIX_TIMESTAMP() BETWEEN dateFrom AND dateTo)');
-   *
-   * @param  LiskDAO  Type of objects to load.
-   * @param  string   Name of the column in target table.
-   * @param  string   Method name in this table.
-   * @param  string   Additional constraints on returned rows. It supports no
-   *                  placeholders and requires putting the WHERE part into
-   *                  parentheses. It's not possible to use LIMIT.
-   * @return list     Objects of type $object.
-   *
-   * @task   load
-   */
-  public function loadRelatives(
-    LiskDAO $object,
-    $foreign_column,
-    $key_method = 'getID',
-    $where = '') {
-
-    if (!$this->inSet) {
-      id(new LiskDAOSet())->addToSet($this);
-    }
-    $relatives = $this->inSet->loadRelatives(
-      $object,
-      $foreign_column,
-      $key_method,
-      $where);
-    return idx($relatives, $this->$key_method(), array());
-  }
-
-  /**
-   * Load referenced row. See @{method:loadRelatives} for details.
-   *
-   * @param  LiskDAO  Type of objects to load.
-   * @param  string   Name of the column in target table.
-   * @param  string   Method name in this table.
-   * @param  string   Additional constraints on returned rows. It supports no
-   *                  placeholders and requires putting the WHERE part into
-   *                  parentheses. It's not possible to use LIMIT.
-   * @return LiskDAO  Object of type $object or null if there's no such object.
-   *
-   * @task   load
-   */
-  final public function loadOneRelative(
-    LiskDAO $object,
-    $foreign_column,
-    $key_method = 'getID',
-    $where = '') {
-
-    $relatives = $this->loadRelatives(
-      $object,
-      $foreign_column,
-      $key_method,
-      $where);
-
-    if (!$relatives) {
-      return null;
-    }
-
-    if (count($relatives) > 1) {
-      throw new AphrontCountQueryException(
-        pht(
-          'More than one result from %s!',
-          __FUNCTION__.'()'));
-    }
-
-    return reset($relatives);
-  }
-
-  final public function putInSet(LiskDAOSet $set) {
-    $this->inSet = $set;
-    return $this;
-  }
-
-  final protected function getInSet() {
-    return $this->inSet;
   }
 
 
@@ -1150,11 +979,10 @@ abstract class LiskDAO extends Phobject
         $map[$key] = qsprintf($conn, '%C = %ns', $key, $value);
       }
     }
-    $map = implode(', ', $map);
 
     $id = $this->getID();
     $conn->query(
-      'UPDATE %R SET %Q WHERE %C = '.(is_int($id) ? '%d' : '%s'),
+      'UPDATE %R SET %LQ WHERE %C = '.(is_int($id) ? '%d' : '%s'),
       $this,
       $map,
       $this->getIDKeyForUse(),
@@ -1256,11 +1084,24 @@ abstract class LiskDAO extends Phobject
           $parameter_exception);
       }
     }
-    $data = implode(', ', $data);
+
+    switch ($mode) {
+      case 'INSERT':
+        $verb = qsprintf($conn, 'INSERT');
+        break;
+      case 'REPLACE':
+        $verb = qsprintf($conn, 'REPLACE');
+        break;
+      default:
+        throw new Exception(
+          pht(
+            'Insert mode verb "%s" is not recognized, use INSERT or REPLACE.',
+            $mode));
+    }
 
     $conn->query(
-      '%Q INTO %R (%LC) VALUES (%Q)',
-      $mode,
+      '%Q INTO %R (%LC) VALUES (%LQ)',
+      $verb,
       $this,
       $columns,
       $data);
@@ -1641,6 +1482,11 @@ abstract class LiskDAO extends Phobject
 
     $now = PhabricatorTime::getNow();
     foreach ($connections as $key => $connection) {
+      // If the connection is not idle, never consider it inactive.
+      if (!$connection->isIdle()) {
+        continue;
+      }
+
       $last_active = $connection->getLastActiveEpoch();
 
       $idle_duration = ($now - $last_active);
@@ -1657,6 +1503,18 @@ abstract class LiskDAO extends Phobject
     $connections = self::$connections;
 
     foreach ($connections as $key => $connection) {
+      self::closeConnection($key);
+    }
+  }
+
+  public static function closeIdleConnections() {
+    $connections = self::$connections;
+
+    foreach ($connections as $key => $connection) {
+      if (!$connection->isIdle()) {
+        continue;
+      }
+
       self::closeConnection($key);
     }
   }
@@ -2021,6 +1879,10 @@ abstract class LiskDAO extends Phobject
 
     return id(new PhabricatorStorageSchemaSpec())
       ->getMaximumByteLengthForDataType($data_type);
+  }
+
+  public function getSchemaPersistence() {
+    return null;
   }
 
 

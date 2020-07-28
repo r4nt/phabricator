@@ -6,6 +6,7 @@ final class PhabricatorFlagQuery
   const GROUP_COLOR = 'color';
   const GROUP_NONE  = 'none';
 
+  private $ids;
   private $ownerPHIDs;
   private $types;
   private $objectPHIDs;
@@ -14,6 +15,11 @@ final class PhabricatorFlagQuery
 
   private $needHandles;
   private $needObjects;
+
+  public function withIDs(array $ids) {
+    $this->ids = $ids;
+    return $this;
+  }
 
   public function withOwnerPHIDs(array $owner_phids) {
     $this->ownerPHIDs = $owner_phids;
@@ -123,40 +129,47 @@ final class PhabricatorFlagQuery
     return $flags;
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildWhereClause(AphrontDatabaseConnection $conn) {
     $where = array();
+
+    if ($this->ids !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'flag.id IN (%Ld)',
+        $this->ids);
+    }
 
     if ($this->ownerPHIDs) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'flag.ownerPHID IN (%Ls)',
         $this->ownerPHIDs);
     }
 
     if ($this->types) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'flag.type IN (%Ls)',
         $this->types);
     }
 
     if ($this->objectPHIDs) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'flag.objectPHID IN (%Ls)',
         $this->objectPHIDs);
     }
 
     if ($this->colors) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'flag.color IN (%Ld)',
         $this->colors);
     }
 
-    $where[] = $this->buildPagingClause($conn_r);
+    $where[] = $this->buildPagingClause($conn);
 
-    return $this->formatWhereClause($where);
+    return $this->formatWhereClause($conn, $where);
   }
 
   public function getQueryApplicationClass() {

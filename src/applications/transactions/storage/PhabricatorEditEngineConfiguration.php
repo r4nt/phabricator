@@ -139,9 +139,14 @@ final class PhabricatorEditEngineConfiguration
 
     $values = $this->getProperty('defaults', array());
     foreach ($fields as $key => $field) {
+      if (!$field->getIsFormField()) {
+        continue;
+      }
+
       if (!$field->getIsDefaultable()) {
         continue;
       }
+
       if ($is_new) {
         if (array_key_exists($key, $values)) {
           $field->readDefaultValueFromConfiguration($values[$key]);
@@ -222,14 +227,7 @@ final class PhabricatorEditEngineConfiguration
   public function getCreateURI() {
     $form_key = $this->getIdentifier();
     $engine = $this->getEngine();
-
-    try {
-      $create_uri = $engine->getEditURI(null, "form/{$form_key}/");
-    } catch (Exception $ex) {
-      $create_uri = null;
-    }
-
-    return $create_uri;
+    return $engine->getCreateURI($form_key);
   }
 
   public function getIdentifier() {
@@ -334,18 +332,8 @@ final class PhabricatorEditEngineConfiguration
     return new PhabricatorEditEngineConfigurationEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorEditEngineConfigurationTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-    return $timeline;
   }
 
 }

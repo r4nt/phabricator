@@ -27,9 +27,10 @@ final class DiffusionRepositoryBasicsManagementPanel
     );
   }
 
-  private function buildActionMenu() {
+  public function buildManagementPanelCurtain() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
+
     $action_list = id(new PhabricatorActionListView())
       ->setViewer($viewer);
 
@@ -44,27 +45,43 @@ final class DiffusionRepositoryBasicsManagementPanel
     $encoding_uri = $this->getEditPageURI('encoding');
     $dangerous_uri = $repository->getPathURI('edit/dangerous/');
     $enormous_uri = $repository->getPathURI('edit/enormous/');
+    $update_uri = $repository->getPathURI('edit/update/');
+    $publish_uri = $repository->getPathURI('edit/publish/');
 
     if ($repository->isTracked()) {
+      $activate_icon = 'fa-ban';
       $activate_label = pht('Deactivate Repository');
     } else {
+      $activate_icon = 'fa-check';
       $activate_label = pht('Activate Repository');
+    }
+
+    if (!$repository->isPublishingDisabled()) {
+      $publish_icon = 'fa-ban';
+      $publish_label = pht('Disable Publishing');
+    } else {
+      $publish_icon = 'fa-check';
+      $publish_label = pht('Enable Publishing');
     }
 
     $should_dangerous = $repository->shouldAllowDangerousChanges();
     if ($should_dangerous) {
+      $dangerous_icon = 'fa-shield';
       $dangerous_name = pht('Prevent Dangerous Changes');
       $can_dangerous = $can_edit;
     } else {
+      $dangerous_icon = 'fa-exclamation-triangle';
       $dangerous_name = pht('Allow Dangerous Changes');
       $can_dangerous = ($can_edit && $repository->canAllowDangerousChanges());
     }
 
     $should_enormous = $repository->shouldAllowEnormousChanges();
     if ($should_enormous) {
+      $enormous_icon = 'fa-shield';
       $enormous_name = pht('Prevent Enormous Changes');
       $can_enormous = $can_edit;
     } else {
+      $enormous_icon = 'fa-exclamation-triangle';
       $enormous_name = pht('Allow Enormous Changes');
       $can_enormous = ($can_edit && $repository->canAllowEnormousChanges());
     }
@@ -73,12 +90,14 @@ final class DiffusionRepositoryBasicsManagementPanel
       id(new PhabricatorActionView())
         ->setName(pht('Edit Basic Information'))
         ->setHref($edit_uri)
+        ->setIcon('fa-pencil')
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
     $action_list->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Edit Text Encoding'))
+        ->setIcon('fa-text-width')
         ->setHref($encoding_uri)
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
@@ -87,6 +106,7 @@ final class DiffusionRepositoryBasicsManagementPanel
       id(new PhabricatorActionView())
         ->setName($dangerous_name)
         ->setHref($dangerous_uri)
+        ->setIcon($dangerous_icon)
         ->setDisabled(!$can_dangerous)
         ->setWorkflow(true));
 
@@ -94,15 +114,37 @@ final class DiffusionRepositoryBasicsManagementPanel
       id(new PhabricatorActionView())
         ->setName($enormous_name)
         ->setHref($enormous_uri)
+        ->setIcon($enormous_icon)
         ->setDisabled(!$can_enormous)
         ->setWorkflow(true));
 
     $action_list->addAction(
       id(new PhabricatorActionView())
-        ->setHref($activate_uri)
+        ->setType(PhabricatorActionView::TYPE_DIVIDER));
+
+    $action_list->addAction(
+      id(new PhabricatorActionView())
         ->setName($activate_label)
+        ->setHref($activate_uri)
+        ->setIcon($activate_icon)
         ->setDisabled(!$can_edit)
         ->setWorkflow(true));
+
+    $action_list->addAction(
+      id(new PhabricatorActionView())
+        ->setName($publish_label)
+        ->setHref($publish_uri)
+        ->setIcon($publish_icon)
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(true));
+
+    $action_list->addAction(
+      id(new PhabricatorActionView())
+      ->setName(pht('Update Now'))
+      ->setHref($update_uri)
+      ->setIcon('fa-refresh')
+      ->setWorkflow(true)
+      ->setDisabled(!$can_edit));
 
     $action_list->addAction(
       id(new PhabricatorActionView())
@@ -112,27 +154,21 @@ final class DiffusionRepositoryBasicsManagementPanel
       id(new PhabricatorActionView())
         ->setName(pht('Delete Repository'))
         ->setHref($delete_uri)
-        ->setColor(PhabricatorActionView::RED)
-        ->setDisabled(true)
+        ->setIcon('fa-times')
         ->setWorkflow(true));
 
-    return $action_list;
+    return $this->newCurtainView()
+      ->setActionList($action_list);
   }
 
   public function buildManagementPanelContent() {
-
-    $button = id(new PHUIButtonView())
-      ->setTag('a')
-      ->setText(pht('Actions'))
-      ->setHref('#')
-      ->setIcon('fa-bars')
-      ->addClass('phui-mobile-menu')
-      ->setDropdownMenu($this->buildActionMenu());
-
     $basics = $this->buildBasics();
-    $basics = $this->newBox(pht('Properties'), $basics, array($button));
+    $basics = $this->newBox(pht('Properties'), $basics);
 
     $repository = $this->getRepository();
+
+    $state = $this->buildStateView($repository);
+
     $is_new = $repository->isNewlyInitialized();
     $info_view = null;
     if ($is_new) {
@@ -166,7 +202,7 @@ final class DiffusionRepositoryBasicsManagementPanel
     }
     $status = $this->buildStatus();
 
-    return array($info_view, $basics, $description, $status);
+    return array($info_view, $state, $basics, $description, $status);
   }
 
   private function buildBasics() {
@@ -254,7 +290,6 @@ final class DiffusionRepositoryBasicsManagementPanel
   private function buildStatus() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
-    $update_uri = $repository->getPathURI('edit/update/');
 
     $view = id(new PHUIPropertyListView())
       ->setViewer($viewer);
@@ -274,20 +309,7 @@ final class DiffusionRepositoryBasicsManagementPanel
       $view->addTextContent($raw_error);
     }
 
-    $can_edit = PhabricatorPolicyFilter::hasCapability(
-      $viewer,
-      $repository,
-      PhabricatorPolicyCapability::CAN_EDIT);
-
-    $button = id(new PHUIButtonView())
-      ->setTag('a')
-      ->setIcon('fa-refresh')
-      ->setText(pht('Update Now'))
-      ->setWorkflow(true)
-      ->setDisabled(!$can_edit)
-      ->setHref($update_uri);
-
-    return $this->newBox(pht('Status'), $view, array($button));
+    return $this->newBox(pht('Working Copy Status'), $view);
   }
 
   private function buildRepositoryUpdateInterval(
@@ -444,13 +466,15 @@ final class DiffusionRepositoryBasicsManagementPanel
               id(new PHUIStatusItemView())
               ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
               ->setTarget(
-                pht('Missing Binary %s', phutil_tag('tt', array(), $binary)))
-              ->setNote(pht(
-                  'Unable to find this binary in `%s`. '.
-                  'You need to configure %s and include %s.',
-                  'environment.append-paths',
-                  $this->getEnvConfigLink(),
-                  $path)));
+                pht('Commit Hooks: %s', phutil_tag('tt', array(), $binary)))
+              ->setNote(
+                pht(
+                  'The directory containing the "svnlook" binary is not '.
+                  'listed in "environment.append-paths", so commit hooks '.
+                  '(which execute with an empty "PATH") will not be able to '.
+                  'find "svnlook". Add `%s` to %s.',
+                  $path,
+                  $this->getEnvConfigLink())));
           }
         }
       }
@@ -716,6 +740,83 @@ final class DiffusionRepositoryBasicsManagementPanel
         'href' => $config_href,
       ),
       'environment.append-paths');
+  }
+
+  private function buildStateView(PhabricatorRepository $repository) {
+    $viewer = $this->getViewer();
+    $is_new = $repository->isNewlyInitialized();
+
+    $view = id(new PHUIPropertyListView())
+      ->setViewer($viewer);
+
+    if (!$repository->isTracked()) {
+      if ($is_new) {
+        $active_icon = 'fa-ban';
+        $active_color = 'yellow';
+        $active_label = pht('Not Activated Yet');
+        $active_note = pht('Complete Setup and Activate Repository');
+      } else {
+        $active_icon = 'fa-times';
+        $active_color = 'red';
+        $active_label = pht('Not Active');
+        $active_note = pht('Repository Disabled');
+      }
+    } else if ($repository->isImporting()) {
+      $active_icon = 'fa-hourglass';
+      $active_color = 'yellow';
+      $active_label = pht('Importing...');
+      $active_note = null;
+    } else {
+      $active_icon = 'fa-check';
+      $active_color = 'green';
+      $active_label = pht('Repository Active');
+      $active_note = null;
+    }
+
+    $active_view = id(new PHUIStatusListView())
+      ->addItem(
+        id(new PHUIStatusItemView())
+          ->setIcon($active_icon, $active_color)
+          ->setTarget($active_label)
+          ->setNote($active_note));
+
+    if ($repository->isPublishingDisabled()) {
+      $publishing_icon = 'fa-times';
+      $publishing_color = 'red';
+      $publishing_label = pht('Not Publishing');
+      $publishing_note = pht('Publishing Disabled');
+    } else if (!$repository->isTracked()) {
+      $publishing_icon = 'fa-ban';
+      $publishing_color = 'yellow';
+      $publishing_label = pht('Not Publishing');
+      if ($is_new) {
+        $publishing_note = pht('Repository Not Active Yet');
+      } else {
+        $publishing_note = pht('Repository Inactive');
+      }
+    } else if ($repository->isImporting()) {
+      $publishing_icon = 'fa-ban';
+      $publishing_color = 'yellow';
+      $publishing_label = pht('Not Publishing');
+      $publishing_note = pht('Repository Importing');
+    } else {
+      $publishing_icon = 'fa-check';
+      $publishing_color = 'green';
+      $publishing_label = pht('Publishing Active');
+      $publishing_note = null;
+    }
+
+    $publishing_view = id(new PHUIStatusListView())
+      ->addItem(
+        id(new PHUIStatusItemView())
+          ->setIcon($publishing_icon, $publishing_color)
+          ->setTarget($publishing_label)
+          ->setNote($publishing_note));
+
+    $view->addProperty(pht('Active'), $active_view);
+    $view->addProperty(pht('Publishing'), $publishing_view);
+
+    return $this->newBox(pht('State'), $view);
   }
 
 }

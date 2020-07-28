@@ -228,7 +228,7 @@ final class PhabricatorOwnersPackageQuery
           $repository_phid,
           $indexes);
       }
-      $where[] = implode(' OR ', $clauses);
+      $where[] = qsprintf($conn, '%LO', $clauses);
     }
 
     return $where;
@@ -267,11 +267,10 @@ final class PhabricatorOwnersPackageQuery
     );
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $package = $this->loadCursorObject($cursor);
+  protected function newPagingMapFromPartialObject($object) {
     return array(
-      'id' => $package->getID(),
-      'name' => $package->getName(),
+      'id' => (int)$object->getID(),
+      'name' => $object->getName(),
     );
   }
 

@@ -36,9 +36,6 @@ final class PhabricatorMetaMTAActorQuery extends PhabricatorQuery {
         case PhabricatorPeopleUserPHIDType::TYPECONST:
           $this->loadUserActors($actors, $phids);
           break;
-        case PhabricatorPeopleExternalPHIDType::TYPECONST:
-          $this->loadExternalUserActors($actors, $phids);
-          break;
         default:
           $this->loadUnknownActors($actors, $phids);
           break;
@@ -93,43 +90,6 @@ final class PhabricatorMetaMTAActorQuery extends PhabricatorQuery {
       }
     }
   }
-
-  private function loadExternalUserActors(array $actors, array $phids) {
-    assert_instances_of($actors, 'PhabricatorMetaMTAActor');
-
-    $xusers = id(new PhabricatorExternalAccountQuery())
-      ->setViewer($this->getViewer())
-      ->withPHIDs($phids)
-      ->execute();
-    $xusers = mpull($xusers, null, 'getPHID');
-
-    foreach ($phids as $phid) {
-      $actor = $actors[$phid];
-
-      $xuser = idx($xusers, $phid);
-      if (!$xuser) {
-        $actor->setUndeliverable(PhabricatorMetaMTAActor::REASON_UNLOADABLE);
-        continue;
-      }
-
-      $actor->setName($xuser->getDisplayName());
-
-      if ($xuser->getAccountType() != 'email') {
-        $actor->setUndeliverable(PhabricatorMetaMTAActor::REASON_EXTERNAL_TYPE);
-        continue;
-      }
-
-      $actor->setEmailAddress($xuser->getAccountID());
-
-      // NOTE: This effectively drops all outbound mail to unrecognized
-      // addresses unless "phabricator.allow-email-users" is set. See T12237
-      // for context.
-      $allow_key = 'phabricator.allow-email-users';
-      $allow_value = PhabricatorEnv::getEnvConfig($allow_key);
-      $actor->setIsVerified((bool)$allow_value);
-    }
-  }
-
 
   private function loadUnknownActors(array $actors, array $phids) {
     foreach ($phids as $phid) {

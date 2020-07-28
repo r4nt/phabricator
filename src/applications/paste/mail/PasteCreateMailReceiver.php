@@ -1,20 +1,16 @@
 <?php
 
-final class PasteCreateMailReceiver extends PhabricatorMailReceiver {
+final class PasteCreateMailReceiver
+  extends PhabricatorApplicationMailReceiver {
 
-  public function isEnabled() {
-    $app_class = 'PhabricatorPasteApplication';
-    return PhabricatorApplication::isClassInstalled($app_class);
-  }
-
-  public function canAcceptMail(PhabricatorMetaMTAReceivedMail $mail) {
-    $paste_app = new PhabricatorPasteApplication();
-    return $this->canAcceptApplicationMail($paste_app, $mail);
+  protected function newApplication() {
+    return new PhabricatorPasteApplication();
   }
 
   protected function processReceivedMail(
     PhabricatorMetaMTAReceivedMail $mail,
-    PhabricatorUser $sender) {
+    PhutilEmailAddress $target) {
+    $author = $this->getAuthor();
 
     $title = $mail->getSubject();
     if (!$title) {
@@ -31,20 +27,24 @@ final class PasteCreateMailReceiver extends PhabricatorMailReceiver {
       ->setTransactionType(PhabricatorPasteTitleTransaction::TRANSACTIONTYPE)
       ->setNewValue($title);
 
-    $paste = PhabricatorPaste::initializeNewPaste($sender);
+    $paste = PhabricatorPaste::initializeNewPaste($author);
 
     $content_source = $mail->newContentSource();
 
     $editor = id(new PhabricatorPasteEditor())
-      ->setActor($sender)
+      ->setActor($author)
       ->setContentSource($content_source)
       ->setContinueOnNoEffect(true);
     $xactions = $editor->applyTransactions($paste, $xactions);
 
     $mail->setRelatedPHID($paste->getPHID());
 
-    $subject_prefix =
-      PhabricatorEnv::getEnvConfig('metamta.paste.subject-prefix');
+    $sender = $this->getSender();
+    if (!$sender) {
+      return;
+    }
+
+    $subject_prefix = pht('[Paste]');
     $subject = pht('You successfully created a paste.');
     $paste_uri = PhabricatorEnv::getProductionURI($paste->getURI());
     $body = new PhabricatorMetaMTAMailBody();
@@ -60,6 +60,5 @@ final class PasteCreateMailReceiver extends PhabricatorMailReceiver {
       ->setBody($body->render())
       ->saveAndSend();
   }
-
 
 }

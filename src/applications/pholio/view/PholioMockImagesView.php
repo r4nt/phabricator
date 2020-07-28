@@ -72,16 +72,9 @@ final class PholioMockImagesView extends AphrontView {
 
     $default = PhabricatorFile::loadBuiltin($viewer, 'image-100x100.png');
 
-    $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($this->getUser());
-    foreach ($mock->getAllImages() as $image) {
-      $engine->addObject($image, 'default');
-    }
-    $engine->process();
-
     $images = array();
     $current_set = 0;
-    foreach ($mock->getAllImages() as $image) {
+    foreach ($mock->getImages() as $image) {
       $file = $image->getFile();
       $metadata = $file->getMetadata();
       $x = idx($metadata, PhabricatorFile::METADATA_IMAGE_WIDTH);
@@ -92,14 +85,9 @@ final class PholioMockImagesView extends AphrontView {
         $current_set++;
       }
 
-      $description = $engine->getOutput($image, 'default');
+      $description = $image->getDescription();
       if (strlen($description)) {
-        $description = phutil_tag(
-          'div',
-          array(
-            'class' => 'phabricator-remarkup',
-          ),
-          $description);
+        $description = new PHUIRemarkupView($viewer, $description);
       }
 
       $history_uri = '/pholio/image/history/'.$image->getID().'/';
@@ -115,14 +103,14 @@ final class PholioMockImagesView extends AphrontView {
         'width' => $x,
         'height' => $y,
         'title' => $image->getName(),
-        'descriptionMarkup' => $description,
+        'descriptionMarkup' => hsprintf('%s', $description),
         'isObsolete' => (bool)$image->getIsObsolete(),
         'isImage' => $file->isViewableImage(),
         'isViewable' => $file->isViewableInBrowser(),
       );
     }
 
-    $ids = mpull($mock->getImages(), 'getID');
+    $ids = mpull($mock->getActiveImages(), null, 'getID');
     if ($this->imageID && isset($ids[$this->imageID])) {
       $selected_id = $this->imageID;
     } else {
@@ -130,7 +118,7 @@ final class PholioMockImagesView extends AphrontView {
     }
 
     $navsequence = array();
-    foreach ($mock->getImages() as $image) {
+    foreach ($mock->getActiveImages() as $image) {
       $navsequence[] = $image->getID();
     }
 
@@ -145,7 +133,7 @@ final class PholioMockImagesView extends AphrontView {
     );
 
     $login_uri = id(new PhutilURI('/login/'))
-      ->setQueryParam('next', (string)$this->getRequestURI());
+      ->replaceQueryParam('next', (string)$this->getRequestURI());
 
     $config = array(
       'mockID' => $mock->getID(),

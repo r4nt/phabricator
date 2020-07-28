@@ -74,7 +74,14 @@ final class DifferentialGetCommitMessageConduitAPIMethod
           unset($field_list[$field_key]);
         }
       }
-    }
+    } else { // LLVM: remove some fields from `arc land`
+      $spurious_fields = array("Subscribers", "Reviewers", "Tags");
+      foreach ($field_list as $field_key => $field) {
+        if (in_array($field->getFieldName(), $spurious_fields)) {
+          unset($field_list[$field_key]);
+        }
+      }
+    } // end LLVM
 
     $overrides = $request->getValue('fields', array());
 
@@ -127,7 +134,9 @@ final class DifferentialGetCommitMessageConduitAPIMethod
             array("\r\n", "\r"),
             array("\n",   "\n"),
             $value);
-          if (strpos($value, "\n") !== false || substr($value, 0, 2) === '  ') {
+          if (!$is_any_edit && $label == "Summary") { // LLVM: do not prefix the description with "Summary" when using `arc land`
+            $commit_message[] = "{$value}";
+          } else if (strpos($value, "\n") !== false || substr($value, 0, 2) === '  ') {
             $commit_message[] = "{$label}:\n{$value}";
           } else {
             $commit_message[] = "{$label}: {$value}";

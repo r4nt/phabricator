@@ -12,16 +12,14 @@ final class ManiphestTaskMailReceiver extends PhabricatorObjectMailReceiver {
   }
 
   protected function loadObject($pattern, PhabricatorUser $viewer) {
-    $id = (int)trim($pattern, 'T');
+    $id = (int)substr($pattern, 1);
 
-    $results = id(new ManiphestTaskQuery())
+    return id(new ManiphestTaskQuery())
       ->setViewer($viewer)
       ->withIDs(array($id))
       ->needSubscriberPHIDs(true)
       ->needProjectPHIDs(true)
-      ->execute();
-
-    return head($results);
+      ->executeOne();
   }
 
   protected function getTransactionReplyHandler() {

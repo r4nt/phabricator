@@ -157,13 +157,10 @@ final class PhabricatorPeopleProfilePictureController
         continue;
       }
 
-      $provider = PhabricatorAuthProvider::getEnabledProviderByKey(
-        $account->getProviderKey());
-      if ($provider) {
-        $tip = pht('Picture From %s', $provider->getProviderName());
-      } else {
-        $tip = pht('Picture From External Account');
-      }
+      $config = $account->getProviderConfig();
+      $provider = $config->getProvider();
+
+      $tip = pht('Picture From %s', $provider->getProviderName());
 
       if ($file->isTransformableImage()) {
         $images[$file->getPHID()] = array(
@@ -269,8 +266,9 @@ final class PhabricatorPeopleProfilePictureController
     $crumbs->addTextCrumb(pht('Edit Profile Picture'));
     $crumbs->setBorder(true);
 
-    $nav = $this->getProfileMenu();
-    $nav->selectFilter(PhabricatorPeopleProfileMenuEngine::ITEM_MANAGE);
+    $nav = $this->newNavigation(
+      $user,
+      PhabricatorPeopleProfileMenuEngine::ITEM_MANAGE);
 
     $header = $this->buildProfileHeader();
 

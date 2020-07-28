@@ -215,6 +215,8 @@ final class PhabricatorRepositoryQuery
         $commits = id(new DiffusionCommitQuery())
           ->setViewer($this->getViewer())
           ->withIDs($commit_ids)
+          ->needCommitData(true)
+          ->needIdentities(true)
           ->execute();
       } else {
         $commits = array();
@@ -442,47 +444,24 @@ final class PhabricatorRepositoryQuery
     );
   }
 
-  protected function willExecuteCursorQuery(
-    PhabricatorCursorPagedPolicyAwareQuery $query) {
-    $vector = $this->getOrderVector();
+  protected function newPagingMapFromCursorObject(
+    PhabricatorQueryCursor $cursor,
+    array $keys) {
 
-    if ($vector->containsKey('committed')) {
-      $query->needMostRecentCommits(true);
-    }
-
-    if ($vector->containsKey('size')) {
-      $query->needCommitCounts(true);
-    }
-  }
-
-  protected function getPagingValueMap($cursor, array $keys) {
-    $repository = $this->loadCursorObject($cursor);
+    $repository = $cursor->getObject();
 
     $map = array(
-      'id' => $repository->getID(),
+      'id' => (int)$repository->getID(),
       'callsign' => $repository->getCallsign(),
       'name' => $repository->getName(),
     );
 
-    foreach ($keys as $key) {
-      switch ($key) {
-        case 'committed':
-          $commit = $repository->getMostRecentCommit();
-          if ($commit) {
-            $map[$key] = $commit->getEpoch();
-          } else {
-            $map[$key] = null;
-          }
-          break;
-        case 'size':
-          $count = $repository->getCommitCount();
-          if ($count) {
-            $map[$key] = $count;
-          } else {
-            $map[$key] = null;
-          }
-          break;
-      }
+    if (isset($keys['committed'])) {
+      $map['committed'] = $cursor->getRawRowProperty('epoch');
+    }
+
+    if (isset($keys['size'])) {
+      $map['size'] = $cursor->getRawRowProperty('size');
     }
 
     return $map;
@@ -491,10 +470,8 @@ final class PhabricatorRepositoryQuery
   protected function buildSelectClauseParts(AphrontDatabaseConnection $conn) {
     $parts = parent::buildSelectClauseParts($conn);
 
-    $parts[] = 'r.*';
-
     if ($this->shouldJoinSummaryTable()) {
-      $parts[] = 's.*';
+      $parts[] = qsprintf($conn, 's.*');
     }
 
     return $parts;
@@ -513,8 +490,8 @@ final class PhabricatorRepositoryQuery
     if ($this->shouldJoinURITable()) {
       $joins[] = qsprintf(
         $conn,
-        'LEFT JOIN %T uri ON r.phid = uri.repositoryPHID',
-        id(new PhabricatorRepositoryURIIndex())->getTableName());
+        'LEFT JOIN %R uri ON r.phid = uri.repositoryPHID',
+        new PhabricatorRepositoryURIIndex());
     }
 
     return $joins;
@@ -639,7 +616,7 @@ final class PhabricatorRepositoryQuery
           $this->slugIdentifiers);
       }
 
-      $where = array('('.implode(' OR ', $identifier_clause).')');
+      $where[] = qsprintf($conn, '%LO', $identifier_clause);
     }
 
     if ($this->types) {
@@ -712,10 +689,13 @@ final class PhabricatorRepositoryQuery
     // or an `svn+ssh` URI, we could deduce how to normalize it. However, this
     // would be more complicated and it's not clear if it matters in practice.
 
-    $types = PhabricatorRepositoryURINormalizer::getAllURITypes();
+    $domain_map = PhabricatorRepositoryURI::getURINormalizerDomainMap();
+
+    $types = ArcanistRepositoryURINormalizer::getAllURITypes();
     foreach ($this->uris as $uri) {
       foreach ($types as $type) {
-        $normalized_uri = new PhabricatorRepositoryURINormalizer($type, $uri);
+        $normalized_uri = new ArcanistRepositoryURINormalizer($type, $uri);
+        $normalized_uri->setDomainMap($domain_map);
         $normalized_uris[] = $normalized_uri->getNormalizedURI();
       }
     }

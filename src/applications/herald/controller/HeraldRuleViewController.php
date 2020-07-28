@@ -14,6 +14,7 @@ final class HeraldRuleViewController extends HeraldController {
       ->setViewer($viewer)
       ->withIDs(array($id))
       ->needConditionsAndActions(true)
+      ->needValidateAuthors(true)
       ->executeOne();
     if (!$rule) {
       return new Aphront404Response();
@@ -26,15 +27,11 @@ final class HeraldRuleViewController extends HeraldController {
       ->setHeaderIcon('fa-bullhorn');
 
     if ($rule->getIsDisabled()) {
-      $header->setStatus(
-        'fa-ban',
-        'red',
-        pht('Archived'));
+      $header->setStatus('fa-ban', 'red', pht('Disabled'));
+    } else if (!$rule->hasValidAuthor()) {
+      $header->setStatus('fa-user', 'red', pht('Author Not Active'));
     } else {
-      $header->setStatus(
-        'fa-check',
-        'bluegrey',
-        pht('Active'));
+      $header->setStatus('fa-check', 'bluegrey', pht('Active'));
     }
 
     $curtain = $this->buildCurtain($rule);
@@ -90,16 +87,15 @@ final class HeraldRuleViewController extends HeraldController {
     if ($rule->getIsDisabled()) {
       $disable_uri = "disable/{$id}/enable/";
       $disable_icon = 'fa-check';
-      $disable_name = pht('Activate Rule');
+      $disable_name = pht('Enable Rule');
     } else {
       $disable_uri = "disable/{$id}/disable/";
       $disable_icon = 'fa-ban';
-      $disable_name = pht('Archive Rule');
+      $disable_name = pht('Disable Rule');
     }
 
     $curtain->addAction(
       id(new PhabricatorActionView())
-        ->setName(pht('Disable Rule'))
         ->setHref($this->getApplicationURI($disable_uri))
         ->setIcon($disable_icon)
         ->setName($disable_name)
@@ -147,12 +143,11 @@ final class HeraldRuleViewController extends HeraldController {
   private function buildDescriptionView(HeraldRule $rule) {
     $viewer = $this->getRequest()->getUser();
     $view = id(new PHUIPropertyListView())
-      ->setUser($viewer);
+      ->setViewer($viewer);
 
     $adapter = HeraldAdapter::getAdapterForContentType($rule->getContentType());
     if ($adapter) {
-      $handles = $viewer->loadHandles(HeraldAdapter::getHandlePHIDs($rule));
-      $rule_text = $adapter->renderRuleAsText($rule, $handles, $viewer);
+      $rule_text = $adapter->renderRuleAsText($rule, $viewer);
       $view->addTextContent($rule_text);
       return $view;
     }

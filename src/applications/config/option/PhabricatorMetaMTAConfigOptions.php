@@ -84,14 +84,6 @@ of each approach are:
 EODOC
 ));
 
-    $herald_hints_description = $this->deformat(pht(<<<EODOC
-You can disable the Herald hints in email if users prefer smaller messages.
-These are the links under the header "WHY DID I GET THIS EMAIL?". If you set
-this to `false`, they will not appear in any mail. Users can still navigate to
-the links via the web interface.
-EODOC
-));
-
     $reply_hints_description = $this->deformat(pht(<<<EODOC
 You can disable the hints under "REPLY HANDLER ACTIONS" if users prefer
 smaller messages. The actions themselves will still work properly.
@@ -154,13 +146,6 @@ custom mailers). This option is deprecated in favor of 'cluster.mailers'.
 EODOC
 ));
 
-    $placeholder_description = $this->deformat(pht(<<<EODOC
-When sending a message that has no To recipient (i.e. all recipients are CC'd),
-set the To field to the following value. If no value is set, messages with no
-To will have their CCs upgraded to To.
-EODOC
-));
-
     $public_replies_description = $this->deformat(pht(<<<EODOC
 By default, Phabricator generates unique reply-to addresses and sends a separate
 email to each recipient when you enable reply handling. This is more secure than
@@ -207,27 +192,33 @@ EODOC
       PhabricatorEnv::getDoclink('Configuring Outbound Email'),
       pht('Configuring Outbound Email')));
 
+    $default_description = $this->deformat(pht(<<<EODOC
+Default address used as a "From" or "To" email address when an address is
+required but no meaningful address is available.
+
+If you configure inbound mail, you generally do not need to set this:
+Phabricator will automatically generate and use a suitable mailbox on the
+inbound mail domain.
+
+Otherwise, this option should be configured to point at a valid mailbox which
+discards all mail sent to it. If you point it at an invalid mailbox, mail sent
+by Phabricator and some mail sent by users will bounce. If you point it at a
+real user mailbox, that user will get a lot of mail they don't want.
+
+For further guidance, see **[[ %s | %s ]]** in the documentation.
+EODOC
+      ,
+      PhabricatorEnv::getDoclink('Configuring Outbound Email'),
+      pht('Configuring Outbound Email')));
+
     return array(
-      $this->newOption('cluster.mailers', 'cluster.mailers', null)
+      $this->newOption('cluster.mailers', 'cluster.mailers', array())
         ->setHidden(true)
         ->setDescription($mailers_description),
-      $this->newOption(
-        'metamta.default-address',
-        'string',
-        'noreply@phabricator.example.com')
-        ->setDescription(pht('Default "From" address.')),
-      $this->newOption(
-        'metamta.domain',
-        'string',
-        'phabricator.example.com')
-        ->setDescription(pht('Domain used to generate Message-IDs.')),
-      $this->newOption(
-        'metamta.mail-adapter',
-        'class',
-        'PhabricatorMailImplementationPHPMailerLiteAdapter')
-        ->setBaseClass('PhabricatorMailImplementationAdapter')
-        ->setSummary(pht('Control how mail is sent.'))
-        ->setDescription($adapter_description),
+      $this->newOption('metamta.default-address', 'string', null)
+        ->setLocked(true)
+        ->setSummary(pht('Default address used when generating mail.'))
+        ->setDescription($default_description),
       $this->newOption(
         'metamta.one-mail-per-recipient',
         'bool',
@@ -261,14 +252,6 @@ EODOC
         ->setLocked(true)
         ->setDescription(pht('Domain used for reply email addresses.'))
         ->addExample('phabricator.example.com', ''),
-      $this->newOption('metamta.herald.show-hints', 'bool', true)
-        ->setBoolOptions(
-          array(
-            pht('Show Herald Hints'),
-            pht('No Herald Hints'),
-          ))
-        ->setSummary(pht('Show hints about Herald rules in email.'))
-        ->setDescription($herald_hints_description),
       $this->newOption('metamta.recipients.show-hints', 'bool', true)
         ->setBoolOptions(
           array(
@@ -285,6 +268,7 @@ EODOC
           ))
         ->setSummary(pht('Show email preferences link in email.'))
         ->setDescription($email_preferences_description),
+// LLVM: pure addition, options control email headers
       $this->newOption('metamta.email-headers', 'bool', true)
         ->setBoolOptions(
           array(
@@ -293,33 +277,7 @@ EODOC
           ))
         ->setSummary(pht('Print headers in emails.'))
         ->setDescription($email_headers_description),
-      $this->newOption('metamta.re-prefix', 'bool', false)
-        ->setBoolOptions(
-          array(
-            pht('Force "Re:" Subject Prefix'),
-            pht('No "Re:" Subject Prefix'),
-          ))
-        ->setSummary(pht('Control "Re:" subject prefix, for Mail.app.'))
-        ->setDescription($re_prefix_description),
-      $this->newOption('metamta.vary-subjects', 'bool', true)
-        ->setBoolOptions(
-          array(
-            pht('Allow Varied Subjects'),
-            pht('Always Use the Same Thread Subject'),
-          ))
-        ->setSummary(pht('Control subject variance, for some mail clients.'))
-        ->setDescription($vary_subjects_description),
-      $this->newOption('metamta.insecure-auth-with-reply-to', 'bool', false)
-        ->setBoolOptions(
-          array(
-            pht('Allow Insecure Reply-To Auth'),
-            pht('Disallow Reply-To Auth'),
-          ))
-        ->setSummary(pht('Trust "Reply-To" headers for authentication.'))
-        ->setDescription($reply_to_description),
-      $this->newOption('metamta.placeholder-to-recipient', 'string', null)
-        ->setSummary(pht('Placeholder for mail with only CCs.'))
-        ->setDescription($placeholder_description),
+// END_LLVM
       $this->newOption('metamta.public-replies', 'bool', false)
         ->setBoolOptions(
           array(

@@ -472,14 +472,21 @@ final class DiffusionBrowseController extends DiffusionController {
     $viewer = $this->getViewer();
     $base_uri = $this->getRequest()->getRequestURI();
 
-    $user = $this->getRequest()->getUser();
     $repository = $drequest->getRepository();
     $path = $drequest->getPath();
     $line = nonempty((int)$drequest->getLine(), 1);
     $buttons = array();
 
-    $editor_link = $user->loadEditorLink($path, $line, $repository);
-    $template = $user->loadEditorLink($path, '%l', $repository);
+    $editor_uri = null;
+    $editor_template = null;
+
+    $link_engine = PhabricatorEditorURIEngine::newForViewer($viewer);
+    if ($link_engine) {
+      $link_engine->setRepository($repository);
+
+      $editor_uri = $link_engine->getURIForPath($path, $line);
+      $editor_template = $link_engine->getURITokensForPath($path);
+    }
 
     $buttons[] =
       id(new PHUIButtonView())
@@ -493,16 +500,16 @@ final class DiffusionBrowseController extends DiffusionController {
             )))
         ->setIcon('fa-backward');
 
-    if ($editor_link) {
+    if ($editor_uri) {
       $buttons[] =
         id(new PHUIButtonView())
           ->setTag('a')
           ->setText(pht('Open File'))
-          ->setHref($editor_link)
+          ->setHref($editor_uri)
           ->setIcon('fa-pencil')
           ->setID('editor_link')
-          ->setMetadata(array('link_template' => $template))
-          ->setDisabled(!$editor_link)
+          ->setMetadata(array('template' => $editor_template))
+          ->setDisabled(!$editor_uri)
           ->setColor(PHUIButtonView::GREY);
     }
 
@@ -566,11 +573,8 @@ final class DiffusionBrowseController extends DiffusionController {
         $name = idx($spec, 'name', $auto);
         $item->addIcon('fa-code', $name);
 
-        if ($package->getAuditingEnabled()) {
-          $item->addIcon('fa-check', pht('Auditing Enabled'));
-        } else {
-          $item->addIcon('fa-ban', pht('No Auditing'));
-        }
+        $rule = $package->newAuditingRule();
+        $item->addIcon($rule->getIconIcon(), $rule->getDisplayName());
 
         if ($package->isArchived()) {
           $item->setDisabled(true);
@@ -712,10 +716,17 @@ final class DiffusionBrowseController extends DiffusionController {
         'path'      => $path,
       ));
 
-    $before_uri->setQueryParams($request->getRequestURI()->getQueryParams());
-    $before_uri = $before_uri->alter('before', null);
-    $before_uri = $before_uri->alter('renamed', $renamed);
-    $before_uri = $before_uri->alter('follow', $follow);
+    if ($renamed === null) {
+      $before_uri->removeQueryParam('renamed');
+    } else {
+      $before_uri->replaceQueryParam('renamed', $renamed);
+    }
+
+    if ($follow === null) {
+      $before_uri->removeQueryParam('follow');
+    } else {
+      $before_uri->replaceQueryParam('follow', $follow);
+    }
 
     return id(new AphrontRedirectResponse())->setURI($before_uri);
   }
@@ -1102,11 +1113,7 @@ final class DiffusionBrowseController extends DiffusionController {
     $history_table = id(new DiffusionHistoryTableView())
       ->setViewer($viewer)
       ->setDiffusionRequest($drequest)
-      ->setHistory($history);
-
-    $history_table->loadRevisions();
-
-    $history_table
+      ->setHistory($history)
       ->setParents($results['parents'])
       ->setFilterParents(true)
       ->setIsHead(true)

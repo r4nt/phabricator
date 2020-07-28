@@ -10,7 +10,6 @@ final class AphrontStackTraceView extends AphrontView {
   }
 
   public function render() {
-    $user = $this->getUser();
     $trace = $this->trace;
 
     $libraries = PhutilBootloader::getInstance()->getAllLibraries();
@@ -20,7 +19,6 @@ final class AphrontStackTraceView extends AphrontView {
 
     $callsigns = array(
       'arcanist' => 'ARC',
-      'phutil' => 'PHU',
       'phabricator' => 'P',
     );
 

@@ -154,35 +154,6 @@ EOTEXT
             pht('Multi-Factor Required'),
             pht('Multi-Factor Optional'),
           )),
-      $this->newOption(
-        'phabricator.csrf-key',
-        'string',
-        '0b7ec0592e0a2829d8b71df2fa269b2c6172eca3')
-        ->setHidden(true)
-        ->setSummary(
-          pht('Hashed with other inputs to generate CSRF tokens.'))
-        ->setDescription(
-          pht(
-            'This is hashed with other inputs to generate CSRF tokens. If '.
-            'you want, you can change it to some other string which is '.
-            'unique to your install. This will make your install more secure '.
-            'in a vague, mostly theoretical way. But it will take you like 3 '.
-            'seconds of mashing on your keyboard to set it up so you might '.
-            'as well.')),
-       $this->newOption(
-         'phabricator.mail-key',
-         'string',
-         '5ce3e7e8787f6e40dfae861da315a5cdf1018f12')
-        ->setHidden(true)
-        ->setSummary(
-          pht('Hashed with other inputs to generate mail tokens.'))
-        ->setDescription(
-          pht(
-            "This is hashed with other inputs to generate mail tokens. If ".
-            "you want, you can change it to some other string which is ".
-            "unique to your install. In particular, you will want to do ".
-            "this if you accidentally send a bunch of mail somewhere you ".
-            "shouldn't have, to invalidate all old reply-to addresses.")),
        $this->newOption(
         'uri.allowed-protocols',
         'set',
@@ -192,14 +163,26 @@ EOTEXT
           'mailto' => true,
         ))
         ->setSummary(
-          pht('Determines which URI protocols are auto-linked.'))
+          pht(
+            'Determines which URI protocols are valid for links and '.
+            'redirects.'))
         ->setDescription(
           pht(
-            "When users write comments which have URIs, they'll be ".
-            "automatically linked if the protocol appears in this set. This ".
-            "whitelist is primarily to prevent security issues like ".
-            "%s URIs.",
-            'javascript://'))
+            'When users write comments which have URIs, they will be '.
+            'automatically turned into clickable links if the URI protocol '.
+            'appears in this set.'.
+            "\n\n".
+            'This set of allowed protocols is primarily intended to prevent '.
+            'security issues with "javascript:" and other potentially '.
+            'dangerous URI handlers.'.
+            "\n\n".
+            'This set is also used to enforce valid redirect URIs. '.
+            'Phabricator will refuse to issue a HTTP "Location" redirect to a '.
+            'URI with a protocol not on this set.'.
+            "\n\n".
+            'Usually, "http" and "https" should be present in this set. If '.
+            'you remove one or both protocols, some Phabricator features '.
+            'which rely on links or redirects may not work.'))
         ->addExample("http\nhttps", pht('Valid Setting'))
         ->setLocked(true),
       $this->newOption(
@@ -227,6 +210,12 @@ EOTEXT
           // This isn't a standard handler installed by an application, but
           // is a reasonable name for a user-installed handler.
           'editor' => true,
+
+          // This handler is for Visual Studio Code.
+          'vscode' => true,
+
+          // This is for IntelliJ IDEA.
+          'idea' => true,
         ))
         ->setSummary(pht('Whitelists editor protocols for "Open in Editor".'))
         ->setDescription(
@@ -234,21 +223,6 @@ EOTEXT
             'Users can configure a URI pattern to open files in a text '.
             'editor. The URI must use a protocol on this whitelist.'))
         ->setLocked(true),
-       $this->newOption(
-         'celerity.resource-hash',
-         'string',
-         'd9455ea150622ee044f7931dabfa52aa')
-        ->setSummary(
-          pht('An input to the hash function when building resource hashes.'))
-        ->setDescription(
-          pht(
-            'This value is an input to the hash function when building '.
-            'resource hashes. It has no security value, but if you '.
-            'accidentally poison user caches (by pushing a bad patch or '.
-            'having something go wrong with a CDN, e.g.) you can change this '.
-            'to something else and rebuild the Celerity map to break user '.
-            'caches. Unless you are doing Celerity development, it is '.
-            'exceptionally unlikely that you need to modify this.')),
        $this->newOption('remarkup.enable-embedded-youtube', 'bool', false)
         ->setBoolOptions(
           array(

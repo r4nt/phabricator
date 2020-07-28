@@ -78,6 +78,16 @@ final class AlmanacInterfaceQuery
     return $interfaces;
   }
 
+  protected function buildSelectClauseParts(AphrontDatabaseConnection $conn) {
+    $select = parent::buildSelectClauseParts($conn);
+
+    if ($this->shouldJoinDeviceTable()) {
+      $select[] = qsprintf($conn, 'device.name');
+    }
+
+    return $select;
+  }
+
   protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
     $where = parent::buildWhereClauseParts($conn);
 
@@ -121,7 +131,7 @@ final class AlmanacInterfaceQuery
           $address->getAddress(),
           $address->getPort());
       }
-      $where[] = implode(' OR ', $parts);
+      $where[] = qsprintf($conn, '%LO', $parts);
     }
 
     return $where;
@@ -186,15 +196,16 @@ final class AlmanacInterfaceQuery
     );
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $interface = $this->loadCursorObject($cursor);
+  protected function newPagingMapFromCursorObject(
+    PhabricatorQueryCursor $cursor,
+    array $keys) {
 
-    $map = array(
-      'id' => $interface->getID(),
-      'name' => $interface->getDevice()->getName(),
+    $interface = $cursor->getObject();
+
+    return array(
+      'id' => (int)$interface->getID(),
+      'name' => $cursor->getRawRowProperty('device.name'),
     );
-
-    return $map;
   }
 
 }

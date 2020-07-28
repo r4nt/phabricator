@@ -17,6 +17,7 @@ final class PhortunePaymentProviderConfig extends PhortuneDAO
     PhortuneMerchant $merchant) {
     return id(new PhortunePaymentProviderConfig())
       ->setMerchantPHID($merchant->getPHID())
+      ->attachMerchant($merchant)
       ->setIsEnabled(1);
   }
 
@@ -75,6 +76,17 @@ final class PhortunePaymentProviderConfig extends PhortuneDAO
       ->setProviderConfig($this);
   }
 
+  public function getObjectName() {
+    return pht('Provider %d', $this->getID());
+  }
+
+  public function getURI() {
+    return urisprintf(
+      '/phortune/merchant/%d/providers/%d/',
+      $this->getMerchant()->getID(),
+      $this->getID());
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -106,19 +118,8 @@ final class PhortunePaymentProviderConfig extends PhortuneDAO
     return new PhortunePaymentProviderConfigEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhortunePaymentProviderConfigTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 }

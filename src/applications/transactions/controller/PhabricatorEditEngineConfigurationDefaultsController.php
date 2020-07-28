@@ -30,6 +30,11 @@ final class PhabricatorEditEngineConfigurationDefaultsController
     $fields = $engine->getFieldsForConfig($config);
 
     foreach ($fields as $key => $field) {
+      if (!$field->getIsFormField()) {
+        unset($fields[$key]);
+        continue;
+      }
+
       if (!$field->getIsDefaultable()) {
         unset($fields[$key]);
         continue;
@@ -47,7 +52,7 @@ final class PhabricatorEditEngineConfigurationDefaultsController
         $field->readValueFromSubmit($request);
       }
 
-      $type = PhabricatorEditEngineConfigurationTransaction::TYPE_DEFAULT;
+      $type = PhabricatorEditEngineDefaultTransaction::TRANSACTIONTYPE;
 
       $xactions = array();
       foreach ($fields as $field) {

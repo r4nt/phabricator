@@ -64,16 +64,21 @@ final class PhabricatorPeopleProfileViewController
           $calendar,
         ));
 
-    $nav = $this->getProfileMenu();
-    $nav->selectFilter(PhabricatorPeopleProfileMenuEngine::ITEM_PROFILE);
+    $navigation = $this->newNavigation(
+      $user,
+      PhabricatorPeopleProfileMenuEngine::ITEM_PROFILE);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->setBorder(true);
 
     return $this->newPage()
       ->setTitle($user->getUsername())
-      ->setNavigation($nav)
+      ->setNavigation($navigation)
       ->setCrumbs($crumbs)
+      ->setPageObjectPHIDs(
+        array(
+          $user->getPHID(),
+        ))
       ->appendChild(
         array(
           $home,
@@ -171,6 +176,12 @@ final class PhabricatorPeopleProfileViewController
       return null;
     }
 
+    // Don't show calendar information for disabled users, since it's probably
+    // not useful or accurate and may be misleading.
+    if ($user->getIsDisabled()) {
+      return null;
+    }
+
     $midnight = PhabricatorTime::getTodayMidnightDateTime($viewer);
     $week_end = clone $midnight;
     $week_end = $week_end->modify('+3 days');
@@ -241,14 +252,29 @@ final class PhabricatorPeopleProfileViewController
     PhabricatorUser $user,
     $viewer) {
 
-    $query = new PhabricatorFeedQuery();
-    $query->withFilterPHIDs(
-      array(
-        $user->getPHID(),
-      ));
-    $query->setLimit(100);
-    $query->setViewer($viewer);
+    $query = id(new PhabricatorFeedQuery())
+      ->setViewer($viewer)
+      ->withFilterPHIDs(array($user->getPHID()))
+      ->setLimit(100)
+      ->setReturnPartialResultsOnOverheat(true);
+
     $stories = $query->execute();
+
+    $overheated_view = null;
+    $is_overheated = $query->getIsOverheated();
+    if ($is_overheated) {
+      $overheated_message =
+        PhabricatorApplicationSearchController::newOverheatedError(
+          (bool)$stories);
+
+      $overheated_view = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->setTitle(pht('Query Overheated'))
+        ->setErrors(
+          array(
+            $overheated_message,
+          ));
+    }
 
     $builder = new PhabricatorFeedBuilder($stories);
     $builder->setUser($viewer);
@@ -257,8 +283,10 @@ final class PhabricatorPeopleProfileViewController
       'requires but just a single step.'));
     $view = $builder->buildView();
 
-    return $view->render();
-
+    return array(
+      $overheated_view,
+      $view->render(),
+    );
   }
 
 }

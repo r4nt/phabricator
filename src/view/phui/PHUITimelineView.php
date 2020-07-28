@@ -7,7 +7,7 @@ final class PHUITimelineView extends AphrontView {
   private $shouldTerminate = false;
   private $shouldAddSpacers = true;
   private $pager;
-  private $renderData = array();
+  private $viewData = array();
   private $quoteTargetID;
   private $quoteRef;
 
@@ -40,9 +40,13 @@ final class PHUITimelineView extends AphrontView {
     return $this;
   }
 
-  public function setRenderData(array $data) {
-    $this->renderData = $data;
+  public function setViewData(array $data) {
+    $this->viewData = $data;
     return $this;
+  }
+
+  public function getViewData() {
+    return $this->viewData;
   }
 
   public function setQuoteTargetID($quote_target_id) {
@@ -72,7 +76,7 @@ final class PHUITimelineView extends AphrontView {
         'phabricator-show-older-transactions',
         array(
           'timelineID' => $this->id,
-          'renderData' => $this->renderData,
+          'viewData' => $this->getViewData(),
         ));
     }
     $events = $this->buildEvents();
@@ -150,8 +154,21 @@ final class PHUITimelineView extends AphrontView {
       }
 
       $uri = $this->getPager()->getNextPageURI();
-      $uri->setQueryParam('quoteTargetID', $this->getQuoteTargetID());
-      $uri->setQueryParam('quoteRef', $this->getQuoteRef());
+
+      $target_id = $this->getQuoteTargetID();
+      if ($target_id === null) {
+        $uri->removeQueryParam('quoteTargetID');
+      } else {
+        $uri->replaceQueryParam('quoteTargetID', $target_id);
+      }
+
+      $quote_ref = $this->getQuoteRef();
+      if ($quote_ref === null) {
+        $uri->removeQueryParam('quoteRef');
+      } else {
+        $uri->replaceQueryParam('quoteRef', $quote_ref);
+      }
+
       $events[] = javelin_tag(
         'div',
         array(

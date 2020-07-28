@@ -15,6 +15,9 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
 
     $defined_keys = PhabricatorApplicationConfigOptions::loadAllOptions();
 
+    $stack = PhabricatorEnv::getConfigSourceStack();
+    $stack = $stack->getStack();
+
     foreach ($all_keys as $key) {
       if (isset($defined_keys[$key])) {
         continue;
@@ -47,9 +50,6 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
         ->setShortName($short)
         ->setName($name)
         ->setSummary($summary);
-
-      $stack = PhabricatorEnv::getConfigSourceStack();
-      $stack = $stack->getStack();
 
       $found = array();
       $found_local = false;
@@ -84,6 +84,120 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
         $issue->addPhabricatorConfig($key);
       }
     }
+
+    $options = PhabricatorApplicationConfigOptions::loadAllOptions();
+    foreach ($defined_keys as $key => $value) {
+      $option = idx($options, $key);
+      if (!$option) {
+        continue;
+      }
+
+      if (!$option->getLocked()) {
+        continue;
+      }
+
+      $found_database = false;
+      foreach ($stack as $source_key => $source) {
+        $value = $source->getKeys(array($key));
+        if ($value) {
+          if ($source instanceof PhabricatorConfigDatabaseSource) {
+            $found_database = true;
+            break;
+          }
+        }
+      }
+
+      if (!$found_database) {
+        continue;
+      }
+
+      // NOTE: These are values which we don't let you edit directly, but edit
+      // via other UI workflows. For now, don't raise this warning about them.
+      // In the future, before we stop reading database configuration for
+      // locked values, we either need to add a flag which lets these values
+      // continue reading from the database or move them to some other storage
+      // mechanism.
+      $soft_locks = array(
+        'phabricator.uninstalled-applications',
+        'phabricator.application-settings',
+        'config.ignore-issues',
+        'auth.lock-config',
+      );
+      $soft_locks = array_fuse($soft_locks);
+      if (isset($soft_locks[$key])) {
+        continue;
+      }
+
+      $doc_name = 'Configuration Guide: Locked and Hidden Configuration';
+      $doc_href = PhabricatorEnv::getDoclink($doc_name);
+
+      $set_command = phutil_tag(
+        'tt',
+        array(),
+        csprintf(
+          'bin/config set %R <value>',
+          $key));
+
+      $summary = pht(
+        'Configuration value "%s" is locked, but has a value in the database.',
+        $key);
+      $message = pht(
+        'The configuration value "%s" is locked (so it can not be edited '.
+        'from the web UI), but has a database value. Usually, this means '.
+        'that it was previously not locked, you set it using the web UI, '.
+        'and it later became locked.'.
+        "\n\n".
+        'You should copy this configuration value to a local configuration '.
+        'source (usually by using %s) and then remove it from the database '.
+        'with the command below.'.
+        "\n\n".
+        'For more information on locked and hidden configuration, including '.
+        'details about this setup issue, see %s.'.
+        "\n\n".
+        'This database value is currently respected, but a future version '.
+        'of Phabricator will stop respecting database values for locked '.
+        'configuration options.',
+        $key,
+        $set_command,
+        phutil_tag(
+          'a',
+          array(
+            'href' => $doc_href,
+            'target' => '_blank',
+          ),
+          $doc_name));
+      $command = csprintf(
+        'phabricator/ $ ./bin/config delete --database %R',
+        $key);
+
+      $this->newIssue('config.locked.'.$key)
+        ->setShortName(pht('Deprecated Config Source'))
+        ->setName(
+          pht(
+            'Locked Configuration Option "%s" Has Database Value',
+            $key))
+        ->setSummary($summary)
+        ->setMessage($message)
+        ->addCommand($command)
+        ->addPhabricatorConfig($key);
+    }
+
+    if (PhabricatorEnv::getEnvConfig('feed.http-hooks')) {
+      $this->newIssue('config.deprecated.feed.http-hooks')
+        ->setShortName(pht('Feed Hooks Deprecated'))
+        ->setName(pht('Migrate From "feed.http-hooks" to Webhooks'))
+        ->addPhabricatorConfig('feed.http-hooks')
+        ->setMessage(
+          pht(
+            'The "feed.http-hooks" option is deprecated in favor of '.
+            'Webhooks. This option will be removed in a future version '.
+            'of Phabricator.'.
+            "\n\n".
+            'You can configure Webhooks in Herald.'.
+            "\n\n".
+            'To resolve this issue, remove all URIs from "feed.http-hooks".'));
+    }
+
   }
 
   /**
@@ -193,12 +307,20 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
       'in global settings.');
 
     $dashboard_reason = pht(
-        'This option has been removed, you can use Dashboards to provide '.
-        'homepage customization. See T11533 for more details.');
+      'This option has been removed, you can use Dashboards to provide '.
+      'homepage customization. See T11533 for more details.');
 
     $elastic_reason = pht(
-        'Elasticsearch is now configured with "%s".',
-        'cluster.search');
+      'Elasticsearch is now configured with "%s".',
+      'cluster.search');
+
+    $mailers_reason = pht(
+      'Inbound and outbound mail is now configured with "cluster.mailers".');
+
+    $prefix_reason = pht(
+      'Per-application mail subject prefix customization is no longer '.
+      'directly supported. Prefixes and other strings may be customized with '.
+      '"translation.override".');
 
     $ancient_config += array(
       'phid.external-loaders' =>
@@ -354,6 +476,69 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
       'search.elastic.host' => $elastic_reason,
       'search.elastic.namespace' => $elastic_reason,
 
+      'metamta.mail-adapter' => $mailers_reason,
+      'amazon-ses.access-key' => $mailers_reason,
+      'amazon-ses.secret-key' => $mailers_reason,
+      'amazon-ses.endpoint' => $mailers_reason,
+      'mailgun.domain' => $mailers_reason,
+      'mailgun.api-key' => $mailers_reason,
+      'phpmailer.mailer' => $mailers_reason,
+      'phpmailer.smtp-host' => $mailers_reason,
+      'phpmailer.smtp-port' => $mailers_reason,
+      'phpmailer.smtp-protocol' => $mailers_reason,
+      'phpmailer.smtp-user' => $mailers_reason,
+      'phpmailer.smtp-password' => $mailers_reason,
+      'phpmailer.smtp-encoding' => $mailers_reason,
+      'sendgrid.api-user' => $mailers_reason,
+      'sendgrid.api-key' => $mailers_reason,
+
+      'celerity.resource-hash' => pht(
+        'This option generally did not prove useful. Resource hash keys '.
+        'are now managed automatically.'),
+      'celerity.enable-deflate' => pht(
+        'Resource deflation is now managed automatically.'),
+      'celerity.minify' => pht(
+        'Resource minification is now managed automatically.'),
+
+      'metamta.domain' => pht(
+        'Mail thread IDs are now generated automatically.'),
+      'metamta.placeholder-to-recipient' => pht(
+        'Placeholder recipients are now generated automatically.'),
+
+      'metamta.mail-key' => pht(
+        'Mail object address hash keys are now generated automatically.'),
+
+      'phabricator.csrf-key' => pht(
+        'CSRF HMAC keys are now managed automatically.'),
+
+      'metamta.insecure-auth-with-reply-to' => pht(
+        'Authenticating users based on "Reply-To" is no longer supported.'),
+
+      'phabricator.allow-email-users' => pht(
+        'Public email is now accepted if the associated address has a '.
+        'default author, and rejected otherwise.'),
+
+      'metamta.conpherence.subject-prefix' => $prefix_reason,
+      'metamta.differential.subject-prefix' => $prefix_reason,
+      'metamta.diffusion.subject-prefix' => $prefix_reason,
+      'metamta.files.subject-prefix' => $prefix_reason,
+      'metamta.legalpad.subject-prefix' => $prefix_reason,
+      'metamta.macro.subject-prefix' => $prefix_reason,
+      'metamta.maniphest.subject-prefix' => $prefix_reason,
+      'metamta.package.subject-prefix' => $prefix_reason,
+      'metamta.paste.subject-prefix' => $prefix_reason,
+      'metamta.pholio.subject-prefix' => $prefix_reason,
+      'metamta.phriction.subject-prefix' => $prefix_reason,
+
+      'aphront.default-application-configuration-class' => pht(
+        'This ancient extension point has been replaced with other '.
+        'mechanisms, including "AphrontSite".'),
+
+      'differential.whitespace-matters' => pht(
+        'Whitespace rendering is now handled automatically.'),
+
+      'phd.pid-directory' => pht(
+        'Phabricator daemons no longer use PID files.'),
     );
 
     return $ancient_config;

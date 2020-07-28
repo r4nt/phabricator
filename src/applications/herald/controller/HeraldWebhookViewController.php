@@ -50,6 +50,19 @@ final class HeraldWebhookViewController
       ->setLimit(20)
       ->execute();
 
+    $warnings = array();
+    if (PhabricatorEnv::getEnvConfig('phabricator.silent')) {
+      $message = pht(
+        'Phabricator is currently configured in silent mode, so it will not '.
+        'publish webhooks. To adjust this setting, see '.
+        '@{config:phabricator.silent} in Config.');
+
+      $warnings[] = id(new PHUIInfoView())
+        ->setTitle(pht('Silent Mode'))
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->appendChild(new PHUIRemarkupView($viewer, $message));
+    }
+
     $requests_table = id(new HeraldWebhookRequestListView())
       ->setViewer($viewer)
       ->setRequests($requests)
@@ -60,12 +73,15 @@ final class HeraldWebhookViewController
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setTable($requests_table);
 
+    $rules_view = $this->newRulesView($hook);
+
     $hook_view = id(new PHUITwoColumnView())
       ->setHeader($header)
       ->setMainColumn(
         array(
           $warnings,
           $properties_view,
+          $rules_view,
           $requests_view,
           $timeline,
         ))
@@ -179,6 +195,44 @@ final class HeraldWebhookViewController
       ->setHeaderText(pht('Details'))
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($properties);
+  }
+
+  private function newRulesView(HeraldWebhook $hook) {
+    $viewer = $this->getViewer();
+
+    $rules = id(new HeraldRuleQuery())
+      ->setViewer($viewer)
+      ->withDisabled(false)
+      ->withAffectedObjectPHIDs(array($hook->getPHID()))
+      ->needValidateAuthors(true)
+      ->setLimit(10)
+      ->execute();
+
+    $list = id(new HeraldRuleListView())
+      ->setViewer($viewer)
+      ->setRules($rules)
+      ->newObjectList();
+
+    $list->setNoDataString(pht('No active Herald rules call this webhook.'));
+
+    $more_href = new PhutilURI(
+      '/herald/',
+      array('affectedPHID' => $hook->getPHID()));
+
+    $more_link = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setIcon('fa-list-ul')
+      ->setText(pht('View All Rules'))
+      ->setHref($more_href);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Called By Herald Rules'))
+      ->addActionLink($more_link);
+
+    return id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->appendChild($list);
   }
 
 }

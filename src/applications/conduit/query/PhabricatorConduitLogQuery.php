@@ -3,9 +3,17 @@
 final class PhabricatorConduitLogQuery
   extends PhabricatorCursorPagedPolicyAwareQuery {
 
+  private $ids;
   private $callerPHIDs;
   private $methods;
   private $methodStatuses;
+  private $epochMin;
+  private $epochMax;
+
+  public function withIDs(array $ids) {
+    $this->ids = $ids;
+    return $this;
+  }
 
   public function withCallerPHIDs(array $phids) {
     $this->callerPHIDs = $phids;
@@ -22,6 +30,12 @@ final class PhabricatorConduitLogQuery
     return $this;
   }
 
+  public function withEpochBetween($epoch_min, $epoch_max) {
+    $this->epochMin = $epoch_min;
+    $this->epochMax = $epoch_max;
+    return $this;
+  }
+
   public function newResultObject() {
     return new PhabricatorConduitMethodCallLog();
   }
@@ -32,6 +46,13 @@ final class PhabricatorConduitLogQuery
 
   protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
     $where = parent::buildWhereClauseParts($conn);
+
+    if ($this->ids !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'id IN (%Ld)',
+        $this->ids);
+    }
 
     if ($this->callerPHIDs !== null) {
       $where[] = qsprintf(
@@ -70,6 +91,20 @@ final class PhabricatorConduitLogQuery
         $conn,
         'method IN (%Ls)',
         $method_names);
+    }
+
+    if ($this->epochMin !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'dateCreated >= %d',
+        $this->epochMin);
+    }
+
+    if ($this->epochMax !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'dateCreated <= %d',
+        $this->epochMax);
     }
 
     return $where;

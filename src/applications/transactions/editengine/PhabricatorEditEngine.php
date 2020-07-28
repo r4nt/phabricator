@@ -165,14 +165,29 @@ abstract class PhabricatorEditEngine
       $extensions = array();
     }
 
+    // See T13248. Create a template object to provide to extensions. We
+    // adjust the template to have the intended subtype, so that extensions
+    // may change behavior based on the form subtype.
+
+    $template_object = clone $object;
+    if ($this->getIsCreate()) {
+      if ($this->supportsSubtypes()) {
+        $config = $this->getEditEngineConfiguration();
+        $subtype = $config->getSubtype();
+        $template_object->setSubtype($subtype);
+      }
+    }
+
     foreach ($extensions as $extension) {
       $extension->setViewer($viewer);
 
-      if (!$extension->supportsObject($this, $object)) {
+      if (!$extension->supportsObject($this, $template_object)) {
         continue;
       }
 
-      $extension_fields = $extension->buildCustomEditFields($this, $object);
+      $extension_fields = $extension->buildCustomEditFields(
+        $this,
+        $template_object);
 
       // TODO: Validate this in more detail with a more tailored error.
       assert_instances_of($extension_fields, 'PhabricatorEditField');
@@ -358,7 +373,7 @@ abstract class PhabricatorEditEngine
     return $this->editEngineConfiguration;
   }
 
-  private function newConfigurationQuery() {
+  public function newConfigurationQuery() {
     return id(new PhabricatorEditEngineConfigurationQuery())
       ->setViewer($this->getViewer())
       ->withEngineKeys(array($this->getEngineKey()));
@@ -551,6 +566,18 @@ abstract class PhabricatorEditEngine
     return $this->getObjectViewURI($object);
   }
 
+  /**
+   * @task uri
+   */
+  public function getCreateURI($form_key) {
+    try {
+      $create_uri = $this->getEditURI(null, "form/{$form_key}/");
+    } catch (Exception $ex) {
+      $create_uri = null;
+    }
+
+    return $create_uri;
+  }
 
   /**
    * @task uri
@@ -1009,9 +1036,13 @@ abstract class PhabricatorEditEngine
     $fields = $this->buildEditFields($object);
     $template = $object->getApplicationTransactionTemplate();
 
+    $page_state = new PhabricatorEditEnginePageState();
+
     if ($this->getIsCreate()) {
       $cancel_uri = $this->getObjectCreateCancelURI($object);
       $submit_button = $this->getObjectCreateButtonText($object);
+
+      $page_state->setIsCreate(true);
     } else {
       $cancel_uri = $this->getEffectiveObjectEditCancelURI($object);
       $submit_button = $this->getObjectEditButtonText($object);
@@ -1041,7 +1072,9 @@ abstract class PhabricatorEditEngine
     }
 
     $validation_exception = null;
-    if ($request->isFormPost() && $request->getBool('editEngine')) {
+    if ($request->isFormOrHisecPost() && $request->getBool('editEngine')) {
+      $page_state->setIsSubmit(true);
+
       $submit_fields = $fields;
 
       foreach ($submit_fields as $key => $field) {
@@ -1105,6 +1138,7 @@ abstract class PhabricatorEditEngine
       $editor = $object->getApplicationTransactionEditor()
         ->setActor($viewer)
         ->setContentSourceFromRequest($request)
+        ->setCancelURI($cancel_uri)
         ->setContinueOnNoEffect(true);
 
       try {
@@ -1126,6 +1160,8 @@ abstract class PhabricatorEditEngine
 
           $field->setControlError($message);
         }
+
+        $page_state->setIsError(true);
       }
     } else {
       if ($this->getIsCreate()) {
@@ -1224,6 +1260,17 @@ abstract class PhabricatorEditEngine
       $box_header->addActionLink($action_button);
     }
 
+    $request_submit_key = $request->getSubmitKey();
+    $engine_submit_key = $this->getEditEngineSubmitKey();
+
+    if ($request_submit_key === $engine_submit_key) {
+      $page_state->setIsSubmit(true);
+      $page_state->setIsSave(true);
+    }
+
+    $head = $this->newEditFormHeadContent($page_state);
+    $tail = $this->newEditFormTailContent($page_state);
+
     $box = id(new PHUIObjectBoxView())
       ->setUser($viewer)
       ->setHeader($box_header)
@@ -1231,14 +1278,11 @@ abstract class PhabricatorEditEngine
       ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->appendChild($form);
 
-    // This is fairly questionable, but in use by Settings.
-    if ($request->getURIData('formSaved')) {
-      $box->setFormSaved(true);
-    }
-
     $content = array(
+      $head,
       $box,
       $previews,
+      $tail,
     );
 
     $view = new PHUITwoColumnView();
@@ -1248,6 +1292,8 @@ abstract class PhabricatorEditEngine
       $view->setHeader($page_header);
     }
 
+    $view->setFooter($content);
+
     $page = $controller->newPage()
       ->setTitle($header_text)
       ->setCrumbs($crumbs)
@@ -1255,22 +1301,38 @@ abstract class PhabricatorEditEngine
 
     $navigation = $this->getNavigation();
     if ($navigation) {
-      $view->setFixed(true);
-      $view->setNavigation($navigation);
-      $view->setMainColumn($content);
-    } else {
-      $view->setFooter($content);
+      $page->setNavigation($navigation);
     }
 
     return $page;
+  }
+
+  protected function newEditFormHeadContent(
+    PhabricatorEditEnginePageState $state) {
+    return null;
+  }
+
+  protected function newEditFormTailContent(
+    PhabricatorEditEnginePageState $state) {
+    return null;
   }
 
   protected function newEditResponse(
     AphrontRequest $request,
     $object,
     array $xactions) {
+
+    $submit_cookie = PhabricatorCookies::COOKIE_SUBMIT;
+    $submit_key = $this->getEditEngineSubmitKey();
+
+    $request->setTemporaryCookie($submit_cookie, $submit_key);
+
     return id(new AphrontRedirectResponse())
       ->setURI($this->getEffectiveObjectEditDoneURI($object));
+  }
+
+  private function getEditEngineSubmitKey() {
+    return 'edit-engine/'.$this->getEngineKey();
   }
 
   private function buildEditForm($object, array $fields) {
@@ -1280,15 +1342,45 @@ abstract class PhabricatorEditEngine
 
     $fields = $this->willBuildEditForm($object, $fields);
 
+    $request_path = $request->getPath();
+
     $form = id(new AphrontFormView())
       ->setUser($viewer)
+      ->setAction($request_path)
       ->addHiddenInput('editEngine', 'true');
 
     foreach ($this->contextParameters as $param) {
       $form->addHiddenInput($param, $request->getStr($param));
     }
 
+    $requires_mfa = false;
+    if ($object instanceof PhabricatorEditEngineMFAInterface) {
+      $mfa_engine = PhabricatorEditEngineMFAEngine::newEngineForObject($object)
+        ->setViewer($viewer);
+      $requires_mfa = $mfa_engine->shouldRequireMFA();
+    }
+
+    if ($requires_mfa) {
+      $message = pht(
+        'You will be required to provide multi-factor credentials to make '.
+        'changes.');
+      $form->appendChild(
+        id(new PHUIInfoView())
+          ->setSeverity(PHUIInfoView::SEVERITY_MFA)
+          ->setErrors(array($message)));
+
+      // TODO: This should also set workflow on the form, so the user doesn't
+      // lose any form data if they "Cancel". However, Maniphest currently
+      // overrides "newEditResponse()" if the request is Ajax and returns a
+      // bag of view data. This can reasonably be cleaned up when workboards
+      // get their next iteration.
+    }
+
     foreach ($fields as $field) {
+      if (!$field->getIsFormField()) {
+        continue;
+      }
+
       $field->appendToForm($form);
     }
 
@@ -1512,8 +1604,7 @@ abstract class PhabricatorEditEngine
         $config_uri = $config->getCreateURI();
 
         if ($parameters) {
-          $config_uri = (string)id(new PhutilURI($config_uri))
-            ->setQueryParams($parameters);
+          $config_uri = (string)new PhutilURI($config_uri, $parameters);
         }
 
         $specs[] = array(
@@ -1562,11 +1653,19 @@ abstract class PhabricatorEditEngine
 
     $comment_uri = $this->getEditURI($object, 'comment/');
 
+    $requires_mfa = false;
+    if ($object instanceof PhabricatorEditEngineMFAInterface) {
+      $mfa_engine = PhabricatorEditEngineMFAEngine::newEngineForObject($object)
+        ->setViewer($viewer);
+      $requires_mfa = $mfa_engine->shouldRequireMFA();
+    }
+
     $view = id(new PhabricatorApplicationTransactionCommentView())
       ->setUser($viewer)
       ->setObjectPHID($object_phid)
       ->setHeaderText($header_text)
       ->setAction($comment_uri)
+      ->setRequiresMFA($requires_mfa)
       ->setSubmitButtonName($button_text);
 
     $draft = PhabricatorVersionedDraft::loadDraft(
@@ -1781,7 +1880,9 @@ abstract class PhabricatorEditEngine
     $controller = $this->getController();
     $request = $controller->getRequest();
 
-    if (!$request->isFormPost()) {
+    // NOTE: We handle hisec inside the transaction editor with "Sign With MFA"
+    // comment actions.
+    if (!$request->isFormOrHisecPost()) {
       return new Aphront400Response();
     }
 
@@ -1915,6 +2016,7 @@ abstract class PhabricatorEditEngine
       ->setContinueOnNoEffect($request->isContinueRequest())
       ->setContinueOnMissingFields(true)
       ->setContentSourceFromRequest($request)
+      ->setCancelURI($view_uri)
       ->setRaiseWarnings(!$request->getBool('editEngine.warnings'))
       ->setIsPreview($is_preview);
 
@@ -1930,6 +2032,7 @@ abstract class PhabricatorEditEngine
         ->setException($ex);
     } catch (PhabricatorApplicationTransactionWarningException $ex) {
       return id(new PhabricatorApplicationTransactionWarningResponse())
+        ->setObject($object)
         ->setCancelURI($view_uri)
         ->setException($ex);
     }
@@ -1950,10 +2053,19 @@ abstract class PhabricatorEditEngine
     if ($request->isAjax() && $is_preview) {
       $preview_content = $this->newCommentPreviewContent($object, $xactions);
 
+      $raw_view_data = $request->getStr('viewData');
+      try {
+        $view_data = phutil_json_decode($raw_view_data);
+      } catch (Exception $ex) {
+        $view_data = array();
+      }
+
       return id(new PhabricatorApplicationTransactionResponse())
+        ->setObject($object)
         ->setViewer($viewer)
         ->setTransactions($xactions)
         ->setIsPreview($is_preview)
+        ->setViewData($view_data)
         ->setPreviewContent($preview_content);
     } else {
       return id(new AphrontRedirectResponse())
@@ -2090,6 +2202,16 @@ abstract class PhabricatorEditEngine
             'Parameter "%s" must contain a list of transaction descriptions, '.
             'but item with key "%s" is missing a "type" field. Each '.
             'transaction must have a type field.',
+            $transactions_key,
+            $key));
+      }
+
+      if (!array_key_exists('value', $xaction)) {
+        throw new Exception(
+          pht(
+            'Parameter "%s" must contain a list of transaction descriptions, '.
+            'but item with key "%s" is missing a "value" field. Each '.
+            'transaction must have a value field.',
             $transactions_key,
             $key));
       }
@@ -2448,6 +2570,8 @@ abstract class PhabricatorEditEngine
   }
 
   final public function newBulkEditMap() {
+    $viewer = $this->getViewer();
+
     $config = $this->loadDefaultConfiguration();
     if (!$config) {
       throw new Exception(
@@ -2466,6 +2590,8 @@ abstract class PhabricatorEditEngine
       if ($bulk_type === null) {
         continue;
       }
+
+      $bulk_type->setViewer($viewer);
 
       $bulk_label = $type->getBulkEditLabel();
       if ($bulk_label === null) {

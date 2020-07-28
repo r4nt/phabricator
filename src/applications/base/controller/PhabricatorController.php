@@ -98,7 +98,8 @@ abstract class PhabricatorController extends AphrontController {
 
 
       if (!$user->isLoggedIn()) {
-        $user->attachAlternateCSRFString(PhabricatorHash::weakDigest($phsid));
+        $csrf = PhabricatorHash::digestWithNamedKey($phsid, 'csrf.alternate');
+        $user->attachAlternateCSRFString($csrf);
       }
 
       $request->setUser($user);
@@ -480,16 +481,27 @@ abstract class PhabricatorController extends AphrontController {
 
   protected function buildTransactionTimeline(
     PhabricatorApplicationTransactionInterface $object,
-    PhabricatorApplicationTransactionQuery $query,
+    PhabricatorApplicationTransactionQuery $query = null,
     PhabricatorMarkupEngine $engine = null,
-    $render_data = array()) {
+    $view_data = array()) {
 
-    $viewer = $this->getRequest()->getUser();
+    $request = $this->getRequest();
+    $viewer = $this->getViewer();
     $xaction = $object->getApplicationTransactionTemplate();
-    $view = $xaction->getApplicationTransactionViewObject();
+
+    if (!$query) {
+      $query = PhabricatorApplicationTransactionQuery::newQueryForObject(
+        $object);
+      if (!$query) {
+        throw new Exception(
+          pht(
+            'Unable to find transaction query for object of class "%s".',
+            get_class($object)));
+      }
+    }
 
     $pager = id(new AphrontCursorPagerView())
-      ->readFromRequest($this->getRequest())
+      ->readFromRequest($request)
       ->setURI(new PhutilURI(
         '/transactions/showolder/'.$object->getPHID().'/'));
 
@@ -499,6 +511,13 @@ abstract class PhabricatorController extends AphrontController {
       ->needComments(true)
       ->executeWithCursorPager($pager);
     $xactions = array_reverse($xactions);
+
+    $timeline_engine = PhabricatorTimelineEngine::newForObject($object)
+      ->setViewer($viewer)
+      ->setTransactions($xactions)
+      ->setViewData($view_data);
+
+    $view = $timeline_engine->buildTimelineView();
 
     if ($engine) {
       foreach ($xactions as $xaction) {
@@ -513,14 +532,9 @@ abstract class PhabricatorController extends AphrontController {
     }
 
     $timeline = $view
-      ->setUser($viewer)
-      ->setObjectPHID($object->getPHID())
-      ->setTransactions($xactions)
       ->setPager($pager)
-      ->setRenderData($render_data)
       ->setQuoteTargetID($this->getRequest()->getStr('quoteTargetID'))
       ->setQuoteRef($this->getRequest()->getStr('quoteRef'));
-    $object->willRenderTimeline($timeline, $this->getRequest());
 
     return $timeline;
   }
@@ -605,6 +619,7 @@ abstract class PhabricatorController extends AphrontController {
     $this->setCurrentApplication($application);
 
     $controller = new LegalpadDocumentSignController();
+    $controller->setIsSessionGate(true);
     return $this->delegateToController($controller);
   }
 

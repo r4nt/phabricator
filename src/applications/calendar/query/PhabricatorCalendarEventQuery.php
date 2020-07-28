@@ -140,11 +140,10 @@ final class PhabricatorCalendarEventQuery
     ) + parent::getOrderableColumns();
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $event = $this->loadCursorObject($cursor);
+  protected function newPagingMapFromPartialObject($object) {
     return array(
-      'start' => $event->getStartDateTimeEpoch(),
-      'id' => $event->getID(),
+      'id' => (int)$object->getID(),
+      'start' => (int)$object->getStartDateTimeEpoch(),
     );
   }
 
@@ -444,8 +443,8 @@ final class PhabricatorCalendarEventQuery
 
       $where[] = qsprintf(
         $conn,
-        '%Q',
-        implode(' OR ', $sql));
+        '%LO',
+        $sql);
     }
 
     if ($this->isStub !== null) {
@@ -509,14 +508,9 @@ final class PhabricatorCalendarEventQuery
     return parent::shouldGroupQueryResultRows();
   }
 
-  protected function getApplicationSearchObjectPHIDColumn() {
-    return 'event.phid';
-  }
-
   public function getQueryApplicationClass() {
     return 'PhabricatorCalendarApplication';
   }
-
 
   protected function willFilterPage(array $events) {
     $instance_of_event_phids = array();

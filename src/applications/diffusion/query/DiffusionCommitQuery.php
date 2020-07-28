@@ -15,8 +15,10 @@ final class DiffusionCommitQuery
   private $statuses;
   private $packagePHIDs;
   private $unreachable;
+  private $unpublished;
 
   private $needAuditRequests;
+  private $needAuditAuthority;
   private $auditIDs;
   private $auditorPHIDs;
   private $epochMin;
@@ -121,6 +123,12 @@ final class DiffusionCommitQuery
     return $this;
   }
 
+  public function needAuditAuthority(array $users) {
+    assert_instances_of($users, 'PhabricatorUser');
+    $this->needAuditAuthority = $users;
+    return $this;
+  }
+
   public function withAuditIDs(array $ids) {
     $this->auditIDs = $ids;
     return $this;
@@ -143,6 +151,11 @@ final class DiffusionCommitQuery
 
   public function withUnreachable($unreachable) {
     $this->unreachable = $unreachable;
+    return $this;
+  }
+
+  public function withUnpublished($unpublished) {
+    $this->unpublished = $unpublished;
     return $this;
   }
 
@@ -195,6 +208,7 @@ final class DiffusionCommitQuery
     $table = $this->newResultObject();
     $conn = $table->establishConnection('r');
 
+    $empty_exception = null;
     $subqueries = array();
     if ($this->responsiblePHIDs) {
       $base_authors = $this->authorPHIDs;
@@ -215,30 +229,55 @@ final class DiffusionCommitQuery
 
       $this->authorPHIDs = $all_authors;
       $this->auditorPHIDs = $base_auditors;
-      $subqueries[] = $this->buildStandardPageQuery(
-        $conn,
-        $table->getTableName());
+      try {
+        $subqueries[] = $this->buildStandardPageQuery(
+          $conn,
+          $table->getTableName());
+      } catch (PhabricatorEmptyQueryException $ex) {
+        $empty_exception = $ex;
+      }
 
       $this->authorPHIDs = $base_authors;
       $this->auditorPHIDs = $all_auditors;
-      $subqueries[] = $this->buildStandardPageQuery(
-        $conn,
-        $table->getTableName());
+      try {
+        $subqueries[] = $this->buildStandardPageQuery(
+          $conn,
+          $table->getTableName());
+      } catch (PhabricatorEmptyQueryException $ex) {
+        $empty_exception = $ex;
+      }
     } else {
       $subqueries[] = $this->buildStandardPageQuery(
         $conn,
         $table->getTableName());
     }
 
+    if (!$subqueries) {
+      throw $empty_exception;
+    }
+
     if (count($subqueries) > 1) {
-      foreach ($subqueries as $key => $subquery) {
-        $subqueries[$key] = '('.$subquery.')';
+      $unions = null;
+      foreach ($subqueries as $subquery) {
+        if (!$unions) {
+          $unions = qsprintf(
+            $conn,
+            '(%Q)',
+            $subquery);
+          continue;
+        }
+
+        $unions = qsprintf(
+          $conn,
+          '%Q UNION DISTINCT (%Q)',
+          $unions,
+          $subquery);
       }
 
       $query = qsprintf(
         $conn,
         '%Q %Q %Q',
-        implode(' UNION DISTINCT ', $subqueries),
+        $unions,
         $this->buildOrderClause($conn, true),
         $this->buildLimitClause($conn));
     } else {
@@ -423,6 +462,72 @@ final class DiffusionCommitQuery
         $commits);
     }
 
+    if ($this->needAuditAuthority) {
+      $authority_users = $this->needAuditAuthority;
+
+      // NOTE: This isn't very efficient since we're running two queries per
+      // user, but there's currently no way to figure out authority for
+      // multiple users in one query. Today, we only ever request authority for
+      // a single user and single commit, so this has no practical impact.
+
+      // NOTE: We're querying with the viewership of query viewer, not the
+      // actual users. If the viewer can't see a project or package, they
+      // won't be able to see who has authority on it. This is safer than
+      // showing them true authority, and should never matter today, but it
+      // also doesn't seem like a significant disclosure and might be
+      // reasonable to adjust later if it causes something weird or confusing
+      // to happen.
+
+      $authority_map = array();
+      foreach ($authority_users as $authority_user) {
+        $authority_phid = $authority_user->getPHID();
+        if (!$authority_phid) {
+          continue;
+        }
+
+        $result_phids = array();
+
+        // Users have authority over themselves.
+        $result_phids[] = $authority_phid;
+
+        // Users have authority over packages they own.
+        $owned_packages = id(new PhabricatorOwnersPackageQuery())
+          ->setViewer($viewer)
+          ->withAuthorityPHIDs(array($authority_phid))
+          ->execute();
+        foreach ($owned_packages as $package) {
+          $result_phids[] = $package->getPHID();
+        }
+
+        // Users have authority over projects they're members of.
+        $projects = id(new PhabricatorProjectQuery())
+          ->setViewer($viewer)
+          ->withMemberPHIDs(array($authority_phid))
+          ->execute();
+        foreach ($projects as $project) {
+          $result_phids[] = $project->getPHID();
+        }
+
+        $result_phids = array_fuse($result_phids);
+
+        foreach ($commits as $commit) {
+          $attach_phids = $result_phids;
+
+          // NOTE: When modifying your own commits, you act only on behalf of
+          // yourself, not your packages or projects. The idea here is that you
+          // can't accept your own commits. In the future, this might change or
+          // depend on configuration.
+          $author_phid = $commit->getAuthorPHID();
+          if ($author_phid == $authority_phid) {
+            $attach_phids = array($author_phid);
+            $attach_phids = array_fuse($attach_phids);
+          }
+
+          $commit->attachAuditAuthority($authority_user, $attach_phids);
+        }
+      }
+    }
+
     return $commits;
   }
 
@@ -556,10 +661,19 @@ final class DiffusionCommitQuery
     }
 
     if ($this->authorPHIDs !== null) {
+      $author_phids = $this->authorPHIDs;
+      if ($author_phids) {
+        $author_phids = $this->selectPossibleAuthors($author_phids);
+        if (!$author_phids) {
+          throw new PhabricatorEmptyQueryException(
+            pht('Author PHIDs contain no possible authors.'));
+        }
+      }
+
       $where[] = qsprintf(
         $conn,
         'commit.authorPHID IN (%Ls)',
-        $this->authorPHIDs);
+        $author_phids);
     }
 
     if ($this->epochMin !== null) {
@@ -696,7 +810,7 @@ final class DiffusionCommitQuery
           pht('No commit identifiers.'));
       }
 
-      $where[] = '('.implode(' OR ', $sql).')';
+      $where[] = qsprintf($conn, '%LO', $sql);
     }
 
     if ($this->auditIDs !== null) {
@@ -742,6 +856,21 @@ final class DiffusionCommitQuery
           $conn,
           '(commit.importStatus & %d) = 0',
           PhabricatorRepositoryCommit::IMPORTED_UNREACHABLE);
+      }
+    }
+
+    if ($this->unpublished !== null) {
+      if ($this->unpublished) {
+        $where[] = qsprintf(
+          $conn,
+          '(commit.importStatus & %d) = 0',
+          PhabricatorRepositoryCommit::IMPORTED_CLOSEABLE);
+      } else {
+        $where[] = qsprintf(
+          $conn,
+          '(commit.importStatus & %d) = %d',
+          PhabricatorRepositoryCommit::IMPORTED_CLOSEABLE,
+          PhabricatorRepositoryCommit::IMPORTED_CLOSEABLE);
       }
     }
 
@@ -816,11 +945,10 @@ final class DiffusionCommitQuery
     );
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $commit = $this->loadCursorObject($cursor);
+  protected function newPagingMapFromPartialObject($object) {
     return array(
-      'id' => $commit->getID(),
-      'epoch' => $commit->getEpoch(),
+      'id' => (int)$object->getID(),
+      'epoch' => (int)$object->getEpoch(),
     );
   }
 
@@ -846,6 +974,21 @@ final class DiffusionCommitQuery
         'name' => pht('Commit Date (Oldest First)'),
       ),
     ) + $parent;
+  }
+
+  private function selectPossibleAuthors(array $phids) {
+    // See PHI1057. Select PHIDs which might possibly be commit authors from
+    // a larger list of PHIDs. This primarily filters out packages and projects
+    // from "Responsible Users: ..." queries. Our goal in performing this
+    // filtering is to improve the performance of the final query.
+
+    foreach ($phids as $key => $phid) {
+      if (phid_get_type($phid) !== PhabricatorPeopleUserPHIDType::TYPECONST) {
+        unset($phids[$key]);
+      }
+    }
+
+    return $phids;
   }
 
 

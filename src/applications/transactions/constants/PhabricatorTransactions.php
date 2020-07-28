@@ -16,6 +16,7 @@ final class PhabricatorTransactions extends Phobject {
   const TYPE_COLUMNS = 'core:columns';
   const TYPE_SUBTYPE = 'core:subtype';
   const TYPE_HISTORY = 'core:history';
+  const TYPE_MFA = 'core:mfa';
 
   const COLOR_RED         = 'red';
   const COLOR_ORANGE      = 'orange';
@@ -31,10 +32,10 @@ final class PhabricatorTransactions extends Phobject {
 
   public static function getInlineStateMap() {
     return array(
-      PhabricatorInlineCommentInterface::STATE_DRAFT =>
-        PhabricatorInlineCommentInterface::STATE_DONE,
-      PhabricatorInlineCommentInterface::STATE_UNDRAFT =>
-        PhabricatorInlineCommentInterface::STATE_UNDONE,
+      PhabricatorInlineComment::STATE_DRAFT =>
+        PhabricatorInlineComment::STATE_DONE,
+      PhabricatorInlineComment::STATE_UNDRAFT =>
+        PhabricatorInlineComment::STATE_UNDONE,
     );
   }
 

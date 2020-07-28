@@ -59,7 +59,6 @@ final class PhabricatorUser
   private $rawCacheData = array();
   private $usableCacheData = array();
 
-  private $authorities = array();
   private $handlePool;
   private $csrfSalt;
 
@@ -318,111 +317,8 @@ final class PhabricatorUser
     return Filesystem::readRandomCharacters(255);
   }
 
-  const CSRF_CYCLE_FREQUENCY  = 3600;
-  const CSRF_SALT_LENGTH      = 8;
-  const CSRF_TOKEN_LENGTH     = 16;
-  const CSRF_BREACH_PREFIX    = 'B@';
-
   const EMAIL_CYCLE_FREQUENCY = 86400;
   const EMAIL_TOKEN_LENGTH    = 24;
-
-  private function getRawCSRFToken($offset = 0) {
-    return $this->generateToken(
-      time() + (self::CSRF_CYCLE_FREQUENCY * $offset),
-      self::CSRF_CYCLE_FREQUENCY,
-      PhabricatorEnv::getEnvConfig('phabricator.csrf-key'),
-      self::CSRF_TOKEN_LENGTH);
-  }
-
-  public function getCSRFToken() {
-    if ($this->isOmnipotent()) {
-      // We may end up here when called from the daemons. The omnipotent user
-      // has no meaningful CSRF token, so just return `null`.
-      return null;
-    }
-
-    if ($this->csrfSalt === null) {
-      $this->csrfSalt = Filesystem::readRandomCharacters(
-        self::CSRF_SALT_LENGTH);
-    }
-
-    $salt = $this->csrfSalt;
-
-    // Generate a token hash to mitigate BREACH attacks against SSL. See
-    // discussion in T3684.
-    $token = $this->getRawCSRFToken();
-    $hash = PhabricatorHash::weakDigest($token, $salt);
-    return self::CSRF_BREACH_PREFIX.$salt.substr(
-        $hash, 0, self::CSRF_TOKEN_LENGTH);
-  }
-
-  public function validateCSRFToken($token) {
-    // We expect a BREACH-mitigating token. See T3684.
-    $breach_prefix = self::CSRF_BREACH_PREFIX;
-    $breach_prelen = strlen($breach_prefix);
-    if (strncmp($token, $breach_prefix, $breach_prelen) !== 0) {
-      return false;
-    }
-
-    $salt = substr($token, $breach_prelen, self::CSRF_SALT_LENGTH);
-    $token = substr($token, $breach_prelen + self::CSRF_SALT_LENGTH);
-
-    // When the user posts a form, we check that it contains a valid CSRF token.
-    // Tokens cycle each hour (every CSRF_CYCLE_FREQUENCY seconds) and we accept
-    // either the current token, the next token (users can submit a "future"
-    // token if you have two web frontends that have some clock skew) or any of
-    // the last 6 tokens. This means that pages are valid for up to 7 hours.
-    // There is also some Javascript which periodically refreshes the CSRF
-    // tokens on each page, so theoretically pages should be valid indefinitely.
-    // However, this code may fail to run (if the user loses their internet
-    // connection, or there's a JS problem, or they don't have JS enabled).
-    // Choosing the size of the window in which we accept old CSRF tokens is
-    // an issue of balancing concerns between security and usability. We could
-    // choose a very narrow (e.g., 1-hour) window to reduce vulnerability to
-    // attacks using captured CSRF tokens, but it's also more likely that real
-    // users will be affected by this, e.g. if they close their laptop for an
-    // hour, open it back up, and try to submit a form before the CSRF refresh
-    // can kick in. Since the user experience of submitting a form with expired
-    // CSRF is often quite bad (you basically lose data, or it's a big pain to
-    // recover at least) and I believe we gain little additional protection
-    // by keeping the window very short (the overwhelming value here is in
-    // preventing blind attacks, and most attacks which can capture CSRF tokens
-    // can also just capture authentication information [sniffing networks]
-    // or act as the user [xss]) the 7 hour default seems like a reasonable
-    // balance. Other major platforms have much longer CSRF token lifetimes,
-    // like Rails (session duration) and Django (forever), which suggests this
-    // is a reasonable analysis.
-    $csrf_window = 6;
-
-    for ($ii = -$csrf_window; $ii <= 1; $ii++) {
-      $valid = $this->getRawCSRFToken($ii);
-
-      $digest = PhabricatorHash::weakDigest($valid, $salt);
-      $digest = substr($digest, 0, self::CSRF_TOKEN_LENGTH);
-      if (phutil_hashes_are_identical($digest, $token)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private function generateToken($epoch, $frequency, $key, $len) {
-    if ($this->getPHID()) {
-      $vec = $this->getPHID().$this->getAccountSecret();
-    } else {
-      $vec = $this->getAlternateCSRFString();
-    }
-
-    if ($this->hasSession()) {
-      $vec = $vec.$this->getSession()->getSessionKey();
-    }
-
-    $time_block = floor($epoch / $frequency);
-    $vec = $vec.$key.$time_block;
-
-    return substr(PhabricatorHash::weakDigest($vec), 0, $len);
-  }
 
   public function getUserProfile() {
     return $this->assertAttached($this->profile);
@@ -458,11 +354,9 @@ final class PhabricatorUser
   }
 
   public function loadPrimaryEmail() {
-    return $this->loadOneRelative(
-      new PhabricatorUserEmail(),
-      'userPHID',
-      'getPHID',
-      '(isPrimary = 1)');
+    return id(new PhabricatorUserEmail())->loadOneWhere(
+      'userPHID = %s AND isPrimary = 1',
+      $this->getPHID());
   }
 
 
@@ -577,63 +471,6 @@ final class PhabricatorUser
     return $this->getUserSetting(PhabricatorPronounSetting::SETTINGKEY);
   }
 
-  public function loadEditorLink(
-    $path,
-    $line,
-    PhabricatorRepository $repository = null) {
-
-    $editor = $this->getUserSetting(PhabricatorEditorSetting::SETTINGKEY);
-
-    if (is_array($path)) {
-      $multi_key = PhabricatorEditorMultipleSetting::SETTINGKEY;
-      $multiedit = $this->getUserSetting($multi_key);
-      switch ($multiedit) {
-        case PhabricatorEditorMultipleSetting::VALUE_SPACES:
-          $path = implode(' ', $path);
-          break;
-        case PhabricatorEditorMultipleSetting::VALUE_SINGLE:
-        default:
-          return null;
-      }
-    }
-
-    if (!strlen($editor)) {
-      return null;
-    }
-
-    if ($repository) {
-      $callsign = $repository->getCallsign();
-    } else {
-      $callsign = null;
-    }
-
-    $uri = strtr($editor, array(
-      '%%' => '%',
-      '%f' => phutil_escape_uri($path),
-      '%l' => phutil_escape_uri($line),
-      '%r' => phutil_escape_uri($callsign),
-    ));
-
-    // The resulting URI must have an allowed protocol. Otherwise, we'll return
-    // a link to an error page explaining the misconfiguration.
-
-    $ok = PhabricatorHelpEditorProtocolController::hasAllowedProtocol($uri);
-    if (!$ok) {
-      return '/help/editorprotocol/';
-    }
-
-    return (string)$uri;
-  }
-
-  public function getAlternateCSRFString() {
-    return $this->assertAttached($this->alternateCSRFString);
-  }
-
-  public function attachAlternateCSRFString($string) {
-    $this->alternateCSRFString = $string;
-    return $this;
-  }
-
   /**
    * Populate the nametoken table, which used to fetch typeahead results. When
    * a user types "linc", we want to match "Abraham Lincoln" from on-demand
@@ -663,114 +500,15 @@ final class PhabricatorUser
     if ($sql) {
       queryfx(
         $conn_w,
-        'INSERT INTO %T (userID, token) VALUES %Q',
+        'INSERT INTO %T (userID, token) VALUES %LQ',
         $table,
-        implode(', ', $sql));
+        $sql);
     }
-  }
-
-  public function sendWelcomeEmail(PhabricatorUser $admin) {
-    if (!$this->canEstablishWebSessions()) {
-      throw new Exception(
-        pht(
-          'Can not send welcome mail to users who can not establish '.
-          'web sessions!'));
-    }
-
-    $admin_username = $admin->getUserName();
-    $admin_realname = $admin->getRealName();
-    $user_username = $this->getUserName();
-    $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
-
-    $base_uri = PhabricatorEnv::getProductionURI('/');
-
-    $engine = new PhabricatorAuthSessionEngine();
-    $uri = $engine->getOneTimeLoginURI(
-      $this,
-      $this->loadPrimaryEmail(),
-      PhabricatorAuthSessionEngine::ONETIME_WELCOME);
-
-    $body = pht(
-      "Welcome to Phabricator!\n\n".
-      "%s (%s) has created an account for you.\n\n".
-      "  Username: %s\n\n".
-      "To login to Phabricator, follow this link and set a password:\n\n".
-      "  %s\n\n".
-      "After you have set a password, you can login in the future by ".
-      "going here:\n\n".
-      "  %s\n",
-      $admin_username,
-      $admin_realname,
-      $user_username,
-      $uri,
-      $base_uri);
-
-    if (!$is_serious) {
-      $body .= sprintf(
-        "\n%s\n",
-        pht("Love,\nPhabricator"));
-    }
-
-    $mail = id(new PhabricatorMetaMTAMail())
-      ->addTos(array($this->getPHID()))
-      ->setForceDelivery(true)
-      ->setSubject(pht('[Phabricator] Welcome to Phabricator'))
-      ->setBody($body)
-      ->saveAndSend();
-  }
-
-  public function sendUsernameChangeEmail(
-    PhabricatorUser $admin,
-    $old_username) {
-
-    $admin_username = $admin->getUserName();
-    $admin_realname = $admin->getRealName();
-    $new_username = $this->getUserName();
-
-    $password_instructions = null;
-    if (PhabricatorPasswordAuthProvider::getPasswordProvider()) {
-      $engine = new PhabricatorAuthSessionEngine();
-      $uri = $engine->getOneTimeLoginURI(
-        $this,
-        null,
-        PhabricatorAuthSessionEngine::ONETIME_USERNAME);
-      $password_instructions = sprintf(
-        "%s\n\n  %s\n\n%s\n",
-        pht(
-          "If you use a password to login, you'll need to reset it ".
-          "before you can login again. You can reset your password by ".
-          "following this link:"),
-        $uri,
-        pht(
-          "And, of course, you'll need to use your new username to login ".
-          "from now on. If you use OAuth to login, nothing should change."));
-    }
-
-    $body = sprintf(
-      "%s\n\n  %s\n  %s\n\n%s",
-      pht(
-        '%s (%s) has changed your Phabricator username.',
-        $admin_username,
-        $admin_realname),
-      pht(
-        'Old Username: %s',
-        $old_username),
-      pht(
-        'New Username: %s',
-        $new_username),
-      $password_instructions);
-
-    $mail = id(new PhabricatorMetaMTAMail())
-      ->addTos(array($this->getPHID()))
-      ->setForceDelivery(true)
-      ->setSubject(pht('[Phabricator] Username Changed'))
-      ->setBody($body)
-      ->saveAndSend();
   }
 
   public static function describeValidUsername() {
     return pht(
-      'Usernames must contain only numbers, letters, period, underscore and '.
+      'Usernames must contain only numbers, letters, period, underscore, and '.
       'hyphen, and can not end with a period. They must have no more than %d '.
       'characters.',
       new PhutilNumber(self::MAXIMUM_USERNAME_LENGTH));
@@ -918,23 +656,6 @@ final class PhabricatorUser
   }
 
 
-  /**
-   * Grant a user a source of authority, to let them bypass policy checks they
-   * could not otherwise.
-   */
-  public function grantAuthority($authority) {
-    $this->authorities[] = $authority;
-    return $this;
-  }
-
-
-  /**
-   * Get authorities granted to the user.
-   */
-  public function getAuthorities() {
-    return $this->authorities;
-  }
-
   public function hasConduitClusterToken() {
     return ($this->conduitClusterToken !== self::ATTACHABLE);
   }
@@ -1072,9 +793,15 @@ final class PhabricatorUser
    * @task factors
    */
   public function updateMultiFactorEnrollment() {
-    $factors = id(new PhabricatorAuthFactorConfig())->loadAllWhere(
-      'userPHID = %s',
-      $this->getPHID());
+    $factors = id(new PhabricatorAuthFactorConfigQuery())
+      ->setViewer($this)
+      ->withUserPHIDs(array($this->getPHID()))
+      ->withFactorProviderStatuses(
+        array(
+          PhabricatorAuthFactorProviderStatus::STATUS_ACTIVE,
+          PhabricatorAuthFactorProviderStatus::STATUS_DEPRECATED,
+        ))
+      ->execute();
 
     $enrolled = count($factors) ? 1 : 0;
     if ($enrolled !== $this->isEnrolledInMultiFactor) {
@@ -1218,6 +945,58 @@ final class PhabricatorUser
     return $this->assertAttached($this->badgePHIDs);
   }
 
+/* -(  CSRF  )--------------------------------------------------------------- */
+
+
+  public function getCSRFToken() {
+    if ($this->isOmnipotent()) {
+      // We may end up here when called from the daemons. The omnipotent user
+      // has no meaningful CSRF token, so just return `null`.
+      return null;
+    }
+
+    return $this->newCSRFEngine()
+      ->newToken();
+  }
+
+  public function validateCSRFToken($token) {
+    return $this->newCSRFengine()
+      ->isValidToken($token);
+  }
+
+  public function getAlternateCSRFString() {
+    return $this->assertAttached($this->alternateCSRFString);
+  }
+
+  public function attachAlternateCSRFString($string) {
+    $this->alternateCSRFString = $string;
+    return $this;
+  }
+
+  private function newCSRFEngine() {
+    if ($this->getPHID()) {
+      $vec = $this->getPHID().$this->getAccountSecret();
+    } else {
+      $vec = $this->getAlternateCSRFString();
+    }
+
+    if ($this->hasSession()) {
+      $vec = $vec.$this->getSession()->getSessionKey();
+    }
+
+    $engine = new PhabricatorAuthCSRFEngine();
+
+    if ($this->csrfSalt === null) {
+      $this->csrfSalt = $engine->newSalt();
+    }
+
+    $engine
+      ->setSalt($this->csrfSalt)
+      ->setSecret(new PhutilOpaqueEnvelope($vec));
+
+    return $engine;
+  }
+
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
 
@@ -1283,18 +1062,21 @@ final class PhabricatorUser
   public function destroyObjectPermanently(
     PhabricatorDestructionEngine $engine) {
 
+    $viewer = $engine->getViewer();
+
     $this->openTransaction();
       $this->delete();
 
-      $externals = id(new PhabricatorExternalAccount())->loadAllWhere(
-        'userPHID = %s',
-        $this->getPHID());
+      $externals = id(new PhabricatorExternalAccountQuery())
+        ->setViewer($viewer)
+        ->withUserPHIDs(array($this->getPHID()))
+        ->newIterator();
       foreach ($externals as $external) {
-        $external->delete();
+        $engine->destroyObject($external);
       }
 
       $prefs = id(new PhabricatorUserPreferencesQuery())
-        ->setViewer($engine->getViewer())
+        ->setViewer($viewer)
         ->withUsers(array($this))
         ->execute();
       foreach ($prefs as $pref) {
@@ -1309,7 +1091,7 @@ final class PhabricatorUser
       }
 
       $keys = id(new PhabricatorAuthSSHKeyQuery())
-        ->setViewer($engine->getViewer())
+        ->setViewer($viewer)
         ->withObjectPHIDs(array($this->getPHID()))
         ->execute();
       foreach ($keys as $key) {
@@ -1320,7 +1102,7 @@ final class PhabricatorUser
         'userPHID = %s',
         $this->getPHID());
       foreach ($emails as $email) {
-        $email->delete();
+        $engine->destroyObject($email);
       }
 
       $sessions = id(new PhabricatorAuthSession())->loadAllWhere(
@@ -1373,18 +1155,8 @@ final class PhabricatorUser
     return new PhabricatorUserTransactionEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorUserTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-    return $timeline;
   }
 
 
@@ -1463,7 +1235,10 @@ final class PhabricatorUser
   }
 
   public function getConduitSearchAttachments() {
-    return array();
+    return array(
+      id(new PhabricatorPeopleAvailabilitySearchEngineAttachment())
+        ->setAttachmentKey('availability'),
+    );
   }
 
 

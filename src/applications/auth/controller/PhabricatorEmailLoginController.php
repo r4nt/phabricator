@@ -8,29 +8,42 @@ final class PhabricatorEmailLoginController
   }
 
   public function handleRequest(AphrontRequest $request) {
-
-    if (!PhabricatorPasswordAuthProvider::getPasswordProvider()) {
-      return new Aphront400Response();
-    }
+    $viewer = $this->getViewer();
+    $is_logged_in = $viewer->isLoggedIn();
 
     $e_email = true;
     $e_captcha = true;
     $errors = array();
 
-    $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
+    if ($is_logged_in) {
+      if (!$this->isPasswordAuthEnabled()) {
+        return $this->newDialog()
+          ->setTitle(pht('No Password Auth'))
+          ->appendParagraph(
+            pht(
+              'Password authentication is not enabled and you are already '.
+              'logged in. There is nothing for you here.'))
+          ->addCancelButton('/', pht('Continue'));
+      }
+
+      $v_email = $viewer->loadPrimaryEmailAddress();
+    } else {
+      $v_email = $request->getStr('email');
+    }
 
     if ($request->isFormPost()) {
       $e_email = null;
       $e_captcha = pht('Again');
 
-      $captcha_ok = AphrontFormRecaptchaControl::processCaptcha($request);
-      if (!$captcha_ok) {
-        $errors[] = pht('Captcha response is incorrect, try again.');
-        $e_captcha = pht('Invalid');
+      if (!$is_logged_in) {
+        $captcha_ok = AphrontFormRecaptchaControl::processCaptcha($request);
+        if (!$captcha_ok) {
+          $errors[] = pht('Captcha response is incorrect, try again.');
+          $e_captcha = pht('Invalid');
+        }
       }
 
-      $email = $request->getStr('email');
-      if (!strlen($email)) {
+      if (!strlen($v_email)) {
        $errors[] = pht('You must provide an email address.');
        $e_email = pht('Required');
       }
@@ -40,9 +53,17 @@ final class PhabricatorEmailLoginController
         // it expensive to fish for valid email addresses while giving the user
         // a better error if they goof their email.
 
+        $action_actor = PhabricatorSystemActionEngine::newActorFromRequest(
+          $request);
+
+        PhabricatorSystemActionEngine::willTakeAction(
+          array($action_actor),
+          new PhabricatorAuthTryEmailLoginAction(),
+          1);
+
         $target_email = id(new PhabricatorUserEmail())->loadOneWhere(
           'address = %s',
-          $email);
+          $v_email);
 
         $target_user = null;
         if ($target_email) {
@@ -81,86 +102,106 @@ final class PhabricatorEmailLoginController
         }
 
         if (!$errors) {
-          $engine = new PhabricatorAuthSessionEngine();
-          $uri = $engine->getOneTimeLoginURI(
-            $target_user,
-            null,
-            PhabricatorAuthSessionEngine::ONETIME_RESET);
+          $target_address = new PhutilEmailAddress($target_email->getAddress());
 
-          if ($is_serious) {
-            $body = pht(
-              "You can use this link to reset your Phabricator password:".
-              "\n\n  %s\n",
-              $uri);
-          } else {
-            $body = pht(
-              "Condolences on forgetting your password. You can use this ".
-              "link to reset it:\n\n".
-              "  %s\n\n".
-              "After you set a new password, consider writing it down on a ".
-              "sticky note and attaching it to your monitor so you don't ".
-              "forget again! Choosing a very short, easy-to-remember password ".
-              "like \"cat\" or \"1234\" might also help.\n\n".
-              "Best Wishes,\nPhabricator\n",
-              $uri);
+          $user_log = PhabricatorUserLog::initializeNewLog(
+            $viewer,
+            $target_user->getPHID(),
+            PhabricatorEmailLoginUserLogType::LOGTYPE);
 
+          $mail_engine = id(new PhabricatorPeopleEmailLoginMailEngine())
+            ->setSender($viewer)
+            ->setRecipient($target_user)
+            ->setRecipientAddress($target_address)
+            ->setActivityLog($user_log);
+
+          try {
+            $mail_engine->validateMail();
+          } catch (PhabricatorPeopleMailEngineException $ex) {
+            return $this->newDialog()
+              ->setTitle($ex->getTitle())
+              ->appendParagraph($ex->getBody())
+              ->addCancelButton('/auth/start/', pht('Done'));
           }
 
-          $mail = id(new PhabricatorMetaMTAMail())
-            ->setSubject(pht('[Phabricator] Password Reset'))
-            ->setForceDelivery(true)
-            ->addRawTos(array($target_email->getAddress()))
-            ->setBody($body)
-            ->saveAndSend();
+          $mail_engine->sendMail();
+
+          if ($is_logged_in) {
+            $instructions = pht(
+              'An email has been sent containing a link you can use to set '.
+              'a password for your account.');
+          } else {
+            $instructions = pht(
+              'An email has been sent containing a link you can use to log '.
+              'in to your account.');
+          }
 
           return $this->newDialog()
             ->setTitle(pht('Check Your Email'))
             ->setShortTitle(pht('Email Sent'))
-            ->appendParagraph(
-              pht('An email has been sent with a link you can use to log in.'))
+            ->appendParagraph($instructions)
             ->addCancelButton('/', pht('Done'));
         }
       }
     }
 
-    $error_view = null;
-    if ($errors) {
-      $error_view = new PHUIInfoView();
-      $error_view->setErrors($errors);
+    $form = id(new AphrontFormView())
+      ->setViewer($viewer);
+
+    if ($this->isPasswordAuthEnabled()) {
+      if ($is_logged_in) {
+        $title = pht('Set Password');
+        $form->appendRemarkupInstructions(
+          pht(
+            'A password reset link will be sent to your primary email '.
+            'address. Follow the link to set an account password.'));
+      } else {
+        $title = pht('Password Reset');
+        $form->appendRemarkupInstructions(
+          pht(
+            'To reset your password, provide your email address. An email '.
+            'with a login link will be sent to you.'));
+      }
+    } else {
+      $title = pht('Email Login');
+      $form->appendRemarkupInstructions(
+        pht(
+          'To access your account, provide your email address. An email '.
+          'with a login link will be sent to you.'));
     }
 
-    $email_auth = new PHUIFormLayoutView();
-    $email_auth->appendChild($error_view);
-    $email_auth
-      ->setUser($request->getUser())
-      ->setFullWidth(true)
-      ->appendChild(
-        id(new AphrontFormTextControl())
-          ->setLabel(pht('Email'))
-          ->setName('email')
-          ->setValue($request->getStr('email'))
-          ->setError($e_email))
-      ->appendChild(
+    if ($is_logged_in) {
+      $address_control = new AphrontFormStaticControl();
+    } else {
+      $address_control = id(new AphrontFormTextControl())
+        ->setName('email')
+        ->setError($e_email);
+    }
+
+    $address_control
+      ->setLabel(pht('Email Address'))
+      ->setValue($v_email);
+
+    $form
+      ->appendControl($address_control);
+
+    if (!$is_logged_in) {
+      $form->appendControl(
         id(new AphrontFormRecaptchaControl())
           ->setLabel(pht('Captcha'))
           ->setError($e_captcha));
+    }
 
-    $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(pht('Reset Password'));
-    $crumbs->setBorder(true);
-
-    $dialog = new AphrontDialogView();
-    $dialog->setUser($request->getUser());
-    $dialog->setTitle(pht('Forgot Password / Email Login'));
-    $dialog->appendChild($email_auth);
-    $dialog->addSubmitButton(pht('Send Email'));
-    $dialog->setSubmitURI('/login/email/');
-
-    return $this->newPage()
-      ->setTitle(pht('Forgot Password'))
-      ->setCrumbs($crumbs)
-      ->appendChild($dialog);
-
+    return $this->newDialog()
+      ->setTitle($title)
+      ->setErrors($errors)
+      ->setWidth(AphrontDialogView::WIDTH_FORM)
+      ->appendForm($form)
+      ->addCancelButton('/auth/start/')
+      ->addSubmitButton(pht('Send Email'));
   }
 
+  private function isPasswordAuthEnabled() {
+    return (bool)PhabricatorPasswordAuthProvider::getPasswordProvider();
+  }
 }

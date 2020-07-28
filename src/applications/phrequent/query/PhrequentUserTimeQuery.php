@@ -116,7 +116,7 @@ final class PhrequentUserTimeQuery
 
     $where[] = $this->buildPagingClause($conn);
 
-    return $this->formatWhereClause($where);
+    return $this->formatWhereClause($conn, $where);
   }
 
   public function getOrderableColumns() {
@@ -133,12 +133,11 @@ final class PhrequentUserTimeQuery
     );
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $usertime = $this->loadCursorObject($cursor);
+  protected function newPagingMapFromPartialObject($object) {
     return array(
-      'id' => $usertime->getID(),
-      'start' => $usertime->getDateStarted(),
-      'end' => $usertime->getDateEnded(),
+      'id' => (int)$object->getID(),
+      'start' => (int)$object->getDateStarted(),
+      'end' => (int)$object->getDateEnded(),
     );
   }
 
@@ -177,9 +176,9 @@ final class PhrequentUserTimeQuery
 
       $preempting_events = queryfx_all(
         $conn_r,
-        'SELECT * FROM %T WHERE %Q ORDER BY dateStarted ASC, id ASC',
+        'SELECT * FROM %T WHERE %LO ORDER BY dateStarted ASC, id ASC',
         $usertime->getTableName(),
-        implode(' OR ', $preempt));
+        $preempt);
       $preempting_events = $usertime->loadAllFromArray($preempting_events);
 
       $preempting_events = mgroup($preempting_events, 'getUserPHID');

@@ -32,10 +32,6 @@ final class PhabricatorAuditTransaction
     return new PhabricatorAuditTransactionComment();
   }
 
-  public function getApplicationTransactionViewObject() {
-    return new PhabricatorAuditTransactionView();
-  }
-
   public function getRemarkupBlocks() {
     $blocks = parent::getRemarkupBlocks();
 
@@ -54,7 +50,7 @@ final class PhabricatorAuditTransaction
 
     switch ($type) {
       case self::TYPE_COMMIT:
-        return 3.0;
+        return 300;
     }
 
     return parent::getActionStrength();

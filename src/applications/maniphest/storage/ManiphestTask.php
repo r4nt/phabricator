@@ -19,7 +19,10 @@ final class ManiphestTask extends ManiphestDAO
     PhabricatorFerretInterface,
     DoorkeeperBridgedObjectInterface,
     PhabricatorEditEngineSubtypeInterface,
-    PhabricatorEditEngineLockableInterface {
+    PhabricatorEditEngineLockableInterface,
+    PhabricatorEditEngineMFAInterface,
+    PhabricatorPolicyCodexInterface,
+    PhabricatorUnlockableInterface {
 
   const MARKUP_FIELD_DESCRIPTION = 'markup:desc';
 
@@ -216,8 +219,16 @@ final class ManiphestTask extends ManiphestDAO
     return ManiphestTaskStatus::isClosedStatus($this->getStatus());
   }
 
-  public function isLocked() {
-    return ManiphestTaskStatus::isLockedStatus($this->getStatus());
+  public function areCommentsLocked() {
+    if ($this->areEditsLocked()) {
+      return true;
+    }
+
+    return ManiphestTaskStatus::areCommentsLockedInStatus($this->getStatus());
+  }
+
+  public function areEditsLocked() {
+    return ManiphestTaskStatus::areEditsLockedInStatus($this->getStatus());
   }
 
   public function setProperty($key, $value) {
@@ -237,16 +248,6 @@ final class ManiphestTask extends ManiphestDAO
     return idx($this->properties, 'cover.thumbnailPHID');
   }
 
-  public function getWorkboardOrderVectors() {
-    return array(
-      PhabricatorProjectColumn::ORDER_PRIORITY => array(
-        (int)-$this->getPriority(),
-        (double)-$this->getSubpriority(),
-        (int)-$this->getID(),
-      ),
-    );
-  }
-
   public function getPriorityKeyword() {
     $priority = $this->getPriority();
 
@@ -256,46 +257,6 @@ final class ManiphestTask extends ManiphestDAO
     }
 
     return ManiphestTaskPriority::UNKNOWN_PRIORITY_KEYWORD;
-  }
-
-  private function comparePriorityTo(ManiphestTask $other) {
-    $upri = $this->getPriority();
-    $vpri = $other->getPriority();
-
-    if ($upri != $vpri) {
-      return ($upri - $vpri);
-    }
-
-    $usub = $this->getSubpriority();
-    $vsub = $other->getSubpriority();
-
-    if ($usub != $vsub) {
-      return ($usub - $vsub);
-    }
-
-    $uid = $this->getID();
-    $vid = $other->getID();
-
-    if ($uid != $vid) {
-      return ($uid - $vid);
-    }
-
-    return 0;
-  }
-
-  public function isLowerPriorityThan(ManiphestTask $other) {
-    return ($this->comparePriorityTo($other) < 0);
-  }
-
-  public function isHigherPriorityThan(ManiphestTask $other) {
-    return ($this->comparePriorityTo($other) > 0);
-  }
-
-  public function getWorkboardProperties() {
-    return array(
-      'status' => $this->getStatus(),
-      'points' => (double)$this->getPoints(),
-    );
   }
 
 
@@ -370,13 +331,17 @@ final class ManiphestTask extends ManiphestDAO
       case PhabricatorPolicyCapability::CAN_VIEW:
         return $this->getViewPolicy();
       case PhabricatorPolicyCapability::CAN_INTERACT:
-        if ($this->isLocked()) {
+        if ($this->areCommentsLocked()) {
           return PhabricatorPolicies::POLICY_NOONE;
         } else {
           return $this->getViewPolicy();
         }
       case PhabricatorPolicyCapability::CAN_EDIT:
-        return $this->getEditPolicy();
+        if ($this->areEditsLocked()) {
+          return PhabricatorPolicies::POLICY_NOONE;
+        } else {
+          return $this->getEditPolicy();
+        }
     }
   }
 
@@ -391,10 +356,6 @@ final class ManiphestTask extends ManiphestDAO
     }
 
     return false;
-  }
-
-  public function describeAutomaticCapability($capability) {
-    return pht('The owner of a task can always view and edit it.');
   }
 
 
@@ -452,19 +413,8 @@ final class ManiphestTask extends ManiphestDAO
     return new ManiphestTransactionEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new ManiphestTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -537,7 +487,6 @@ final class ManiphestTask extends ManiphestDAO
     $priority_value = (int)$this->getPriority();
     $priority_info = array(
       'value' => $priority_value,
-      'subpriority' => (double)$this->getSubpriority(),
       'name' => ManiphestTaskPriority::getTaskPriorityName($priority_value),
       'color' => ManiphestTaskPriority::getTaskPriorityColor($priority_value),
     );
@@ -573,7 +522,7 @@ final class ManiphestTask extends ManiphestDAO
   public function newSubtypeObject() {
     $subtype_key = $this->getEditEngineSubtype();
     $subtype_map = $this->newEditEngineSubtypeMap();
-    return idx($subtype_map, $subtype_key);
+    return $subtype_map->getSubtype($subtype_key);
   }
 
 /* -(  PhabricatorFulltextInterface  )--------------------------------------- */
@@ -611,7 +560,8 @@ final class ManiphestTask extends ManiphestDAO
 
   public function newEditEngineSubtypeMap() {
     $config = PhabricatorEnv::getEnvConfig('maniphest.subtypes');
-    return PhabricatorEditEngineSubtype::newSubtypeMap($config);
+    return PhabricatorEditEngineSubtype::newSubtypeMap($config)
+      ->setDatasource(new ManiphestTaskSubtypeDatasource());
   }
 
 
@@ -628,6 +578,30 @@ final class ManiphestTask extends ManiphestDAO
 
   public function newFerretEngine() {
     return new ManiphestTaskFerretEngine();
+  }
+
+
+/* -(  PhabricatorEditEngineMFAInterface  )---------------------------------- */
+
+
+  public function newEditEngineMFAEngine() {
+    return new ManiphestTaskMFAEngine();
+  }
+
+
+/* -(  PhabricatorPolicyCodexInterface  )------------------------------------ */
+
+
+  public function newPolicyCodex() {
+    return new ManiphestTaskPolicyCodex();
+  }
+
+
+/* -(  PhabricatorUnlockableInterface  )------------------------------------- */
+
+
+  public function newUnlockEngine() {
+    return new ManiphestTaskUnlockEngine();
   }
 
 }

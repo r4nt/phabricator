@@ -14,15 +14,8 @@ final class PhabricatorAuthProviderConfigTransaction
 
   const PROPERTY_KEY        = 'auth:property';
 
-  private $provider;
-
-  public function setProvider(PhabricatorAuthProvider $provider) {
-    $this->provider = $provider;
-    return $this;
-  }
-
   public function getProvider() {
-    return $this->provider;
+    return $this->getObject()->getProvider();
   }
 
   public function getApplicationName() {
@@ -31,10 +24,6 @@ final class PhabricatorAuthProviderConfigTransaction
 
   public function getApplicationTransactionType() {
     return PhabricatorAuthAuthProviderPHIDType::TYPECONST;
-  }
-
-  public function getApplicationTransactionCommentObject() {
-    return null;
   }
 
   public function getIcon() {

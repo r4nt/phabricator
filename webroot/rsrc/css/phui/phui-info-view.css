@@ -74,8 +74,8 @@ h1.phui-info-view-head {
 }
 
 .phui-info-view-list {
-  margin: 0;
-  list-style: none;
+  margin-left: 30px;
+  list-style: disc;
   line-height: 1.6em;
 }
 
@@ -91,6 +91,15 @@ h1.phui-info-view-head {
 
 .phui-info-severity-error .phui-info-icon {
   color: {$red};
+}
+
+.phui-info-severity-mfa {
+  border-color: {$blue};
+  border-left-width: 6px;
+}
+
+.phui-info-severity-mfa .phui-info-icon {
+  color: {$blue};
 }
 
 .phui-info-severity-warning {

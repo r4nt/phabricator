@@ -26,7 +26,8 @@ final class PhabricatorProjectDatasource
 
     $query = id(new PhabricatorProjectQuery())
       ->needImages(true)
-      ->needSlugs(true);
+      ->needSlugs(true)
+      ->setOrderVector(array('-status', 'id'));
 
     if ($this->getPhase() == self::PHASE_PREFIX) {
       $prefix = $this->getPrefixQuery();
@@ -52,6 +53,7 @@ final class PhabricatorProjectDatasource
       $columns = id(new PhabricatorProjectColumnQuery())
         ->setViewer($viewer)
         ->withProjectPHIDs(array_keys($projs))
+        ->withIsProxyColumn(false)
         ->execute();
       $has_cols = mgroup($columns, 'getProjectPHID');
     } else {

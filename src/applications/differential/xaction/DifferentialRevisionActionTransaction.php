@@ -17,7 +17,9 @@ abstract class DifferentialRevisionActionTransaction
   }
 
   abstract protected function validateAction($object, PhabricatorUser $viewer);
-  abstract protected function getRevisionActionLabel();
+  abstract protected function getRevisionActionLabel(
+    DifferentialRevision $revision,
+    PhabricatorUser $viewer);
 
   protected function validateOptionValue($object, $actor, array $value) {
     return null;
@@ -40,7 +42,7 @@ abstract class DifferentialRevisionActionTransaction
   }
 
   public function getActionStrength() {
-    return 3;
+    return 300;
   }
 
   public function getRevisionActionOrderVector() {
@@ -53,8 +55,21 @@ abstract class DifferentialRevisionActionTransaction
   }
 
   protected function getRevisionActionDescription(
-    DifferentialRevision $revision) {
+    DifferentialRevision $revision,
+    PhabricatorUser $viewer) {
     return null;
+  }
+
+  protected function getRevisionActionSubmitButtonText(
+    DifferentialRevision $revision,
+    PhabricatorUser $viewer) {
+    return null;
+  }
+
+  protected function getRevisionActionMetadata(
+    DifferentialRevision $revision,
+    PhabricatorUser $viewer) {
+    return array();
   }
 
   public static function loadAllActions() {
@@ -100,15 +115,20 @@ abstract class DifferentialRevisionActionTransaction
       ->setValue(true);
 
     if ($this->isActionAvailable($revision, $viewer)) {
-      $label = $this->getRevisionActionLabel();
+      $label = $this->getRevisionActionLabel($revision, $viewer);
       if ($label !== null) {
         $field->setCommentActionLabel($label);
 
-        $description = $this->getRevisionActionDescription($revision);
+        $description = $this->getRevisionActionDescription($revision, $viewer);
         $field->setActionDescription($description);
 
         $group_key = $this->getRevisionActionGroupKey();
         $field->setCommentActionGroupKey($group_key);
+
+        $button_text = $this->getRevisionActionSubmitButtonText(
+          $revision,
+          $viewer);
+        $field->setActionSubmitButtonText($button_text);
 
         // Currently, every revision action conflicts with every other
         // revision action: for example, you can not simultaneously Accept and
@@ -135,6 +155,11 @@ abstract class DifferentialRevisionActionTransaction
         if ($can_multi || $can_force || $not_self) {
           $field->setOptions($options);
           $field->setValue($value);
+        }
+
+        $metadata = $this->getRevisionActionMetadata($revision, $viewer);
+        foreach ($metadata as $metadata_key => $metadata_value) {
+          $field->setMetadataValue($metadata_key, $metadata_value);
         }
       }
     }

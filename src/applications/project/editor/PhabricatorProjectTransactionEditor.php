@@ -55,12 +55,12 @@ final class PhabricatorProjectTransactionEditor
         case PhabricatorProjectParentTransaction::TRANSACTIONTYPE:
         case PhabricatorProjectMilestoneTransaction::TRANSACTIONTYPE:
           if ($xaction->getNewValue() === null) {
-            continue;
+            continue 2;
           }
 
           if (!$parent_xaction) {
             $parent_xaction = $xaction;
-            continue;
+            continue 2;
           }
 
           $errors[] = new PhabricatorApplicationTransactionValidationError(
@@ -71,8 +71,7 @@ final class PhabricatorProjectTransactionEditor
               'project or milestone project. A project can not be both a '.
               'subproject and a milestone.'),
             $xaction);
-          break;
-          break;
+          break 2;
       }
     }
 
@@ -250,6 +249,17 @@ final class PhabricatorProjectTransactionEditor
         ->rematerialize($new_parent);
     }
 
+    // See PHI1046. Milestones are always in the Space of their parent project.
+    // Synchronize the database values to match the application values.
+    $conn = $object->establishConnection('w');
+    queryfx(
+      $conn,
+      'UPDATE %R SET spacePHID = %ns
+        WHERE parentProjectPHID = %s AND milestoneNumber IS NOT NULL',
+      $object,
+      $object->getSpacePHID(),
+      $object->getPHID());
+
     return parent::applyFinalEffects($object, $xactions);
   }
 
@@ -326,40 +336,68 @@ final class PhabricatorProjectTransactionEditor
     $type_edge = PhabricatorTransactions::TYPE_EDGE;
     $edgetype_member = PhabricatorProjectProjectHasMemberEdgeType::EDGECONST;
 
-    $member_xaction = null;
-    foreach ($xactions as $xaction) {
-      if ($xaction->getTransactionType() !== $type_edge) {
-        continue;
-      }
-
-      $edgetype = $xaction->getMetadataValue('edge:type');
-      if ($edgetype !== $edgetype_member) {
-        continue;
-      }
-
-      $member_xaction = $xaction;
+    // See T13462. If we're creating a milestone, set a dummy milestone
+    // number so the project behaves like a milestone and uses milestone
+    // policy rules. Otherwise, we'll end up checking the default policies
+    // (which are not relevant to milestones) instead of the parent project
+    // policies (which are the correct policies).
+    if ($this->getIsMilestone() && !$copy->isMilestone()) {
+      $copy->setMilestoneNumber(1);
     }
 
-    if ($member_xaction) {
-      $object_phid = $object->getPHID();
+    $hint = null;
+    if ($this->getIsMilestone()) {
+      // See T13462. If we're creating a milestone, predict that the members
+      // of the newly created milestone will be the same as the members of the
+      // parent project, since this is the governing rule.
 
-      if ($object_phid) {
-        $project = id(new PhabricatorProjectQuery())
-          ->setViewer($this->getActor())
-          ->withPHIDs(array($object_phid))
-          ->needMembers(true)
-          ->executeOne();
-        $members = $project->getMemberPHIDs();
-      } else {
-        $members = array();
+      $parent = $copy->getParentProject();
+
+      $parent = id(new PhabricatorProjectQuery())
+        ->setViewer($this->getActor())
+        ->withPHIDs(array($parent->getPHID()))
+        ->needMembers(true)
+        ->executeOne();
+      $members = $parent->getMemberPHIDs();
+
+      $hint = array_fuse($members);
+    } else {
+      $member_xaction = null;
+      foreach ($xactions as $xaction) {
+        if ($xaction->getTransactionType() !== $type_edge) {
+          continue;
+        }
+
+        $edgetype = $xaction->getMetadataValue('edge:type');
+        if ($edgetype !== $edgetype_member) {
+          continue;
+        }
+
+        $member_xaction = $xaction;
       }
 
-      $clone_xaction = clone $member_xaction;
-      $hint = $this->getPHIDTransactionNewValue($clone_xaction, $members);
+      if ($member_xaction) {
+        $object_phid = $object->getPHID();
+
+        if ($object_phid) {
+          $project = id(new PhabricatorProjectQuery())
+            ->setViewer($this->getActor())
+            ->withPHIDs(array($object_phid))
+            ->needMembers(true)
+            ->executeOne();
+          $members = $project->getMemberPHIDs();
+        } else {
+          $members = array();
+        }
+
+        $clone_xaction = clone $member_xaction;
+        $hint = $this->getPHIDTransactionNewValue($clone_xaction, $members);
+        $hint = array_fuse($hint);
+      }
+    }
+
+    if ($hint !== null) {
       $rule = new PhabricatorProjectMembersPolicyRule();
-
-      $hint = array_fuse($hint);
-
       PhabricatorPolicyRule::passTransactionHintToRule(
         $copy,
         $rule,

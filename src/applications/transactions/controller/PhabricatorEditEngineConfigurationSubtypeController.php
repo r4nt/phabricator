@@ -35,9 +35,7 @@ final class PhabricatorEditEngineConfigurationSubtypeController
       $xactions = array();
 
       $subtype = $request->getStr('subtype');
-      $type_subtype =
-        PhabricatorEditEngineConfigurationTransaction::TYPE_SUBTYPE;
-
+      $type_subtype = PhabricatorEditEngineSubtypeTransaction::TRANSACTIONTYPE;
       $xactions[] = id(new PhabricatorEditEngineConfigurationTransaction())
         ->setTransactionType($type_subtype)
         ->setNewValue($subtype);
@@ -61,8 +59,7 @@ Choose the object **subtype** that this form should create and edit.
 EOTEXT
       );
 
-    $map = $engine->newSubtypeMap();
-    $map = mpull($map, 'getName');
+    $map = $engine->newSubtypeMap()->getDisplayMap();
 
     $form = id(new AphrontFormView())
       ->setUser($viewer)

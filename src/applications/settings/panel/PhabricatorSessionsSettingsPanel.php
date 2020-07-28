@@ -10,6 +10,10 @@ final class PhabricatorSessionsSettingsPanel extends PhabricatorSettingsPanel {
     return pht('Sessions');
   }
 
+  public function getPanelMenuIcon() {
+    return 'fa-user';
+  }
+
   public function getPanelGroupKey() {
     return PhabricatorSettingsLogsPanelGroup::PANELGROUPKEY;
   }
@@ -44,8 +48,9 @@ final class PhabricatorSessionsSettingsPanel extends PhabricatorSettingsPanel {
       ->withPHIDs($identity_phids)
       ->execute();
 
-    $current_key = PhabricatorHash::weakDigest(
-      $request->getCookie(PhabricatorCookies::COOKIE_SESSION));
+    $current_key = PhabricatorAuthSession::newSessionDigest(
+      new PhutilOpaqueEnvelope(
+        $request->getCookie(PhabricatorCookies::COOKIE_SESSION)));
 
     $rows = array();
     $rowc = array();

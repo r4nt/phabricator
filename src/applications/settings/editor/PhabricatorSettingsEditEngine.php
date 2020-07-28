@@ -7,6 +7,7 @@ final class PhabricatorSettingsEditEngine
 
   private $isSelfEdit;
   private $profileURI;
+  private $settingsPanel;
 
   public function setIsSelfEdit($is_self_edit) {
     $this->isSelfEdit = $is_self_edit;
@@ -24,6 +25,15 @@ final class PhabricatorSettingsEditEngine
 
   public function getProfileURI() {
     return $this->profileURI;
+  }
+
+  public function setSettingsPanel($settings_panel) {
+    $this->settingsPanel = $settings_panel;
+    return $this;
+  }
+
+  public function getSettingsPanel() {
+    return $this->settingsPanel;
   }
 
   public function isEngineConfigurable() {
@@ -101,7 +111,7 @@ final class PhabricatorSettingsEditEngine
   protected function getPageHeader($object) {
     $user = $object->getUser();
     if ($user) {
-      $text = pht('Edit Settings (%s)', $user->getUserName());
+      $text = pht('Edit Settings: %s', $user->getUserName());
     } else {
       $text = pht('Edit Global Settings');
     }
@@ -128,10 +138,6 @@ final class PhabricatorSettingsEditEngine
     return PhabricatorPolicies::POLICY_ADMIN;
   }
 
-  public function getEffectiveObjectEditDoneURI($object) {
-    return parent::getEffectiveObjectViewURI($object).'saved/';
-  }
-
   public function getEffectiveObjectEditCancelURI($object) {
     if (!$object->getUser()) {
       return '/settings/';
@@ -152,7 +158,7 @@ final class PhabricatorSettingsEditEngine
     $viewer = $this->getViewer();
     $user = $object->getUser();
 
-    $panels = PhabricatorSettingsPanel::getAllPanels();
+    $panels = PhabricatorSettingsPanel::getAllDisplayPanels();
 
     foreach ($panels as $key => $panel) {
       if (!($panel instanceof PhabricatorEditEngineSettingsPanel)) {
@@ -251,6 +257,34 @@ final class PhabricatorSettingsEditEngine
     }
 
     return parent::getValidationExceptionShortMessage($ex, $field);
+  }
+
+  protected function newEditFormHeadContent(
+    PhabricatorEditEnginePageState $state) {
+
+    $content = array();
+
+    if ($state->getIsSave()) {
+      $content[] = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_NOTICE)
+        ->appendChild(pht('Changes saved.'));
+    }
+
+    $panel = $this->getSettingsPanel();
+    $content[] = $panel->newSettingsPanelEditFormHeadContent($state);
+
+    return $content;
+  }
+
+  protected function newEditFormTailContent(
+    PhabricatorEditEnginePageState $state) {
+
+    $content = array();
+
+    $panel = $this->getSettingsPanel();
+    $content[] = $panel->newSettingsPanelEditFormTailContent($state);
+
+    return $content;
   }
 
 }

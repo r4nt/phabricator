@@ -21,10 +21,6 @@ final class PhabricatorPHDConfigOptions
 
   public function getOptions() {
     return array(
-      $this->newOption('phd.pid-directory', 'string', '/var/tmp/phd/pid')
-        ->setLocked(true)
-        ->setDescription(
-          pht('Directory that phd should use to track running daemons.')),
       $this->newOption('phd.log-directory', 'string', '/var/tmp/phd/log')
         ->setLocked(true)
         ->setDescription(
@@ -41,7 +37,12 @@ final class PhabricatorPHDConfigOptions
             "If you are running a cluster, this limit applies separately ".
             "to each instance of `phd`. For example, if this limit is set ".
             "to `4` and you have three hosts running daemons, the effective ".
-            "global limit will be 12.")),
+            "global limit will be 12.".
+            "\n\n".
+            "After changing this value, you must restart the daemons. Most ".
+            "configuration changes are picked up by the daemons ".
+            "automatically, but pool sizes can not be changed without a ".
+            "restart.")),
       $this->newOption('phd.verbose', 'bool', false)
         ->setLocked(true)
         ->setBoolOptions(

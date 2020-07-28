@@ -99,9 +99,9 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
   }
 
   public function getDatasourceURI() {
-    $uri = new PhutilURI('/typeahead/class/'.get_class($this).'/');
-    $uri->setQueryParams($this->parameters);
-    return (string)$uri;
+    $params = $this->newURIParameters();
+    $uri = new PhutilURI('/typeahead/class/'.get_class($this).'/', $params);
+    return phutil_string_cast($uri);
   }
 
   public function getBrowseURI() {
@@ -109,9 +109,21 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
       return null;
     }
 
-    $uri = new PhutilURI('/typeahead/browse/'.get_class($this).'/');
-    $uri->setQueryParams($this->parameters);
-    return (string)$uri;
+    $params = $this->newURIParameters();
+    $uri = new PhutilURI('/typeahead/browse/'.get_class($this).'/', $params);
+    return phutil_string_cast($uri);
+  }
+
+  private function newURIParameters() {
+    if (!$this->parameters) {
+      return array();
+    }
+
+    $map = array(
+      'parameters' => phutil_json_encode($this->parameters),
+    );
+
+    return $map;
   }
 
   abstract public function getPlaceholderText();
@@ -591,5 +603,39 @@ abstract class PhabricatorTypeaheadDatasource extends Phobject {
 
     return mpull($tokens, 'getWireFormat', 'getPHID');
   }
+
+  final protected function applyFerretConstraints(
+    PhabricatorCursorPagedPolicyAwareQuery $query,
+    PhabricatorFerretEngine $engine,
+    $ferret_function,
+    $raw_query) {
+
+    $compiler = id(new PhutilSearchQueryCompiler())
+      ->setEnableFunctions(true);
+
+    $raw_tokens = $compiler->newTokens($raw_query);
+
+    $fulltext_tokens = array();
+    foreach ($raw_tokens as $raw_token) {
+      // This is a little hacky and could maybe be cleaner. We're treating
+      // every search term as though the user had entered "title:dog" instead
+      // of "dog".
+
+      $alternate_token = PhutilSearchQueryToken::newFromDictionary(
+        array(
+          'quoted' => $raw_token->isQuoted(),
+          'value' => $raw_token->getValue(),
+          'operator' => PhutilSearchQueryCompiler::OPERATOR_SUBSTRING,
+          'function' => $ferret_function,
+        ));
+
+      $fulltext_token = id(new PhabricatorFulltextToken())
+        ->setToken($alternate_token);
+      $fulltext_tokens[] = $fulltext_token;
+    }
+
+    $query->withFerretConstraint($engine, $fulltext_tokens);
+  }
+
 
 }

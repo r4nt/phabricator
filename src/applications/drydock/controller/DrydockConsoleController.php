@@ -34,6 +34,7 @@ final class DrydockConsoleController extends DrydockController {
         ->setHeader(pht('Blueprints'))
         ->setImageIcon('fa-map-o')
         ->setHref($this->getApplicationURI('blueprint/'))
+        ->setClickable(true)
         ->addAttribute(
           pht(
             'Configure blueprints so Drydock can build resources, like '.
@@ -44,6 +45,7 @@ final class DrydockConsoleController extends DrydockController {
         ->setHeader(pht('Resources'))
         ->setImageIcon('fa-map')
         ->setHref($this->getApplicationURI('resource/'))
+        ->setClickable(true)
         ->addAttribute(
           pht('View and manage resources Drydock has built, like hosts.')));
 
@@ -52,6 +54,7 @@ final class DrydockConsoleController extends DrydockController {
         ->setHeader(pht('Leases'))
         ->setImageIcon('fa-link')
         ->setHref($this->getApplicationURI('lease/'))
+        ->setClickable(true)
         ->addAttribute(pht('Manage leases on resources.')));
 
     $menu->addItem(
@@ -59,6 +62,7 @@ final class DrydockConsoleController extends DrydockController {
         ->setHeader(pht('Repository Operations'))
         ->setImageIcon('fa-fighter-jet')
         ->setHref($this->getApplicationURI('operation/'))
+        ->setClickable(true)
         ->addAttribute(pht('Review the repository operation queue.')));
 
     $crumbs = $this->buildApplicationCrumbs();
@@ -72,9 +76,11 @@ final class DrydockConsoleController extends DrydockController {
       ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setObjectList($menu);
 
+    $launcher_view = id(new PHUILauncherView())
+      ->appendChild($box);
+
     $view = id(new PHUITwoColumnView())
-      ->setFixed(true)
-      ->setFooter($box);
+      ->setFooter($launcher_view);
 
     return $this->newPage()
       ->setTitle($title)

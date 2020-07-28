@@ -17,27 +17,26 @@ final class PhabricatorPeopleEmpowerController
 
     $done_uri = $this->getApplicationURI("manage/{$id}/");
 
-    id(new PhabricatorAuthSessionEngine())->requireHighSecuritySession(
-      $viewer,
-      $request,
-      $done_uri);
+    $validation_exception = null;
+    if ($request->isFormOrHisecPost()) {
+      $xactions = array();
+      $xactions[] = id(new PhabricatorUserTransaction())
+        ->setTransactionType(
+          PhabricatorUserEmpowerTransaction::TRANSACTIONTYPE)
+        ->setNewValue(!$user->getIsAdmin());
 
-    if ($user->getPHID() == $viewer->getPHID()) {
-      return $this->newDialog()
-        ->setTitle(pht('Your Way is Blocked'))
-        ->appendParagraph(
-          pht(
-            'After a time, your efforts fail. You can not adjust your own '.
-            'status as an administrator.'))
-        ->addCancelButton($done_uri, pht('Accept Fate'));
-    }
-
-    if ($request->isFormPost()) {
-      id(new PhabricatorUserEditor())
+      $editor = id(new PhabricatorUserTransactionEditor())
         ->setActor($viewer)
-        ->makeAdminUser($user, !$user->getIsAdmin());
+        ->setContentSourceFromRequest($request)
+        ->setContinueOnMissingFields(true)
+        ->setCancelURI($done_uri);
 
-      return id(new AphrontRedirectResponse())->setURI($done_uri);
+      try {
+        $editor->applyTransactions($user, $xactions);
+        return id(new AphrontRedirectResponse())->setURI($done_uri);
+      } catch (PhabricatorApplicationTransactionValidationException $ex) {
+        $validation_exception = $ex;
+      }
     }
 
     if ($user->getIsAdmin()) {
@@ -60,6 +59,7 @@ final class PhabricatorPeopleEmpowerController
     }
 
     return $this->newDialog()
+      ->setValidationException($validation_exception)
       ->setTitle($title)
       ->setShortTitle($short)
       ->appendParagraph($body)

@@ -193,6 +193,11 @@ class SMTP {
       return false;
     }
 
+    // Temporary LLVM PATCH: PHP 5.6 changed the default and we're failing with:
+    //   ERROR 2: stream_socket_enable_crypto(): Peer certificate CN=`*.smtp.sendgrid.net' did
+    //            not match expected CN=`smtp.sendgrid.com'
+    stream_context_set_option ( $this->smtp_conn, 'ssl' , 'verify_peer_name' , false);
+
     // Begin encrypted connection
     if(!stream_socket_enable_crypto($this->smtp_conn, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
       return false;

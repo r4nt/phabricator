@@ -6,6 +6,7 @@ final class HeraldRule extends HeraldDAO
     PhabricatorFlaggableInterface,
     PhabricatorPolicyInterface,
     PhabricatorDestructibleInterface,
+    PhabricatorIndexableInterface,
     PhabricatorSubscribableInterface {
 
   const TABLE_RULE_APPLIED = 'herald_ruleapplied';
@@ -258,6 +259,22 @@ final class HeraldRule extends HeraldDAO
     return '/'.$this->getMonogram();
   }
 
+  public function getEditorSortVector() {
+    return id(new PhutilSortVector())
+      ->addInt($this->getIsDisabled() ? 1 : 0)
+      ->addString($this->getName());
+  }
+
+  public function getEditorDisplayName() {
+    $name = pht('%s %s', $this->getMonogram(), $this->getName());
+
+    if ($this->getIsDisabled()) {
+      $name = pht('%s (Disabled)', $name);
+    }
+
+    return $name;
+  }
+
 
 /* -(  Repetition Policies  )------------------------------------------------ */
 
@@ -318,19 +335,8 @@ final class HeraldRule extends HeraldDAO
     return new HeraldRuleEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new HeraldRuleTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 

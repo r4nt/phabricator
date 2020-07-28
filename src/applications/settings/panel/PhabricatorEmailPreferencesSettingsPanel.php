@@ -11,6 +11,10 @@ final class PhabricatorEmailPreferencesSettingsPanel
     return pht('Email Preferences');
   }
 
+  public function getPanelMenuIcon() {
+    return 'fa-envelope-open-o';
+  }
+
   public function getPanelGroupKey() {
     return PhabricatorSettingsEmailPanelGroup::PANELGROUPKEY;
   }
@@ -134,7 +138,6 @@ final class PhabricatorEmailPreferencesSettingsPanel
 
     $form_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Email Preferences'))
-      ->setFormSaved($request->getStr('saved'))
       ->setFormErrors($errors)
       ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setForm($form);

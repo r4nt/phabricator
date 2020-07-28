@@ -1544,19 +1544,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return new PhabricatorFileEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorFileTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -1667,8 +1656,12 @@ final class PhabricatorFile extends PhabricatorFileDAO
         ->setType('string')
         ->setDescription(pht('The name of the file.')),
       id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('uri')
+        ->setType('uri')
+        ->setDescription(pht('View URI for the file.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
         ->setKey('dataURI')
-        ->setType('string')
+        ->setType('uri')
         ->setDescription(pht('Download URI for the file data.')),
       id(new PhabricatorConduitSearchFieldSpecification())
         ->setKey('size')
@@ -1680,6 +1673,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
   public function getFieldValuesForConduit() {
     return array(
       'name' => $this->getName(),
+      'uri' => PhabricatorEnv::getURI($this->getURI()),
       'dataURI' => $this->getCDNURI('data'),
       'size' => (int)$this->getByteSize(),
     );
