@@ -214,6 +214,16 @@ final class PHUIDiffInlineCommentDetailView
       (!$is_synthetic);
 
     if ($can_reply) {
+      // LLVM: restore button for replying to comments
+      $action_buttons[] = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setIcon('fa-reply')
+        ->setTooltip(pht('Reply'))
+        ->addSigil('differential-inline-reply')
+        ->setMustCapture(true)
+        ->setAuralLabel(pht('Reply'));
+      // LLVM: END
+
       $menu_items[] = array(
         'label' => pht('Reply to Comment'),
         'icon' => 'fa-reply',
