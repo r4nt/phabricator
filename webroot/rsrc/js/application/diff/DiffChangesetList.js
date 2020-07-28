@@ -2402,6 +2402,14 @@ JX.install('DiffChangesetList', {
         ['differential-inline-comment', 'inline-action-dropdown'],
         onmenu);
 
+      // LLVM: restore button for replying to comments
+      var onreply = JX.bind(this, this._onInlineEvent, 'reply');
+      JX.Stratcom.listen(
+        'click',
+        ['differential-inline-comment', 'differential-inline-reply'],
+        onreply);
+      // LLVM: END
+
       var ondraft = JX.bind(this, this._onInlineEvent, 'draft');
       JX.Stratcom.listen(
         'keydown',
@@ -2491,6 +2499,11 @@ JX.install('DiffChangesetList', {
         case 'delete':
           inline.delete(is_ref);
           break;
+        // LLVM: restore button for replying to comments
+        case 'reply':
+          inline.reply();
+          break;
+        // LLVM: END
         case 'draft':
           inline.triggerDraft();
           break;
